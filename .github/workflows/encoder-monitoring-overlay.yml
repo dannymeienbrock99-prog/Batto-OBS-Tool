@@ -36,8 +36,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if compgen -G ".bootstrap/encoder-overlay.part*" > /dev/null; then
-            cat .bootstrap/encoder-overlay.part* | base64 --decode > /tmp/encoder-overlay.tar.gz
+          if [[ -f ".bootstrap/encoder-overlay.part00" ]]; then
+            cat \
+              .bootstrap/encoder-overlay.part00 \
+              .bootstrap/encoder-overlay.part01 \
+              .bootstrap/encoder-overlay.part02 \
+              .bootstrap/encoder-overlay.part03 \
+              .bootstrap/encoder-overlay.part04 \
+              .bootstrap/encoder-overlay.part05a \
+              .bootstrap/encoder-overlay.part05b \
+              .bootstrap/encoder-overlay.part06 \
+              .bootstrap/encoder-overlay.part07 \
+              .bootstrap/encoder-overlay.part08 \
+              .bootstrap/encoder-overlay.part09 \
+              | base64 --decode > /tmp/encoder-overlay.tar.gz
             echo "35fe8fdb04e30faa3189c04b35a43bfc5d7e3595b929ce729813369218d42fee  /tmp/encoder-overlay.tar.gz" | sha256sum --check
             tar -xzf /tmp/encoder-overlay.tar.gz
             rm -rf .bootstrap
