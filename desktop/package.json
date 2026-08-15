@@ -1,0 +1,63 @@
+{
+  "name": "batto-obs-tool",
+  "version": "1.9.0",
+  "private": true,
+  "description": "Batto OBS Tool – Windows-PC-Diagnose, OBS-Optimierung, Monitoring und Twitch-Hologramm",
+  "author": "Crazy_Batto / Team Alpha",
+  "main": "src/main.cjs",
+  "scripts": {
+    "prepare:modules": "node scripts/prepare-modules.cjs",
+    "check": "node --check src/main.cjs && node --check src/preload.cjs && node --check src/services/hardware.cjs && node --check src/services/obs-websocket.cjs && node --check src/services/recommendation.cjs && node --check src/services/store.cjs && node --check src/services/twitch-holo-server.cjs && node --check src/renderer/app.js",
+    "test": "npm run check && node --test test/*.test.cjs",
+    "dist:win": "electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "de.crazybatto.battoobstool",
+    "productName": "Batto OBS Tool",
+    "artifactName": "Batto-OBS-Tool-Setup-${version}.${ext}",
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/license.txt",
+        "to": "Nutzungs-und-Lizenzbedingungen.txt"
+      }
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "requestedExecutionLevel": "asInvoker",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "shortcutName": "Batto OBS Tool",
+      "license": "build/license.txt"
+    }
+  }
+}
