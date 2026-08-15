@@ -1,0 +1,161 @@
+name: Batto OBS Tool 1.9.0 Windows Release
+
+on:
+  push:
+    branches:
+      - release/windows-1.9.0-final
+    paths:
+      - "desktop/**"
+      - "modules/**"
+      - ".github/workflows/windows-release-1.9.0.yml"
+      - ".github/release-1.9.0-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: batto-obs-tool-1.9.0-windows
+  cancel-in-progress: false
+
+jobs:
+  build-test-release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package.json
+
+      - name: Copy integrated modules into desktop application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Remove-Item -Recurse -Force "desktop/modules" -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force "desktop/modules" | Out-Null
+          Copy-Item -Recurse -Force "modules/encoder-monitoring-overlay" "desktop/modules/encoder-monitoring-overlay"
+          Copy-Item -Recurse -Force "modules/twitch-holo-chat" "desktop/modules/twitch-holo-chat"
+          if (-not (Test-Path "desktop/modules/encoder-monitoring-overlay/src/server.cjs")) { throw "Monitoring-Modul fehlt." }
+          if (-not (Test-Path "desktop/modules/twitch-holo-chat/web/overlay.html")) { throw "Twitch-Hologramm-Modul fehlt." }
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        shell: pwsh
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare production modules
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          node scripts/prepare-modules.cjs
+          node scripts/prepare-production.cjs
+
+      - name: Run complete syntax and unit tests
+        working-directory: desktop
+        shell: pwsh
+        run: npm test
+
+      - name: Build real Windows x64 NSIS installer
+        working-directory: desktop
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist:win
+
+      - name: Verify unpacked application self-test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = Get-ChildItem "desktop/dist/win-unpacked" -Filter "Batto OBS Tool.exe" -File -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "Ungepackte Batto-OBS-Tool-EXE fehlt." }
+          $process = Start-Process -FilePath $exe.FullName -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) { throw "Self-Test der ungepackten Anwendung fehlgeschlagen: $($process.ExitCode)" }
+
+      - name: Install and test the generated installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Get-ChildItem "desktop/dist" -Filter "Batto-OBS-Tool-Setup-1.9.0.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "NSIS-Installer wurde nicht erzeugt." }
+          $bytes = [IO.File]::ReadAllBytes($installer.FullName)
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Installer besitzt keinen gültigen Windows-PE-Header." }
+          $installDir = Join-Path $env:RUNNER_TEMP "Batto OBS Tool Test Install"
+          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Stille Testinstallation fehlgeschlagen: $($install.ExitCode)" }
+          $installedExe = Join-Path $installDir "Batto OBS Tool.exe"
+          if (-not (Test-Path $installedExe)) { throw "Installierte Anwendung wurde nicht gefunden: $installedExe" }
+          $selfTest = Start-Process -FilePath $installedExe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Self-Test der installierten Anwendung fehlgeschlagen: $($selfTest.ExitCode)" }
+
+      - name: Create verified Windows download package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $release = Join-Path $PWD "release-1.9.0"
+          Remove-Item -Recurse -Force $release -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $release | Out-Null
+          $installer = Get-ChildItem "desktop/dist" -Filter "Batto-OBS-Tool-Setup-1.9.0.exe" -File | Select-Object -First 1
+          Copy-Item $installer.FullName (Join-Path $release $installer.Name)
+          @"
+          BATTO OBS TOOL 1.9.0 – INSTALLATION
+
+          1. Batto-OBS-Tool-Setup-1.9.0.exe starten.
+          2. Im Installer den gewünschten Installationsordner beziehungsweise das Laufwerk auswählen.
+          3. Batto OBS Tool starten und zuerst „Hardwarediagnose“ öffnen.
+          4. Für OBS unter Werkzeuge > WebSocket-Servereinstellungen den Server aktivieren.
+          5. Standardadresse: 127.0.0.1, Standardport: 4455.
+
+          Der Installer enthält die vollständige Windows-Anwendung, das Encoder-/Hardware-Monitoring,
+          den Twitch-Hologramm-Editor und das profilbasierte Touch-Deck. Es handelt sich nicht um eine Demo.
+          "@ | Set-Content -Encoding UTF8 (Join-Path $release "INSTALLATION.txt")
+          $hash = Get-FileHash (Join-Path $release $installer.Name) -Algorithm SHA256
+          "$($hash.Hash.ToLower())  $($installer.Name)" | Set-Content -Encoding ASCII (Join-Path $release "SHA256.txt")
+          $zip = Join-Path $PWD "Batto-OBS-Tool-1.9.0-Windows.zip"
+          Remove-Item -Force $zip -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$release/*" -DestinationPath $zip -CompressionLevel Optimal
+          if (-not (Test-Path $zip)) { throw "Windows-ZIP wurde nicht erzeugt." }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+          try {
+            $names = @($archive.Entries | ForEach-Object FullName)
+            if ($names -notcontains "Batto-OBS-Tool-Setup-1.9.0.exe") { throw "Installer fehlt im ZIP." }
+            if ($names -notcontains "SHA256.txt") { throw "SHA256.txt fehlt im ZIP." }
+          } finally { $archive.Dispose() }
+
+      - name: Upload verified Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Batto-OBS-Tool-1.9.0-Windows
+          path: |
+            Batto-OBS-Tool-1.9.0-Windows.zip
+            release-1.9.0/Batto-OBS-Tool-Setup-1.9.0.exe
+            release-1.9.0/SHA256.txt
+            release-1.9.0/INSTALLATION.txt
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+      - name: Publish GitHub Release v1.9.0
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          gh release delete v1.9.0 --cleanup-tag --yes 2>$null
+          gh release create v1.9.0 `
+            "Batto-OBS-Tool-1.9.0-Windows.zip" `
+            "release-1.9.0/Batto-OBS-Tool-Setup-1.9.0.exe" `
+            "release-1.9.0/SHA256.txt" `
+            "release-1.9.0/INSTALLATION.txt" `
+            --target "$env:GITHUB_SHA" `
+            --title "Batto OBS Tool 1.9.0" `
+            --notes "Vollständige Windows-x64-Version mit Hardwarediagnose, OBS-Encoder-Empfehlung, bestätigungspflichtigen Belastungstests, transparentem Monitoring-Overlay, Twitch-Hologrammfarben und profilbasiertem Touch-Deck. Der NSIS-Installer wurde still installiert und die installierte Anwendung per Self-Test gestartet."
