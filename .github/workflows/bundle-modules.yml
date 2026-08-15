@@ -1,0 +1,36 @@
+name: Bundle Batto modules
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "modules/**"
+      - ".github/workflows/bundle-modules.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create module archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          zip -r -9 out/Batto-OBS-Tool-Modules.zip modules
+          sha256sum out/Batto-OBS-Tool-Modules.zip > out/SHA256.txt
+
+      - name: Upload module archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: Batto-OBS-Tool-Modules
+          path: out/*
+          if-no-files-found: error
+          retention-days: 7
