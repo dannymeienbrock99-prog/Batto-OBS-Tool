@@ -1,0 +1,86 @@
+name: Encoder Monitoring Overlay
+
+on:
+  push:
+    branches:
+      - feat/encoder-overlay-monitoring
+    paths:
+      - ".bootstrap/**"
+      - "modules/encoder-monitoring-overlay/**"
+      - ".github/workflows/encoder-monitoring-overlay.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: encoder-monitoring-overlay-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Restore encoder monitoring module when bootstrap parts exist
+        id: bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f ".bootstrap/encoder-overlay.part00" ]]; then
+            cat \
+              .bootstrap/encoder-overlay.part00 \
+              .bootstrap/encoder-overlay.part01 \
+              .bootstrap/encoder-overlay.part02 \
+              .bootstrap/encoder-overlay.part03 \
+              .bootstrap/encoder-overlay.part04 \
+              .bootstrap/encoder-overlay.part05a \
+              .bootstrap/encoder-overlay.part05b \
+              .bootstrap/encoder-overlay.part06 \
+              .bootstrap/encoder-overlay.part07 \
+              .bootstrap/encoder-overlay.part08 \
+              .bootstrap/encoder-overlay.part09 \
+              | base64 --decode > /tmp/encoder-overlay.tar.gz
+            echo "35fe8fdb04e30faa3189c04b35a43bfc5d7e3595b929ce729813369218d42fee  /tmp/encoder-overlay.tar.gz" | sha256sum --check
+            tar -xzf /tmp/encoder-overlay.tar.gz
+            rm -rf .bootstrap
+            echo "restored=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "restored=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        working-directory: modules/encoder-monitoring-overlay
+        run: npm ci
+
+      - name: JavaScript syntax check
+        working-directory: modules/encoder-monitoring-overlay
+        run: npm run check
+
+      - name: Unit and integration tests
+        working-directory: modules/encoder-monitoring-overlay
+        run: npm test
+
+      - name: Commit restored module
+        if: steps.bootstrap.outputs.restored == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Crazy_Batto"
+          git config user.email "dannymeienbrock99@gmail.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No restored files to commit."
+            exit 0
+          fi
+          git commit -m "feat(overlay): add transparent 3DMark-style encoder monitoring [skip ci]"
+          git push origin HEAD:feat/encoder-overlay-monitoring
