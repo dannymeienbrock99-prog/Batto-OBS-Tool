@@ -6,7 +6,7 @@
   "author": "Crazy_Batto / Team Alpha",
   "main": "src/main.cjs",
   "scripts": {
-    "prepare:hotfix": "node scripts/apply-1.9.1-source-fixes-v4.cjs",
+    "prepare:hotfix": "node scripts/apply-1.9.1-source-fixes-v5.cjs",
     "pretest": "npm run prepare:hotfix",
     "check": "node --check src/main.cjs && node --check src/preload.cjs && node --check src/services/hardware.cjs && node --check src/services/obs-websocket.cjs && node --check src/services/recommendation.cjs && node --check src/services/secret-store.cjs && node --check src/services/store.cjs && node --check src/services/telemetry.cjs && node --check src/services/twitch-holo-server.cjs && node --check src/renderer/app.js && node --check modules/encoder-monitoring-overlay/src/server.cjs && node --check modules/encoder-monitoring-overlay/src/telemetry.cjs && node --check modules/encoder-monitoring-overlay/src/layout-engine.cjs && node --check modules/encoder-monitoring-overlay/src/metric-catalog.cjs && node --check modules/encoder-monitoring-overlay/web/editor.js && node --check modules/encoder-monitoring-overlay/web/overlay.js && node --check modules/twitch-holo-chat/src/holo-style-engine.cjs && node --check modules/twitch-holo-chat/web/editor.js && node --check modules/twitch-holo-chat/web/overlay.js",
     "test": "npm run check && node --test test/*.test.cjs",
