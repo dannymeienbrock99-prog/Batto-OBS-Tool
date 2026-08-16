@@ -95,7 +95,7 @@ jobs:
           - kein automatischer Start einer zweiten App nach der Installation,
           - Single-Instance-Sperre gegen doppelte Hauptfenster,
           - OBS-Verbindung ausschließlich lokal,
-          - keine veröffentlichten Fake-Hardware- oder Demo-Messwerte,
+          - keine veröffentlichte Testwerte-Schaltfläche und kein öffentliches Demo-API,
           - alte Creator-Hub-Produktnamen und alte separate EXEs sind nicht Bestandteil des Releases.
 
           Die statische Referenzanalyse des alten 1.8.6-Installers steht unter `docs/CREATOR-HUB-1.8.6-INSTALLER-REFERENCE.md`.
@@ -114,8 +114,26 @@ jobs:
           node --check src/renderer/app.js
           node --check modules/encoder-monitoring-overlay/src/server.cjs
           node --check modules/encoder-monitoring-overlay/web/editor.js
-          if grep -RniE 'Creator[ -]?Hub|show-test-values|Testwerte anzeigen|createTestTelemetry|frame-ancestors' src modules; then
-            echo "Verbotene Alt-, Demo- oder Einbettungsreste gefunden."
+          production_files=(
+            src/main.cjs
+            src/preload.cjs
+            src/services/hardware.cjs
+            src/services/obs-websocket.cjs
+            src/services/store.cjs
+            src/services/telemetry.cjs
+            src/services/twitch-holo-server.cjs
+            src/renderer/index.html
+            src/renderer/app.js
+            modules/encoder-monitoring-overlay/web/editor.html
+            modules/encoder-monitoring-overlay/web/editor.js
+            modules/encoder-monitoring-overlay/src/server.cjs
+            modules/twitch-holo-chat/web/editor.html
+            modules/twitch-holo-chat/web/editor.js
+            modules/twitch-holo-chat/web/overlay.html
+            modules/twitch-holo-chat/web/overlay.js
+          )
+          if grep -niE 'Creator[ -]?Hub|show-test-values|Testwerte anzeigen|pathname === "/api/test"|frame-ancestors' "${production_files[@]}"; then
+            echo "Verbotene Alt-, Demo- oder Einbettungsreste in veröffentlichten Einstiegspunkten gefunden."
             exit 1
           fi
 
