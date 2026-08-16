@@ -1,0 +1,134 @@
+name: Persist verified Batto OBS Tool 1.9.1 source
+
+on:
+  push:
+    branches:
+      - release/windows-1.9.1-hotfix
+    paths:
+      - ".github/workflows/persist-1.9.1-source.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  persist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Recreate the exact integrated source layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf desktop/modules
+          mkdir -p desktop/modules
+          cp -a modules/encoder-monitoring-overlay desktop/modules/
+          cp -a modules/twitch-holo-chat desktop/modules/
+          cd desktop
+          node scripts/apply-1.9.1-source-fixes-v5.cjs
+          cd ..
+          rm -rf modules/encoder-monitoring-overlay
+          cp -a desktop/modules/encoder-monitoring-overlay modules/
+
+      - name: Remove obsolete failed pipelines and temporary bootstrap data
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/windows-release-1.9.0.yml
+          rm -f .github/workflows/windows-release-1.9.0-v2.yml
+          rm -rf .bootstrap
+          rm -f desktop/scripts/apply-1.9.1-source-fixes.cjs
+          rm -f desktop/scripts/apply-1.9.1-source-fixes-v2.cjs
+          rm -f desktop/scripts/prepare-modules.cjs
+          rm -f desktop/scripts/prepare-production.cjs
+          rm -f desktop/scripts/prepare-release-hotfix.cjs
+          rm -f .github/workflows/persist-1.9.1-source.yml
+
+      - name: Write current project README
+        shell: bash
+        run: |
+          cat > README.md <<'EOF'
+          # Batto OBS Tool
+
+          Offizielles Windows-Projekt von **Crazy_Batto / Team Alpha**.
+
+          ## Aktueller stabiler Release
+
+          **Batto OBS Tool 1.9.1**
+
+          - [Windows-Komplettpaket herunterladen](https://github.com/dannymeienbrock99-prog/Batto-OBS-Tool/releases/download/v1.9.1/Batto-OBS-Tool-1.9.1-Windows.zip)
+          - [Windows-Installer herunterladen](https://github.com/dannymeienbrock99-prog/Batto-OBS-Tool/releases/download/v1.9.1/Batto-OBS-Tool-Setup-1.9.1.exe)
+          - [Release und Prüfsummen öffnen](https://github.com/dannymeienbrock99-prog/Batto-OBS-Tool/releases/tag/v1.9.1)
+
+          ## Aufbau
+
+          Das Programm wird als **eine Electron-Anwendung und ein NSIS-Installer** ausgeliefert. Monitoring und Twitch-Hologramm sind lokale Module derselben Hauptanwendung; es entstehen keine zusätzlichen Programm-EXEs.
+
+          Enthalten:
+
+          - lokale Windows-Hardwarediagnose,
+          - bevorzugte Erkennung der dedizierten Grafikkarte,
+          - lokale OBS-WebSocket-Verbindung über `127.0.0.1:4455`,
+          - Erkennung des konfigurierten OBS-Encoders,
+          - manuell übertragbare Encoder-Empfehlungen,
+          - bestätigungspflichtige CPU- und OBS-Aufnahmetests,
+          - transparentes Hardware-/Encoder-Monitoring,
+          - Twitch-Hologrammfarben für Namen und Nachrichten,
+          - variables Touch-Deck.
+
+          ## Branches
+
+          - `main`: stabiler Quellcode
+          - `release/windows-1.9.1-hotfix`: geprüfter Windows-Release-Stand 1.9.1
+
+          ## Sicherheit und Verhalten
+
+          - kein automatischer Start einer zweiten App nach der Installation,
+          - Single-Instance-Sperre gegen doppelte Hauptfenster,
+          - OBS-Verbindung ausschließlich lokal,
+          - keine veröffentlichten Fake-Hardware- oder Demo-Messwerte,
+          - alte Creator-Hub-Produktnamen und alte separate EXEs sind nicht Bestandteil des Releases.
+
+          Die statische Referenzanalyse des alten 1.8.6-Installers steht unter `docs/CREATOR-HUB-1.8.6-INSTALLER-REFERENCE.md`.
+          EOF
+
+      - name: Verify persisted source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd desktop
+          node scripts/apply-1.9.1-source-fixes-v5.cjs
+          node --check src/main.cjs
+          node --check src/services/hardware.cjs
+          node --check src/services/obs-websocket.cjs
+          node --check src/services/telemetry.cjs
+          node --check src/renderer/app.js
+          node --check modules/encoder-monitoring-overlay/src/server.cjs
+          node --check modules/encoder-monitoring-overlay/web/editor.js
+          if grep -RniE 'Creator[ -]?Hub|show-test-values|Testwerte anzeigen|createTestTelemetry|frame-ancestors' src modules; then
+            echo "Verbotene Alt-, Demo- oder Einbettungsreste gefunden."
+            exit 1
+          fi
+
+      - name: Commit verified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Crazy_Batto"
+          git config user.email "dannymeienbrock99@gmail.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Keine Quellcodeänderung erforderlich."
+            exit 0
+          fi
+          git commit -m "fix(windows): persist tested Batto OBS Tool 1.9.1 source [skip ci]"
+          git push origin HEAD:release/windows-1.9.1-hotfix
