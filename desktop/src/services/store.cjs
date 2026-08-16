@@ -7,8 +7,17 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function normalizeLocalObsHost(value) {
+  let host = String(value || "").trim();
+  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
+  const normalized = host.toLowerCase();
+  if (normalized === "localhost" || normalized === "127.0.0.1") return "127.0.0.1";
+  if (normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") return "::1";
+  return "127.0.0.1";
+}
+
 const DEFAULT_STATE = Object.freeze({
-  version: 1,
+  version: 2,
   obs: {
     host: "127.0.0.1",
     port: 4455,
@@ -59,11 +68,11 @@ function normalizeState(value = {}) {
     : Object.keys(normalizedProfiles)[0];
 
   return {
-    version: 1,
+    version: 2,
     obs: {
-      host: String(source.obs?.host || "127.0.0.1").trim() || "127.0.0.1",
+      host: normalizeLocalObsHost(source.obs?.host),
       port: Math.max(1, Math.min(65535, Math.round(Number(source.obs?.port) || 4455))),
-      password: String(source.obs?.password || "")
+      password: ""
     },
     preferences: {
       platform: ["twitch", "youtube", "recording"].includes(source.preferences?.platform)
@@ -104,7 +113,18 @@ class SettingsStore {
       this.state = clone(DEFAULT_STATE);
     }
     this.loaded = true;
+    await this.persist().catch(() => {});
     return clone(this.state);
+  }
+
+  async persist() {
+    await fs.mkdir(path.dirname(this.filename), { recursive: true });
+    const temporary = `${this.filename}.${process.pid}.${Date.now()}.tmp`;
+    await fs.writeFile(temporary, JSON.stringify(this.state, null, 2), {
+      encoding: "utf8",
+      mode: 0o600
+    });
+    await fs.rename(temporary, this.filename);
   }
 
   async get() {
@@ -115,15 +135,7 @@ class SettingsStore {
   async set(value) {
     await this.load();
     this.state = normalizeState(value);
-    this.queue = this.queue.catch(() => {}).then(async () => {
-      await fs.mkdir(path.dirname(this.filename), { recursive: true });
-      const temporary = `${this.filename}.${process.pid}.${Date.now()}.tmp`;
-      await fs.writeFile(temporary, JSON.stringify(this.state, null, 2), {
-        encoding: "utf8",
-        mode: 0o600
-      });
-      await fs.rename(temporary, this.filename);
-    });
+    this.queue = this.queue.catch(() => {}).then(() => this.persist());
     await this.queue;
     return clone(this.state);
   }
@@ -143,5 +155,6 @@ class SettingsStore {
 module.exports = {
   DEFAULT_STATE,
   SettingsStore,
+  normalizeLocalObsHost,
   normalizeState
 };
