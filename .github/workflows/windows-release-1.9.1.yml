@@ -93,15 +93,40 @@ jobs:
           if (Test-Path (Join-Path $installDir "Creator Hub.exe")) { throw "Alte separate EXE wurde installiert." }
           $selfTest = Start-Process -FilePath $installedExe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
           if ($selfTest.ExitCode -ne 0) { throw "Self-Test der installierten App fehlgeschlagen: $($selfTest.ExitCode)" }
+
           $first = Start-Process -FilePath $installedExe -PassThru
           Start-Sleep -Seconds 8
           if ($first.HasExited) { throw "Die installierte App wurde unmittelbar beendet." }
           $second = Start-Process -FilePath $installedExe -PassThru
           Start-Sleep -Seconds 4
-          $matching = @(Get-Process | Where-Object { try { $_.Path -eq $installedExe } catch { $false } })
-          if ($matching.Count -ne 1) { throw "Single-Instance-Prüfung fehlgeschlagen: $($matching.Count) Prozesse." }
-          $matching | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
-          if (-not $second.HasExited) { Stop-Process -Id $second.Id -Force -ErrorAction SilentlyContinue }
+
+          $allElectronProcesses = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.ExecutablePath -eq $installedExe
+          })
+          $mainProcesses = @($allElectronProcesses | Where-Object {
+            $commandLine = [string]$_.CommandLine
+            $commandLine -notmatch '(?:^|\s)--type=' -and
+            $commandLine -notmatch '(?:^|\s)--utility-sub-type=' -and
+            $commandLine -notmatch '(?:^|\s)--crashpad-handler'
+          })
+          if ($mainProcesses.Count -ne 1) {
+            $allElectronProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            throw "Single-Instance-Prüfung fehlgeschlagen. Hauptprozesse: $($mainProcesses.Count), Electron-Prozesse insgesamt: $($allElectronProcesses.Count)"
+          }
+          if (-not $second.HasExited) {
+            Start-Sleep -Seconds 3
+          }
+          $mainAfterSecondStart = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.ExecutablePath -eq $installedExe -and
+            ([string]$_.CommandLine) -notmatch '(?:^|\s)--type=' -and
+            ([string]$_.CommandLine) -notmatch '(?:^|\s)--utility-sub-type=' -and
+            ([string]$_.CommandLine) -notmatch '(?:^|\s)--crashpad-handler'
+          })
+          if ($mainAfterSecondStart.Count -ne 1) {
+            throw "Nach dem zweiten Start wurden $($mainAfterSecondStart.Count) Hauptinstanzen gefunden."
+          }
+          @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $installedExe }) |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
       - name: Package verified files
         shell: pwsh
