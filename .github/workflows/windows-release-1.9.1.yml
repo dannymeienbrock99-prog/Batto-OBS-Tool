@@ -1,0 +1,166 @@
+name: Batto OBS Tool 1.9.1 Windows Build
+
+on:
+  push:
+    branches:
+      - release/windows-1.9.1-hotfix
+    paths:
+      - "desktop/**"
+      - "modules/**"
+      - ".github/workflows/windows-release-1.9.1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: batto-obs-tool-1.9.1-windows
+  cancel-in-progress: false
+
+jobs:
+  build-test-package:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Assemble one integrated Electron application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Remove-Item -Recurse -Force "desktop/modules" -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force "desktop/modules" | Out-Null
+          Copy-Item -Recurse -Force "modules/encoder-monitoring-overlay" "desktop/modules/encoder-monitoring-overlay"
+          Copy-Item -Recurse -Force "modules/twitch-holo-chat" "desktop/modules/twitch-holo-chat"
+          if (-not (Test-Path "desktop/modules/encoder-monitoring-overlay/src/server.cjs")) { throw "Monitoring-Modul fehlt." }
+          if (-not (Test-Path "desktop/modules/twitch-holo-chat/web/editor.html")) { throw "Twitch-Hologramm-Modul fehlt." }
+
+      - name: Install build dependencies
+        working-directory: desktop
+        shell: pwsh
+        env:
+          npm_config_ignore_scripts: "false"
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm install --no-audit --no-fund --ignore-scripts=false
+          if (-not (Test-Path "node_modules/electron/dist/electron.exe")) { throw "Electron wurde nicht vollständig installiert." }
+
+      - name: Apply all source fixes
+        working-directory: desktop
+        run: npm run prepare:hotfix
+
+      - name: Run syntax and production tests
+        working-directory: desktop
+        run: npm test
+
+      - name: Build Windows x64 NSIS installer
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          npm_config_ignore_scripts: "false"
+        run: npm run dist:win
+
+      - name: Validate unpacked application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = Get-ChildItem "desktop/dist/win-unpacked" -Filter "Batto OBS Tool.exe" -File -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "Ungepackte Hauptanwendung fehlt." }
+          if (Get-ChildItem "desktop/dist/win-unpacked" -Filter "Creator Hub.exe" -File -Recurse) { throw "Alte Creator-Hub-EXE im Paket." }
+          $test = Start-Process -FilePath $exe.FullName -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($test.ExitCode -ne 0) { throw "Self-Test der ungepackten App fehlgeschlagen: $($test.ExitCode)" }
+
+      - name: Install and verify single-instance behavior
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Get-ChildItem "desktop/dist" -Filter "Batto-OBS-Tool-Setup-1.9.1.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "NSIS-Installer fehlt." }
+          $bytes = [IO.File]::ReadAllBytes($installer.FullName)
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Ungültiger PE-Header." }
+          $installDir = Join-Path $env:RUNNER_TEMP "Batto-OBS-Tool-1.9.1-Test"
+          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Stille Installation fehlgeschlagen: $($install.ExitCode)" }
+          $installedExe = Join-Path $installDir "Batto OBS Tool.exe"
+          if (-not (Test-Path $installedExe)) { throw "Installierte Hauptanwendung fehlt." }
+          if (Test-Path (Join-Path $installDir "Creator Hub.exe")) { throw "Alte separate EXE wurde installiert." }
+          $selfTest = Start-Process -FilePath $installedExe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Self-Test der installierten App fehlgeschlagen: $($selfTest.ExitCode)" }
+
+          $first = Start-Process -FilePath $installedExe -PassThru
+          Start-Sleep -Seconds 8
+          if ($first.HasExited) { throw "Die installierte App wurde unmittelbar beendet." }
+          $second = Start-Process -FilePath $installedExe -PassThru
+          Start-Sleep -Seconds 4
+
+          $allElectronProcesses = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.ExecutablePath -eq $installedExe
+          })
+          $mainProcesses = @($allElectronProcesses | Where-Object {
+            $commandLine = [string]$_.CommandLine
+            $commandLine -notmatch '(?:^|\s)--type=' -and
+            $commandLine -notmatch '(?:^|\s)--utility-sub-type=' -and
+            $commandLine -notmatch '(?:^|\s)--crashpad-handler'
+          })
+          if ($mainProcesses.Count -ne 1) {
+            $allElectronProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            throw "Single-Instance-Prüfung fehlgeschlagen. Hauptprozesse: $($mainProcesses.Count), Electron-Prozesse insgesamt: $($allElectronProcesses.Count)"
+          }
+          if (-not $second.HasExited) {
+            Start-Sleep -Seconds 3
+          }
+          $mainAfterSecondStart = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.ExecutablePath -eq $installedExe -and
+            ([string]$_.CommandLine) -notmatch '(?:^|\s)--type=' -and
+            ([string]$_.CommandLine) -notmatch '(?:^|\s)--utility-sub-type=' -and
+            ([string]$_.CommandLine) -notmatch '(?:^|\s)--crashpad-handler'
+          })
+          if ($mainAfterSecondStart.Count -ne 1) {
+            throw "Nach dem zweiten Start wurden $($mainAfterSecondStart.Count) Hauptinstanzen gefunden."
+          }
+          @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $installedExe }) |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
+      - name: Package verified files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $release = Join-Path $PWD "release-1.9.1"
+          Remove-Item -Recurse -Force $release -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $release | Out-Null
+          $installer = Get-ChildItem "desktop/dist" -Filter "Batto-OBS-Tool-Setup-1.9.1.exe" -File | Select-Object -First 1
+          Copy-Item $installer.FullName (Join-Path $release $installer.Name)
+          @"
+          BATTO OBS TOOL 1.9.1 – WINDOWS-INSTALLATION
+
+          Ein Installer, eine Hauptanwendung. Der Installer startet das Programm nicht automatisch.
+          Nach der Installation Batto OBS Tool über Desktop oder Startmenü öffnen.
+          OBS WebSocket lokal unter 127.0.0.1:4455 aktivieren.
+
+          Enthalten: Hardwarediagnose, OBS-Steuerung, Encoder-Empfehlung,
+          bestätigungspflichtige Tests, transparentes Monitoring,
+          Twitch-Hologramm und Touch-Deck. Keine Demo-Version.
+          "@ | Set-Content -Encoding UTF8 (Join-Path $release "INSTALLATION.txt")
+          $hash = Get-FileHash (Join-Path $release $installer.Name) -Algorithm SHA256
+          "$($hash.Hash.ToLower())  $($installer.Name)" | Set-Content -Encoding ASCII (Join-Path $release "SHA256.txt")
+          Compress-Archive -Path "$release/*" -DestinationPath "Batto-OBS-Tool-1.9.1-Windows.zip" -CompressionLevel Optimal
+
+      - name: Upload verified Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Batto-OBS-Tool-1.9.1-Windows
+          path: |
+            Batto-OBS-Tool-1.9.1-Windows.zip
+            release-1.9.1/Batto-OBS-Tool-Setup-1.9.1.exe
+            release-1.9.1/SHA256.txt
+            release-1.9.1/INSTALLATION.txt
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
