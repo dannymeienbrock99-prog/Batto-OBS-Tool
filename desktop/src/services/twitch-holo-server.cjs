@@ -86,6 +86,12 @@ class TwitchHoloServer {
       return;
     }
     const url = new URL(request.url, `http://${this.host}:${this.port || this.preferredPort}`);
+    if (url.pathname === "/health") {
+      const body = Buffer.from(JSON.stringify(this.status()), "utf8");
+      response.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": body.length, "Cache-Control": "no-store" });
+      response.end(body);
+      return;
+    }
     let filename;
     if (url.pathname === "/" || url.pathname === "/editor") filename = "editor.html";
     else if (url.pathname === "/overlay") filename = "overlay.html";
@@ -103,6 +109,8 @@ class TwitchHoloServer {
         "Content-Length": content.length,
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
+        "Cross-Origin-Resource-Policy": "cross-origin",
+        "Access-Control-Allow-Origin": "*",
         "Content-Security-Policy": path.extname(resolved).toLowerCase() === ".html"
           ? "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws://127.0.0.1:*; img-src 'self' data:; object-src 'none'; base-uri 'none'"
           : "default-src 'none'"

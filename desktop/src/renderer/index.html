@@ -27,7 +27,7 @@
           <button class="nav-button" data-view="settings"><span>☷</span> Einstellungen</button>
         </nav>
         <footer>
-          <span id="version-label">Version 1.9.0</span>
+          <span id="version-label">Version 1.9.1</span>
           <small>Windows-PC-Version</small>
         </footer>
       </aside>
@@ -48,7 +48,7 @@
           <section id="view-overview" class="view active">
             <div class="hero-card">
               <div>
-                <span class="eyebrow">BATTO OBS TOOL 1.9.0</span>
+                <span class="eyebrow">BATTO OBS TOOL 1.9.1</span>
                 <h2>Vom echten PC zur passenden OBS-Einstellung</h2>
                 <p>Die Windows-Diagnose liest Hardware lokal aus. Werte, die Windows oder der Treiber nicht zuverlässig liefert, bleiben als „Nicht verfügbar“ gekennzeichnet.</p>
                 <div class="button-row">
@@ -124,7 +124,7 @@
             <div class="obs-layout">
               <article class="panel form-panel">
                 <h3>Verbindungsdaten</h3>
-                <label>Adresse<input id="obs-host" value="127.0.0.1" autocomplete="off"></label>
+                <label>Adresse<input id="obs-host" value="127.0.0.1" autocomplete="off" readonly title="Batto OBS Tool verbindet ausschließlich das lokale OBS auf diesem PC."></label>
                 <label>Port<input id="obs-port" type="number" min="1" max="65535" value="4455"></label>
                 <label>WebSocket-Passwort<input id="obs-password" type="password" autocomplete="new-password" placeholder="Leer lassen, um das gespeicherte Passwort zu verwenden"></label>
                 <label class="check-line"><input id="obs-remember" type="checkbox" checked> Passwort verschlüsselt speichern</label>
@@ -227,7 +227,7 @@
             <div class="settings-grid">
               <article class="panel form-panel"><h3>Standardziel</h3><label>Plattform<select id="settings-platform"><option value="twitch">Twitch</option><option value="youtube">YouTube</option><option value="recording">Aufnahme</option></select></label><label>Auflösung<select id="settings-resolution"><option value="1280x720">1280 × 720</option><option value="1920x1080">1920 × 1080</option><option value="2560x1440">2560 × 1440</option><option value="3840x2160">3840 × 2160</option></select></label><label>FPS<select id="settings-fps"><option value="30">30</option><option value="60">60</option><option value="120">120</option></select></label></article>
               <article class="panel"><h3>Sicherheit</h3><ul class="privacy-list"><li>OBS-Passwörter werden mit Windows safeStorage verschlüsselt.</li><li>Overlay-Server binden ausschließlich an 127.0.0.1.</li><li>Keine Administrator- oder Firewall-Freigabe ist für lokale Overlays nötig.</li><li>Sensorwerte werden nicht erfunden; fehlende Werte erscheinen als „Nicht verfügbar“.</li><li>Belastungstests starten ausschließlich nach Bestätigung.</li></ul></article>
-              <article class="panel"><h3>Produkt</h3><dl class="details-list"><div><dt>Name</dt><dd>Batto OBS Tool</dd></div><div><dt>Version</dt><dd>1.9.0</dd></div><div><dt>Branding</dt><dd>Crazy_Batto / Team Alpha</dd></div><div><dt>Plattform</dt><dd>Windows x64</dd></div></dl></article>
+              <article class="panel"><h3>Produkt</h3><dl class="details-list"><div><dt>Name</dt><dd>Batto OBS Tool</dd></div><div><dt>Version</dt><dd>1.9.1</dd></div><div><dt>Branding</dt><dd>Crazy_Batto / Team Alpha</dd></div><div><dt>Plattform</dt><dd>Windows x64</dd></div></dl></article>
             </div>
           </section>
         </main>

@@ -18,13 +18,23 @@ const {
   runCpuLoadTest,
   runInternetTest
 } = require("./services/hardware.cjs");
-const { ObsWebSocketClient } = require("./services/obs-websocket.cjs");
+const { ObsWebSocketClient, normalizeLocalObsHost } = require("./services/obs-websocket.cjs");
 const { buildRecommendation } = require("./services/recommendation.cjs");
 const { composeTelemetry } = require("./services/telemetry.cjs");
 const { TwitchHoloServer } = require("./services/twitch-holo-server.cjs");
 const { MonitoringOverlayServer } = require("../modules/encoder-monitoring-overlay/src/server.cjs");
 
 app.setName("Batto OBS Tool");
+
+// BATTO_1_9_1_HOTFIX
+const singleInstanceLock = app.requestSingleInstanceLock();
+if (!singleInstanceLock) app.exit(0);
+app.on("second-instance", () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
 
 let mainWindow = null;
 let settingsStore = null;
@@ -36,6 +46,7 @@ let internetResult = null;
 let recommendation = null;
 let telemetryTimer = null;
 let latestTelemetry = null;
+let moduleErrors = {};
 const obs = new ObsWebSocketClient();
 const sampler = new SystemTelemetrySampler();
 
@@ -65,20 +76,33 @@ async function ensureHardware() {
 }
 
 async function startLocalModules() {
+  moduleErrors = {};
   const monitoringRoot = path.join(__dirname, "..", "modules", "encoder-monitoring-overlay", "web");
-  monitoringServer = new MonitoringOverlayServer({
-    port: 17822,
-    webRoot: monitoringRoot,
-    configFile: userDataFile("encoder-monitoring-layouts.json"),
-    historySize: 600
-  });
-  await monitoringServer.start();
+  try {
+    monitoringServer = new MonitoringOverlayServer({
+      port: 17822,
+      webRoot: monitoringRoot,
+      configFile: userDataFile("encoder-monitoring-layouts.json"),
+      historySize: 600
+    });
+    await monitoringServer.start();
+  } catch (error) {
+    moduleErrors.monitoring = errorPayload(error);
+    monitoringServer = null;
+    console.error("Monitoring-Overlay konnte nicht starten:", error);
+  }
 
-  holoServer = new TwitchHoloServer({
-    preferredPort: 17823,
-    webRoot: path.join(__dirname, "..", "modules", "twitch-holo-chat", "web")
-  });
-  await holoServer.start();
+  try {
+    holoServer = new TwitchHoloServer({
+      preferredPort: 17823,
+      webRoot: path.join(__dirname, "..", "modules", "twitch-holo-chat", "web")
+    });
+    await holoServer.start();
+  } catch (error) {
+    moduleErrors.twitchHolo = errorPayload(error);
+    holoServer = null;
+    console.error("Twitch-Hologramm konnte nicht starten:", error);
+  }
 }
 
 async function sampleTelemetry() {
@@ -132,7 +156,8 @@ async function stateSnapshot() {
     obs: obsSnapshot,
     telemetry: latestTelemetry,
     monitoring: monitoringServer?.status() || { running: false },
-    twitchHolo: holoServer?.status() || { running: false }
+    twitchHolo: holoServer?.status() || { running: false },
+    moduleErrors: { ...moduleErrors }
   };
 }
 
@@ -196,7 +221,7 @@ function registerIpc() {
 
   ipcMain.handle("obs:connect", async (_event, input = {}) => {
     const current = await settingsStore.get();
-    const host = String(input.host || current.obs.host || "127.0.0.1").trim();
+    const host = normalizeLocalObsHost(input.host || current.obs.host || "127.0.0.1");
     const port = Number(input.port || current.obs.port || 4455);
     let password = String(input.password || "");
     if (!password) password = await secretStore.get("obs-websocket-password");

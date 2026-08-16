@@ -142,7 +142,7 @@ $net = @(Get-NetAdapter -Physical | ForEach-Object {
 $os = Get-CimInstance Win32_OperatingSystem | Select-Object -First 1 Caption,Version,BuildNumber,OSArchitecture,LastBootUpTime,TotalVisibleMemorySize,FreePhysicalMemory
 $obsPaths = @(
   "$env:ProgramFiles\obs-studio\bin\64bit\obs64.exe",
-  "${env:ProgramFiles(x86)}\obs-studio\bin\64bit\obs64.exe",
+  "$([Environment]::GetFolderPath('ProgramFilesX86'))\obs-studio\bin\64bit\obs64.exe",
   "$env:LOCALAPPDATA\Programs\obs-studio\bin\64bit\obs64.exe"
 ) | Where-Object { $_ -and (Test-Path $_) }
 $result = [PSCustomObject]@{

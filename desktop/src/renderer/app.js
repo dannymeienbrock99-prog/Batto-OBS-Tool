@@ -285,7 +285,7 @@
     byId("obs-message").textContent = "Verbindung wird hergestellt …";
     try {
       const result = await api.connectObs({
-        host: byId("obs-host").value,
+        host: "127.0.0.1",
         port: Number(byId("obs-port").value),
         password: byId("obs-password").value,
         rememberPassword: byId("obs-remember").checked
@@ -413,13 +413,28 @@
     }
   }
 
+  function applyModuleFrame(frame, status, label) {
+    if (!status?.running || !status.editorUrl) {
+      frame.removeAttribute("src");
+      frame.dataset.baseUrl = "";
+      const message = status?.error?.message || (label + " ist nicht gestartet.");
+      frame.srcdoc = '<!doctype html><html><body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#080d14;color:#d7e4ee;font:16px Segoe UI,Arial,sans-serif"><div style="max-width:620px;padding:28px;text-align:center"><h2>' + escapeHtml(label) + '</h2><p>' + escapeHtml(message) + '</p></div></body></html>';
+      return;
+    }
+    frame.removeAttribute("srcdoc");
+    if (frame.dataset.baseUrl === status.editorUrl) return;
+    frame.dataset.baseUrl = status.editorUrl;
+    const separator = status.editorUrl.includes("?") ? "&" : "?";
+    frame.src = status.editorUrl + separator + "embedded=1&version=" + encodeURIComponent(state?.product?.version || "1.9.1");
+  }
+
   async function loadMonitoringFrame() {
     try {
       const status = await api.getMonitoringStatus();
       byId("monitoring-url").textContent = status.overlayUrl || "Nicht gestartet";
-      const frame = byId("monitoring-frame");
-      if (status.editorUrl && frame.src !== status.editorUrl) frame.src = status.editorUrl;
+      applyModuleFrame(byId("monitoring-frame"), status, "Monitoring-Overlay");
     } catch (error) {
+      applyModuleFrame(byId("monitoring-frame"), { running: false, error: { message: errorMessage(error) } }, "Monitoring-Overlay");
       showToast(errorMessage(error), "error");
     }
   }
@@ -428,9 +443,9 @@
     try {
       const status = await api.getHoloStatus();
       byId("holo-url").textContent = status.overlayUrl || "Nicht gestartet";
-      const frame = byId("holo-frame");
-      if (status.editorUrl && frame.src !== status.editorUrl) frame.src = status.editorUrl;
+      applyModuleFrame(byId("holo-frame"), status, "Twitch-Hologramm");
     } catch (error) {
+      applyModuleFrame(byId("holo-frame"), { running: false, error: { message: errorMessage(error) } }, "Twitch-Hologramm");
       showToast(errorMessage(error), "error");
     }
   }
@@ -584,7 +599,7 @@
   function syncSettings() {
     const settings = state?.settings;
     if (!settings) return;
-    byId("obs-host").value = settings.obs?.host || "127.0.0.1";
+    byId("obs-host").value = "127.0.0.1";
     byId("obs-port").value = settings.obs?.port || 4455;
     byId("settings-platform").value = settings.preferences?.platform || "twitch";
     byId("settings-resolution").value = settings.preferences?.targetResolution || "1920x1080";
@@ -653,7 +668,7 @@
     });
     byId("deck-apply-grid").addEventListener("click", applyDeckGrid);
     byId("deck-save").addEventListener("click", () => void saveDeck());
-    byId("deck-action-type").addEventListener("change", fillDeckInspector);
+    byId("deck-action-type").addEventListener("change", () => { byId("deck-value-row").hidden = !["obs:scene.set", "url"].includes(byId("deck-action-type").value); });
     byId("deck-apply-key").addEventListener("click", () => {
       if (selectedDeckIndex < 0) return showToast("Zuerst eine Taste auswählen.", "error");
       activeDeckProfile().pages.root[selectedDeckIndex] = assignmentFromInspector();
