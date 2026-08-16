@@ -13,6 +13,30 @@ function obsAuthentication(password, salt, challenge) {
   return base64Sha256(`${secret}${challenge}`);
 }
 
+function stripIpv6Brackets(value) {
+  const text = String(value || "").trim();
+  return text.startsWith("[") && text.endsWith("]") ? text.slice(1, -1) : text;
+}
+
+function normalizeLocalObsHost(value) {
+  const host = stripIpv6Brackets(value).toLowerCase();
+  if (host === "::1" || host === "0:0:0:0:0:0:0:1") return "::1";
+  return "127.0.0.1";
+}
+
+function formatWebSocketHost(value) {
+  const host = stripIpv6Brackets(value) || "127.0.0.1";
+  return host.includes(":") ? `[${host}]` : host;
+}
+
+function normalizePort(value) {
+  return Math.max(1, Math.min(65535, Math.round(Number(value) || 4455)));
+}
+
+function buildObsWebSocketUrl(host, port) {
+  return `ws://${formatWebSocketHost(normalizeLocalObsHost(host))}:${normalizePort(port)}`;
+}
+
 class ObsRequestError extends Error {
   constructor(message, requestType, status = {}) {
     super(message);
@@ -47,10 +71,26 @@ class ObsWebSocketClient extends EventEmitter {
   }
 
   async connect({ host = "127.0.0.1", port = 4455, password = "", timeoutMs = 8000 } = {}) {
+    const requested = normalizeLocalObsHost(host);
+    const candidates = requested === "::1" ? ["::1", "127.0.0.1"] : ["127.0.0.1", "::1"];
+    const failures = [];
+    for (const candidate of candidates) {
+      try {
+        return await this.connectSingle({ host: candidate, port, password, timeoutMs });
+      } catch (error) {
+        failures.push(`${candidate}: ${String(error?.message || error)}`);
+      }
+    }
+    const error = new Error(`OBS WebSocket ist lokal nicht erreichbar. ${failures.join(" · ")}`);
+    this.lastError = error.message;
+    throw error;
+  }
+
+  async connectSingle({ host, port, password, timeoutMs }) {
     await this.disconnect();
-    const normalizedHost = String(host || "127.0.0.1").trim() || "127.0.0.1";
-    const normalizedPort = Math.max(1, Math.min(65535, Math.round(Number(port) || 4455)));
-    const url = `ws://${normalizedHost}:${normalizedPort}`;
+    const normalizedHost = normalizeLocalObsHost(host);
+    const normalizedPort = normalizePort(port);
+    const url = `ws://${formatWebSocketHost(normalizedHost)}:${normalizedPort}`;
     this.connection = { host: normalizedHost, port: normalizedPort };
     this.lastError = "";
 
@@ -74,6 +114,7 @@ class ObsWebSocketClient extends EventEmitter {
         settled = true;
         cleanupInitial();
         this.lastError = String(error?.message || error);
+        this.identified = false;
         try { socket.close(); } catch {}
         reject(error);
       };
@@ -143,6 +184,9 @@ class ObsWebSocketClient extends EventEmitter {
         if (!settled) fail(new Error(`OBS-Verbindung geschlossen (${code}): ${String(reason || "")}`));
         if (wasConnected) this.emit("disconnected", { code, reason: String(reason || "") });
       });
+      socket.on("error", (error) => {
+        this.lastError = String(error?.message || error);
+      });
     });
   }
 
@@ -194,15 +238,44 @@ class ObsWebSocketClient extends EventEmitter {
     }
   }
 
+  async profileParameter(parameterCategory, parameterName) {
+    return this.requestSafe("GetProfileParameter", { parameterCategory, parameterName });
+  }
+
   async snapshot() {
     if (!this.connected) return { ...this.status(), available: false };
-    const [version, video, stats, stream, record, scenes] = await Promise.all([
+    const [
+      version,
+      video,
+      stats,
+      stream,
+      record,
+      scenes,
+      profile,
+      streamService,
+      outputList,
+      outputMode,
+      simpleStreamEncoder,
+      simpleBitrate,
+      simplePreset,
+      advancedStreamEncoder,
+      advancedRecordEncoder
+    ] = await Promise.all([
       this.requestSafe("GetVersion"),
       this.requestSafe("GetVideoSettings"),
       this.requestSafe("GetStats"),
       this.requestSafe("GetStreamStatus"),
       this.requestSafe("GetRecordStatus"),
-      this.requestSafe("GetSceneList")
+      this.requestSafe("GetSceneList"),
+      this.requestSafe("GetProfileList"),
+      this.requestSafe("GetStreamServiceSettings"),
+      this.requestSafe("GetOutputList"),
+      this.profileParameter("Output", "Mode"),
+      this.profileParameter("SimpleOutput", "StreamEncoder"),
+      this.profileParameter("SimpleOutput", "VBitrate"),
+      this.profileParameter("SimpleOutput", "Preset"),
+      this.profileParameter("AdvOut", "Encoder"),
+      this.profileParameter("AdvOut", "RecEncoder")
     ]);
     return {
       ...this.status(),
@@ -212,7 +285,18 @@ class ObsWebSocketClient extends EventEmitter {
       stats,
       stream,
       record,
-      scenes
+      scenes,
+      profile,
+      streamService,
+      outputList,
+      profileParameters: {
+        outputMode,
+        simpleStreamEncoder,
+        simpleBitrate,
+        simplePreset,
+        advancedStreamEncoder,
+        advancedRecordEncoder
+      }
     };
   }
 
@@ -253,6 +337,10 @@ class ObsWebSocketClient extends EventEmitter {
     if (before.outputActive) {
       throw new Error("OBS nimmt bereits auf. Der Test wurde nicht gestartet.");
     }
+    const stream = await this.requestSafe("GetStreamStatus");
+    if (stream.outputActive) {
+      throw new Error("Während eines laufenden Streams wird kein automatischer Aufnahmetest gestartet.");
+    }
     const samples = [];
     await this.request("StartRecord");
     try {
@@ -287,5 +375,9 @@ class ObsWebSocketClient extends EventEmitter {
 module.exports = {
   ObsRequestError,
   ObsWebSocketClient,
-  obsAuthentication
+  buildObsWebSocketUrl,
+  formatWebSocketHost,
+  normalizeLocalObsHost,
+  obsAuthentication,
+  stripIpv6Brackets
 };
