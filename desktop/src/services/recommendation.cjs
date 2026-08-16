@@ -39,9 +39,7 @@ function classifyGpu(gpu = {}) {
   return { vendor: "Unbekannt", name: name || "Nicht erkannt", family: "Unbekannt", av1: false };
 }
 
-function bitrateFor({ platform, resolution, fps, uploadMbps }) {
-  const upload = Math.max(0, number(uploadMbps));
-  const safeBudget = upload > 0 ? upload * 1000 * 0.72 : 6000;
+function targetBitrateFor({ platform, resolution, fps }) {
   const key = `${resolution}@${fps}`;
   const targets = {
     twitch: {
@@ -67,10 +65,15 @@ function bitrateFor({ platform, resolution, fps, uploadMbps }) {
     }
   };
   const fallback = platform === "recording" ? 25000 : platform === "youtube" ? 10000 : 6000;
-  const target = targets[platform]?.[key] || fallback;
-  return platform === "recording"
-    ? target
-    : Math.max(1500, Math.round(Math.min(target, safeBudget) / 100) * 100);
+  return targets[platform]?.[key] || fallback;
+}
+
+function bitrateFor({ platform, resolution, fps, uploadMbps }) {
+  const target = targetBitrateFor({ platform, resolution, fps });
+  if (platform === "recording") return target;
+  const upload = Math.max(0, number(uploadMbps));
+  const safeBudget = upload > 0 ? upload * 1000 * 0.72 : 6000;
+  return Math.max(1500, Math.round(Math.min(target, safeBudget) / 100) * 100);
 }
 
 function buildRecommendation(input = {}) {
@@ -81,14 +84,15 @@ function buildRecommendation(input = {}) {
   const fps = [30, 60, 120].includes(number(input.fps)) ? number(input.fps) : 60;
   const gpu = classifyGpu(input.gpu || {});
   const uploadMbps = number(input.uploadMbps);
+  const targetBitrateKbps = targetBitrateFor({ platform, resolution, fps });
   const bitrateKbps = bitrateFor({ platform, resolution, fps, uploadMbps });
 
   let encoder = "x264";
   let codec = "H.264";
   let preset = "veryfast";
   let profile = "high";
-  let rateControl = platform === "recording" ? "CQP" : "CBR";
-  let quality = platform === "recording" ? 20 : null;
+  const rateControl = platform === "recording" ? "CQP" : "CBR";
+  const quality = platform === "recording" ? 20 : null;
   let bFrames = 2;
   const notes = [];
 
@@ -127,8 +131,8 @@ function buildRecommendation(input = {}) {
     profile = "high";
   }
 
-  if (uploadMbps > 0 && uploadMbps * 1000 < bitrateKbps / 0.72) {
-    notes.push("Die gewünschte Bitrate wurde wegen der gemessenen Uploadrate begrenzt.");
+  if (platform !== "recording" && uploadMbps > 0 && bitrateKbps < targetBitrateKbps) {
+    notes.push(`Die Zielbitrate von ${targetBitrateKbps.toLocaleString("de-DE")} Kbit/s wurde durch die 72-%-Uploadreserve auf ${bitrateKbps.toLocaleString("de-DE")} Kbit/s begrenzt.`);
   }
   if (resolution === "3840x2160" && uploadMbps > 0 && uploadMbps < 45 && platform !== "recording") {
     notes.push("Für 4K-Livestreaming ist mehr stabiler Upload sinnvoll; 1440p oder 1080p ist zuverlässiger.");
@@ -163,5 +167,6 @@ function buildRecommendation(input = {}) {
 module.exports = {
   bitrateFor,
   buildRecommendation,
-  classifyGpu
+  classifyGpu,
+  targetBitrateFor
 };
