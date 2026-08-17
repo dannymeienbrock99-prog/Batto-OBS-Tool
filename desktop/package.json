@@ -47,6 +47,7 @@
       "buildResources": "build"
     },
     "win": {
+      "icon": "build/icon.ico",
       "requestedExecutionLevel": "asInvoker",
       "target": [
         {
@@ -66,7 +67,9 @@
       "runAfterFinish": false,
       "shortcutName": "Batto OBS Tool",
       "license": "build/license.txt",
-      "include": "build/installer.nsh"
+      "include": "build/installer.nsh",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     }
   }
 }
