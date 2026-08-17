@@ -55,13 +55,14 @@ copyFile(path.join(bootstrap, "renderer", "integrated.css"), path.join(source, "
 
 ensureDir(resources);
 const fallbackLogo = path.join(source, "stream-overlay", "team-logo.svg");
-if (!fs.existsSync(fallbackLogo)) throw new Error("Team-Alpha-Logo fehlt im Stream-Overlay.");
+if (!fs.existsSync(fallbackLogo)) throw new Error("Team-Alpha-Fallbacklogo fehlt im Stream-Overlay.");
 copyFile(fallbackLogo, path.join(resources, "team-logo.svg"));
 copyFile(fallbackLogo, path.join(source, "renderer", "assets", "team-alpha-logo.svg"));
 copyFile(fallbackLogo, path.join(source, "mobile", "team-logo.svg"));
 
 const indexFile = path.join(source, "renderer", "index.html");
 let index = fs.readFileSync(indexFile, "utf8").replaceAll("1.9.1", "2.0.0");
+index = index.replaceAll("./assets/team-alpha-logo.svg", "./assets/team-alpha-logo.png");
 if (!index.includes("integrated.css")) {
   const marker = '<link rel="stylesheet" href="./styles.css">';
   if (!index.includes(marker)) throw new Error("Stylesheet-Marker im Hauptfenster fehlt.");
@@ -95,6 +96,16 @@ replaceRequired(mainFile,
   'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });',
   'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });\n  handle("obs:forget-password", () => { writeSecret("obsPassword", ""); return true; });',
   "IPC zum Entfernen des OBS-Passworts");
+replaceRequired(mainFile,
+  'logoPath: appResource("team-logo.svg")',
+  'logoPath: appResource("team-logo.png")',
+  "Originales Team-Alpha-Logo im Stream-Overlay");
+
+const streamServerFile = path.join(source, "services", "stream-overlay-server.cjs");
+replaceRequired(streamServerFile,
+  'path.join(this.webRoot, "team-logo.svg")',
+  'path.join(this.webRoot, "team-logo.png")',
+  "PNG-Fallback des Team-Alpha-Logos");
 
 const preloadFile = path.join(source, "preload.cjs");
 replaceRequired(preloadFile,
