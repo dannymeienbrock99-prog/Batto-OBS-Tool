@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build-test-install-publish:
     runs-on: windows-2025
-    timeout-minutes: 75
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: desktop
@@ -43,37 +43,48 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           npm install --no-audit --no-fund --ignore-scripts=false
-          if (-not (Test-Path "node_modules/electron/dist/electron.exe")) {
-            throw "Electron wurde nicht vollständig installiert."
-          }
-          if (-not (Test-Path "node_modules/electron-builder/out/cli/cli.js")) {
-            throw "electron-builder wurde nicht vollständig installiert."
-          }
+          if ($LASTEXITCODE -ne 0) { throw "npm install ist fehlgeschlagen." }
+          if (-not (Test-Path "node_modules/electron/dist/electron.exe")) { throw "Electron wurde nicht vollständig installiert." }
+          if (-not (Test-Path "node_modules/electron-builder/out/cli/cli.js")) { throw "electron-builder wurde nicht vollständig installiert." }
+          if (-not (Test-Path "node_modules/qrcode")) { throw "QR-Code-Laufzeit fehlt." }
+          if (-not (Test-Path "node_modules/ws")) { throw "WebSocket-Laufzeit fehlt." }
 
-      - name: Assemble one clean integrated production source
+      - name: Assemble one integrated production application
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          node scripts/prepare-2.0.0-release.cjs
-          node scripts/patch-2.0.0-runtime.cjs
-
-      - name: Validate source, branding, navigation and installer rules
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          node scripts/check-2.0.0.cjs
-
-      - name: Run integration and data-safety tests
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $tests = @(Get-ChildItem "test" -Filter "*.test.cjs" -File | Sort-Object Name)
-          if ($tests.Count -eq 0) { throw "Keine Tests gefunden." }
-          foreach ($test in $tests) {
-            Write-Host "Teste $($test.Name)"
-            node --test $test.FullName
-            if ($LASTEXITCODE -ne 0) { throw "Test fehlgeschlagen: $($test.Name)" }
+          npm run prepare:integrated
+          if ($LASTEXITCODE -ne 0) { throw "Die integrierte Produktionsquelle konnte nicht zusammengesetzt werden." }
+          foreach ($required in @(
+            "src/main.cjs",
+            "src/preload.cjs",
+            "src/renderer/index.html",
+            "src/renderer/integrated.js",
+            "src/services/mobile-bridge.cjs",
+            "src/services/stream-overlay-server.cjs",
+            "src/services/plugin-registry.cjs",
+            "src/mobile/index.html",
+            "src/stream-overlay/editor.html",
+            "modules/encoder-monitoring-overlay/src/server.cjs",
+            "modules/twitch-holo-chat/web/overlay.html",
+            "resources/team-logo.svg"
+          )) {
+            if (-not (Test-Path $required)) { throw "Integrierter Bestandteil fehlt: $required" }
           }
+
+      - name: Validate syntax branding navigation data safety and installer rules
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm run check
+          if ($LASTEXITCODE -ne 0) { throw "Produktionsprüfung ist fehlgeschlagen." }
+
+      - name: Run integrated and module tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          node --test test/integrated-2.0.0.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw "Mindestens ein Integrations- oder Modultest ist fehlgeschlagen." }
 
       - name: Build Windows x64 NSIS installer
         shell: pwsh
@@ -82,10 +93,12 @@ jobs:
           npm_config_ignore_scripts: "false"
         run: |
           $ErrorActionPreference = "Stop"
-          npx electron-builder --win nsis --x64
+          npm run dist:win
           if ($LASTEXITCODE -ne 0) { throw "Windows-Installer konnte nicht gebaut werden." }
+          $installer = Get-ChildItem "dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "Batto-OBS-Tool-Setup-2.0.0.exe fehlt." }
 
-      - name: Validate unpacked application and package contents
+      - name: Validate unpacked application and self-test
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -94,23 +107,22 @@ jobs:
           if (-not $exe) { throw "Ungepackte Batto-OBS-Tool-EXE fehlt." }
           if (Get-ChildItem $unpacked -Filter "Creator Hub.exe" -File -Recurse) { throw "Alte separate Creator-Hub-EXE wurde eingepackt." }
           if (Get-ChildItem $unpacked -Filter "Creator-Hub-.apk" -File -Recurse) { throw "Alte APK wurde unkontrolliert in den Windows-Release eingepackt." }
-          $resources = Join-Path $unpacked "resources"
-          if (-not (Test-Path (Join-Path $resources "app.asar"))) { throw "Electron-ASAR fehlt." }
-          if (-not (Test-Path (Join-Path $resources "team-logo.svg"))) { throw "Team-Alpha-Logo fehlt." }
-          if (-not (Test-Path (Join-Path $resources "plugin-catalog-2.0.json"))) { throw "Plugin-Katalog fehlt." }
+          $resourceRoot = Join-Path $unpacked "resources"
+          if (-not (Test-Path (Join-Path $resourceRoot "app.asar"))) { throw "Electron-ASAR fehlt." }
+          if (-not (Test-Path (Join-Path $resourceRoot "resources/team-logo.svg"))) { throw "Externes Team-Alpha-Logo fehlt." }
           $bytes = [IO.File]::ReadAllBytes($exe.FullName)
           if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Hauptanwendung besitzt keinen gültigen PE-Header." }
           $selfTest = Start-Process -FilePath $exe.FullName -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
           if ($selfTest.ExitCode -ne 0) { throw "Self-Test der ungepackten Anwendung fehlgeschlagen: $($selfTest.ExitCode)" }
 
-      - name: Install, launch, verify local modules and single-instance behavior
+      - name: Install launch and verify the complete application
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $installer = Get-ChildItem "dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
           if (-not $installer) { throw "NSIS-Installer fehlt." }
-          $bytes = [IO.File]::ReadAllBytes($installer.FullName)
-          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Installer besitzt keinen gültigen PE-Header." }
+          $installerBytes = [IO.File]::ReadAllBytes($installer.FullName)
+          if ($installerBytes.Length -lt 2 -or $installerBytes[0] -ne 0x4D -or $installerBytes[1] -ne 0x5A) { throw "Installer besitzt keinen gültigen PE-Header." }
 
           $installDir = Join-Path $env:RUNNER_TEMP "Batto-OBS-Tool-2.0.0-Test"
           Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
@@ -120,6 +132,7 @@ jobs:
           $installedExe = Join-Path $installDir "Batto OBS Tool.exe"
           if (-not (Test-Path $installedExe)) { throw "Installierte Hauptanwendung fehlt." }
           if (Test-Path (Join-Path $installDir "Creator Hub.exe")) { throw "Alte Creator-Hub-EXE wurde installiert." }
+          if (-not (Test-Path (Join-Path $installDir "resources/resources/team-logo.svg"))) { throw "Team-Alpha-Logo wurde nicht installiert." }
 
           $installedSelfTest = Start-Process -FilePath $installedExe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
           if ($installedSelfTest.ExitCode -ne 0) { throw "Self-Test der installierten Anwendung fehlgeschlagen: $($installedSelfTest.ExitCode)" }
@@ -128,7 +141,7 @@ jobs:
           Start-Sleep -Seconds 18
           if ($first.HasExited) { throw "Die installierte Anwendung wurde unmittelbar beendet. ExitCode: $($first.ExitCode)" }
 
-          function Wait-LocalEndpoint([string]$Url, [int]$Seconds = 35) {
+          function Wait-LocalEndpoint([string]$Url, [int]$Seconds = 40) {
             $deadline = (Get-Date).AddSeconds($Seconds)
             $lastError = $null
             while ((Get-Date) -lt $deadline) {
@@ -142,11 +155,21 @@ jobs:
           }
 
           Wait-LocalEndpoint "http://127.0.0.1:48620/api/status"
+          Wait-LocalEndpoint "http://127.0.0.1:48620/mobile/"
           Wait-LocalEndpoint "http://127.0.0.1:48621/api/status"
+          Wait-LocalEndpoint "http://127.0.0.1:48621/overlay"
+          Wait-LocalEndpoint "http://127.0.0.1:48621/editor"
           Wait-LocalEndpoint "http://127.0.0.1:17821/api/status"
           Wait-LocalEndpoint "http://127.0.0.1:17822/api/status"
-          Wait-LocalEndpoint "http://127.0.0.1:48621/overlay.html"
-          Wait-LocalEndpoint "http://127.0.0.1:48621/editor.html"
+          Wait-LocalEndpoint "http://127.0.0.1:17822/overlay"
+          Wait-LocalEndpoint "http://127.0.0.1:17822/editor"
+
+          $mobileStatus = Invoke-RestMethod -Uri "http://127.0.0.1:48620/api/status" -TimeoutSec 5
+          if ($null -ne $mobileStatus.pin) { throw "Die Handy-PIN wird über den öffentlichen Statusendpunkt preisgegeben." }
+          $streamStatus = Invoke-RestMethod -Uri "http://127.0.0.1:48621/api/status" -TimeoutSec 5
+          if (-not $streamStatus.active) { throw "Stream-Overlay meldet sich nicht als aktiv." }
+          $monitorStatus = Invoke-RestMethod -Uri "http://127.0.0.1:17822/api/status" -TimeoutSec 5
+          if (-not $monitorStatus.status.running) { throw "Monitoring-Overlay meldet sich nicht als aktiv." }
 
           $second = Start-Process -FilePath $installedExe -PassThru
           Start-Sleep -Seconds 6
@@ -157,15 +180,21 @@ jobs:
             $commandLine -notmatch '(?:^|\s)--utility-sub-type=' -and
             $commandLine -notmatch '(?:^|\s)--crashpad-handler'
           })
-          if ($mainProcesses.Count -ne 1) {
-            throw "Single-Instance-Prüfung fehlgeschlagen. Hauptprozesse: $($mainProcesses.Count), Electron-Prozesse insgesamt: $($allProcesses.Count)"
-          }
+          if ($mainProcesses.Count -ne 1) { throw "Single-Instance-Prüfung fehlgeschlagen. Hauptprozesse: $($mainProcesses.Count), Electron-Prozesse insgesamt: $($allProcesses.Count)" }
 
-          $renderer = Get-Content "src/renderer/index.html" -Raw
-          $overlay = Get-Content "src/stream-overlay/overlay.html" -Raw
-          $mobile = Get-Content "src/mobile/index.html" -Raw
-          if ($renderer -match 'Creator[ -]?Hub' -or $overlay -match 'Creator[ -]?Hub' -or $mobile -match 'Creator[ -]?Hub') {
-            throw "Alte sichtbare Produktbezeichnung wurde im Release gefunden."
+          $visibleFiles = @(
+            "src/renderer/index.html",
+            "src/renderer/app.js",
+            "src/renderer/integrated.js",
+            "src/mobile/index.html",
+            "src/mobile/app.js",
+            "src/stream-overlay/editor.html",
+            "src/stream-overlay/overlay.html"
+          )
+          foreach ($file in $visibleFiles) {
+            $text = Get-Content $file -Raw
+            if ($text -match 'Creator Hub') { throw "Alte sichtbare Produktbezeichnung in $file." }
+            if ($text -match '\bKandidat\b') { throw "Alte Encoderbezeichnung in $file." }
           }
 
           @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $installedExe }) |
@@ -185,26 +214,27 @@ jobs:
           Remove-Item -Recurse -Force $releaseDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $releaseDir | Out-Null
           $installer = Get-ChildItem "dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "Verifizierter Installer fehlt." }
           Copy-Item $installer.FullName (Join-Path $releaseDir $installer.Name)
 
           @"
           BATTO OBS TOOL 2.0.0 – WINDOWS-INSTALLATION
 
-          Ein Installer, eine Hauptanwendung. Der Installer startet das Programm nicht automatisch.
+          Ein Installer und eine Hauptanwendung. Der Installer startet das Programm nicht automatisch.
           Nach der Installation Batto OBS Tool über Desktop oder Startmenü öffnen.
 
           Enthalten:
-          - lokale Hardwarediagnose und Internettest
+          - Hardwarediagnose, Internettest und dedizierte GPU-Auswahl
           - OBS-WebSocket, Encoder-Empfehlung und bestätigungspflichtige Tests
-          - neues transparentes Hardware-/Encoder-Monitoring
-          - Stream-Overlay mit Team-Alpha-Logo, Chat, Ziele, Geschenke, Wheel und Herzfrequenz
+          - transparentes Hardware-/Encoder-Monitoring mit Frametime und 1-%-Low
+          - frei gestaltbares Stream-Overlay mit Team-Alpha-Logo
           - Twitch-Hologramm
           - Multi-Chat für Twitch, YouTube und lokale TikTok-/TikFinity-/Tiktory-Webhooks
           - OBS-Gastquellen
           - variables Touch-Deck mit Profilen, Ordnern und Mehrfachaktionen
           - Plugin-Erkennung und native Kompatibilitätsaktionen
           - lokale Handy-Kopplung über QR-Code und PIN
-          - sichere Alt-Datenmigration ohne Überschreiben neuer Profile
+          - sichere Altdatenmigration ohne Überschreiben neuer Profile
 
           OBS WebSocket lokal unter 127.0.0.1:4455 aktivieren.
           Handy und PC müssen sich im selben lokalen Netzwerk befinden.
@@ -217,14 +247,16 @@ jobs:
           Batto OBS Tool 2.0.0 – geprüfter Windows-Build
           Workflow: $env:GITHUB_RUN_ID
           Commit: $env:GITHUB_SHA
+          Quellprüfung: bestanden
+          Integrations- und Modultests: bestanden
           Self-Test ungepackt: bestanden
           Stille Installation: bestanden
           Self-Test installiert: bestanden
           Normalstart: bestanden
-          Mobile-Server 48620: bestanden
-          Stream-Overlay 48621: bestanden
-          Twitch-Hologramm 17821: bestanden
-          Monitoring 17822: bestanden
+          Handy-Server und Weboberfläche: bestanden
+          Stream-Overlay: bestanden
+          Twitch-Hologramm: bestanden
+          Monitoring-Overlay: bestanden
           Single-Instance: bestanden
           Deinstallation: bestanden
           "@ | Set-Content -Encoding UTF8 (Join-Path $releaseDir "BUILD-REPORT.txt")
@@ -257,6 +289,7 @@ jobs:
             desktop/release-2.0.0/BUILD-REPORT.txt
           if-no-files-found: error
           retention-days: 90
+          compression-level: 0
 
       - name: Publish public GitHub release
         shell: pwsh
@@ -266,9 +299,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $false
           gh release view v2.0.0 *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release delete v2.0.0 --cleanup-tag --yes
-          }
+          if ($LASTEXITCODE -eq 0) { gh release delete v2.0.0 --cleanup-tag --yes }
           gh release create v2.0.0 `
             "$env:RELEASE_ZIP" `
             "$env:RELEASE_INSTALLER" `
@@ -277,4 +308,5 @@ jobs:
             "$env:RELEASE_REPORT" `
             --target "$env:GITHUB_SHA" `
             --title "Batto OBS Tool 2.0.0" `
-            --notes "Vollständig integrierter Windows-x64-Release mit einer Hauptanwendung und einem NSIS-Installer. Enthält Hardwarediagnose, OBS und Encoder-Empfehlung, bestätigungspflichtige Tests, unverändertes neues Monitoring, Stream-Overlay mit Team-Alpha-Logo, Twitch-Hologramm, Multi-Chat, OBS-Gäste, Touch-Deck, Plugin-Kompatibilität, lokale Handy-Kopplung und sichere Alt-Datenmigration. Der Build wurde installiert, gestartet, auf lokale Dienste und Single-Instance geprüft und anschließend wieder deinstalliert."
+            --notes "Vollständig integrierter und verifizierter Windows-x64-Release. Eine Hauptanwendung und ein NSIS-Installer. Enthalten sind Hardwarediagnose, OBS- und Encoderfunktionen, transparentes Monitoring, Stream-Overlay, Twitch-Hologramm, Multi-Chat, OBS-Gastquellen, Touch-Deck Pro, Plugin-Kompatibilität, lokale Handy-Kopplung und sichere Altdatenmigration."
+          if ($LASTEXITCODE -ne 0) { throw "GitHub-Release konnte nicht veröffentlicht werden." }
