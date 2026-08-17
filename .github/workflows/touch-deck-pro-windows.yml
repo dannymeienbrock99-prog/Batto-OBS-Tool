@@ -8,6 +8,13 @@ on:
       - "desktop/**"
       - "game-mods/**"
       - ".github/workflows/touch-deck-pro-windows.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "desktop/**"
+      - "game-mods/**"
+      - ".github/workflows/touch-deck-pro-windows.yml"
   workflow_dispatch:
 
 permissions:
