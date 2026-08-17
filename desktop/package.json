@@ -71,9 +71,7 @@
       "runAfterFinish": false,
       "shortcutName": "Batto OBS Tool",
       "license": "build/license.txt",
-      "include": "build/installer.nsh",
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico"
+      "include": "build/installer.nsh"
     }
   }
 }
