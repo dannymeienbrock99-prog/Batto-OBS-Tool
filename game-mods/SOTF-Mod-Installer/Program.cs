@@ -111,11 +111,16 @@ internal sealed class InstallerForm : Form
     {
         var gameDirectory = Path.GetFullPath(_gamePath.Text.Trim().Trim('"'));
         var sourceArchive = Path.Combine(AppContext.BaseDirectory, SourceArchiveName);
-        var sonsSdk = Path.Combine(gameDirectory, "_RedLoader", "net6", "SonsSdk.dll");
         var gameExecutable = Path.Combine(gameDirectory, "SonsOfTheForest.exe");
 
         if (!File.Exists(gameExecutable)) { Fail("SonsOfTheForest.exe wurde im gewählten Ordner nicht gefunden."); return; }
-        if (!File.Exists(sonsSdk)) { Fail("RedLoader/SonsSdk.dll fehlt. RedLoader installieren und das Spiel einmal starten."); return; }
+        var missingRedLoaderFiles = RequiredRedLoaderFiles(gameDirectory).Where(file => !File.Exists(file)).ToArray();
+        if (missingRedLoaderFiles.Length > 0)
+        {
+            var relative = missingRedLoaderFiles.Select(file => Path.GetRelativePath(gameDirectory, file));
+            Fail("RedLoader ist nicht vollständig vorbereitet. Installiere RedLoader, starte das Spiel einmal und versuche es erneut.\n\nFehlende Dateien:\n" + string.Join("\n", relative));
+            return;
+        }
         if (!File.Exists(sourceArchive)) { Fail($"Mitgeliefertes Quellmodul fehlt: {SourceArchiveName}"); return; }
 
         _install.Enabled = false;
@@ -137,7 +142,11 @@ internal sealed class InstallerForm : Form
 
             var dotnet = FindDotnet();
             if (dotnet is null) throw new InvalidOperationException("Kein dotnet-SDK gefunden. Installiere das aktuelle .NET SDK und starte den Installer erneut.");
-            Append($".NET: {dotnet}");
+            var sdkResult = await RunAsync(dotnet, "--list-sdks", sourceRoot);
+            if (sdkResult.ExitCode != 0 || string.IsNullOrWhiteSpace(sdkResult.Output))
+                throw new InvalidOperationException("dotnet wurde gefunden, aber kein verwendbares .NET SDK. Installiere ein aktuelles .NET SDK.");
+            Append("Installierte .NET-SDKs:");
+            Append(sdkResult.Output);
             Append("Release-Build wird gestartet …");
 
             var arguments = $"build \"{Path.Combine(hostDirectory, "CrazyBatto.SotfIntegration.ModHost.csproj")}\" -c Release -p:GameDir=\"{gameDirectory}\" --nologo";
@@ -181,6 +190,16 @@ internal sealed class InstallerForm : Form
             _browse.Enabled = true;
             _progress.Visible = false;
         }
+    }
+
+    private static IEnumerable<string> RequiredRedLoaderFiles(string gameDirectory)
+    {
+        var net6 = Path.Combine(gameDirectory, "_RedLoader", "net6");
+        var game = Path.Combine(gameDirectory, "_RedLoader", "Game");
+        foreach (var name in new[] { "SonsSdk.dll", "RedLoader.dll", "Il2CppInterop.Common.dll", "Il2CppInterop.Runtime.dll", "0Harmony.dll" })
+            yield return Path.Combine(net6, name);
+        foreach (var name in new[] { "Il2Cppmscorlib.dll", "Sons.dll", "Endnight.dll", "Sons.Multiplayer.dll", "UnityEngine.dll", "UnityEngine.CoreModule.dll", "bolt.dll", "Bolt.Unity.dll", "bolt.user.dll" })
+            yield return Path.Combine(game, name);
     }
 
     private static void WriteHostProject(string directory)
@@ -282,6 +301,7 @@ using CrazyBatto.SotfDeathCounter.Core;
 using CrazyBatto.SotfDeathCounter.LocalApi;
 using CrazyBatto.SotfDeathCounter.RedLoader;
 using SonsSdk;
+using SonsSdk.Attributes;
 
 namespace CrazyBatto.SotfIntegration;
 
@@ -297,24 +317,24 @@ public sealed class CrazyBattoSotfIntegrationMod : SonsMod, IOnInWorldUpdateRece
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Crazy_Batto", "SOTFIntegration");
         Directory.CreateDirectory(dataDirectory);
-        var store = new JsonFileDeathCounterStore(Path.Combine(dataDirectory, "stats.json"), Log);
+        var store = new JsonFileDeathCounterStore(Path.Combine(dataDirectory, "stats.json"), WriteLog);
         _counter = new DeathCounterModule(
             new DeathCounterOptions { Title = "SONS OF THE FOREST – TODESZÄHLER", CountKnockdowns = false },
-            store, Log);
+            store, WriteLog);
         _adapter = new SotfDeathCounterAdapter(
             _counter, dataDirectory,
             new SotfAdapterOptions { EnableRuntimeHooks = true, ScanIntervalMilliseconds = 1000, WorldScanIntervalMilliseconds = 2500 },
-            Log);
-        Log("Crazy_Batto SOTF Integration 0.3.0 initialisiert.");
+            WriteLog);
+        WriteLog("Crazy_Batto SOTF Integration 0.3.0 initialisiert.");
     }
 
     protected override void OnSdkInitialized()
     {
         _adapter?.Start();
         if (_counter is null) return;
-        _overlay = new LocalApiOutput(new LocalApiOptions { Port = 19447, EnableObsOverlay = true }, Log);
+        _overlay = new LocalApiOutput(new LocalApiOptions { Port = 19447, EnableObsOverlay = true }, WriteLog);
         _overlay.Start(_counter);
-        Log("Death-Counter-Overlay: http://127.0.0.1:19447/overlay");
+        WriteLog("Death-Counter-Overlay: http://127.0.0.1:19447/overlay");
     }
 
     protected override void OnGameStart() => _adapter?.BeginSession();
@@ -325,6 +345,8 @@ public sealed class CrazyBattoSotfIntegrationMod : SonsMod, IOnInWorldUpdateRece
     }
 
     public void OnInWorldUpdate() => _adapter?.Tick();
+
+    private void WriteLog(string message) => Log(message);
 }
 """;
 

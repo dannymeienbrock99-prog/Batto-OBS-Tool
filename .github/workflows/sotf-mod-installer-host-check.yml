@@ -1,0 +1,59 @@
+name: SOTF Mod Installer Host Check
+
+on:
+  push:
+    branches:
+      - fix/sotf-mod-installer-redloader-api
+    paths:
+      - "game-mods/SOTF-Mod-Installer/**"
+      - ".github/workflows/sotf-mod-installer-host-check.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "game-mods/SOTF-Mod-Installer/**"
+      - ".github/workflows/sotf-mod-installer-host-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sotf-host-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-host-source:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Compile the generated RedLoader host source against API stubs
+        shell: pwsh
+        run: ./game-mods/SOTF-Mod-Installer/verify-host-source.ps1
+
+      - name: Build the graphical Windows mod installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet publish "game-mods/SOTF-Mod-Installer/CrazyBatto.SotfModInstaller.csproj" `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o "game-mods/publish-check"
+          if ($LASTEXITCODE -ne 0) { throw "Der grafische SOTF-Mod-Installer konnte nicht gebaut werden." }
+          $exe = Get-ChildItem "game-mods/publish-check" -Filter "CrazyBatto-SOTF-Mod-Installer.exe" -File | Select-Object -First 1
+          if (-not $exe) { throw "CrazyBatto-SOTF-Mod-Installer.exe fehlt." }
+          $bytes = [IO.File]::ReadAllBytes($exe.FullName)
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Der Installer besitzt keinen gültigen Windows-PE-Header." }
