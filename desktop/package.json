@@ -8,7 +8,7 @@
   "scripts": {
     "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && node scripts/patch-2.0.0-integrated.cjs",
     "pretest": "npm run prepare:integrated",
-    "check": "node scripts/check-2.0.0.cjs",
+    "check": "node scripts/check-2.0.0.cjs && node scripts/check-icon.cjs",
     "test": "npm run check && node --test test/integrated-2.0.0.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs",
     "predist:win": "npm run prepare:integrated",
     "dist:win": "electron-builder --win nsis --x64 --publish never"
