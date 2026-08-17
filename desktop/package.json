@@ -36,6 +36,10 @@
       {
         "from": "build/license.txt",
         "to": "Nutzungs-und-Lizenzbedingungen.txt"
+      },
+      {
+        "from": "resources/team-logo.svg",
+        "to": "resources/team-logo.svg"
       }
     ],
     "directories": {
