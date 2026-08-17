@@ -53,7 +53,7 @@ jobs:
           $base64 = (($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join "") -replace '\s', ''
           [IO.File]::WriteAllBytes($source, [Convert]::FromBase64String($base64))
           $hash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expected = "e4b4e7f7a6098fe2307b1b91160fd4bd992f818b0bb902ec611a4af5921ff6a4"
+          $expected = "e5bf4843d50eb81f59f94f8ec213e4ab7c60532a160d7f640cffd7f17dc23ec9"
           if ($hash -ne $expected) { throw "SHA-256 des rekonstruierten SOTF-Quellarchivs stimmt nicht. Ist: $hash" }
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [IO.Compression.ZipFile]::OpenRead($source)
@@ -65,7 +65,22 @@ jobs:
             if (-not ($archive.Entries | Where-Object FullName -Match 'CrazyBatto\.SotfDeathCounter\.RedLoader\.csproj$')) { throw "RedLoader-Projekt im SOTF-Quellarchiv fehlt." }
             if (-not ($archive.Entries | Where-Object FullName -Match 'CrazyBatto\.SotfDeathCounter\.LocalApi\.csproj$')) { throw "LocalApi-Projekt im SOTF-Quellarchiv fehlt." }
           } finally { $archive.Dispose() }
-          Write-Host "SOTF-Quellarchiv geprüft: $source"
+
+          $verifyDirectory = Join-Path $env:RUNNER_TEMP "crazy-batto-sotf-source-verify"
+          Remove-Item -Recurse -Force $verifyDirectory -ErrorAction SilentlyContinue
+          [IO.Compression.ZipFile]::ExtractToDirectory($source, $verifyDirectory)
+          $root = @(Get-ChildItem $verifyDirectory -Directory)
+          if ($root.Count -ne 1) { throw "Das entpackte SOTF-Quellarchiv besitzt keinen eindeutigen Wurzelordner." }
+          foreach ($required in @(
+            "README.md",
+            "LICENSE",
+            "src/CrazyBatto.SotfDeathCounter.Core/CrazyBatto.SotfDeathCounter.Core.csproj",
+            "src/CrazyBatto.SotfDeathCounter.RedLoader/CrazyBatto.SotfDeathCounter.RedLoader.csproj",
+            "src/CrazyBatto.SotfDeathCounter.LocalApi/CrazyBatto.SotfDeathCounter.LocalApi.csproj"
+          )) {
+            if (-not (Test-Path (Join-Path $root[0].FullName $required))) { throw "Entpackte SOTF-Quelldatei fehlt: $required" }
+          }
+          Write-Host "SOTF-Quellarchiv vollständig extrahiert und geprüft: $source"
           Write-Host "SHA-256: $hash"
 
       - name: Install desktop dependencies
