@@ -6,10 +6,10 @@
   "author": "Crazy_Batto / Team Alpha",
   "main": "src/main.cjs",
   "scripts": {
-    "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs",
+    "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && node scripts/patch-2.0.0-integrated.cjs",
     "pretest": "npm run prepare:integrated",
     "check": "node scripts/check-2.0.0.cjs",
-    "test": "npm run check && node --test test/*.test.cjs",
+    "test": "npm run check && node --test test/integrated-2.0.0.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs",
     "predist:win": "npm run prepare:integrated",
     "dist:win": "electron-builder --win nsis --x64 --publish never"
   },
