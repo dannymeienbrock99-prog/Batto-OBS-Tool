@@ -48,12 +48,26 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $source = Join-Path $PWD "game-mods/CrazyBatto-SOTF-Universal-IntegrationModule-v0.3.0-source.zip"
-          $parts = @(Get-ChildItem "game-mods/source-archive" -Filter "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part*" -File | Sort-Object Name)
-          if ($parts.Count -ne 7) { throw "Das SOTF-Quellarchiv besitzt nicht alle sieben geprüften Teile. Gefunden: $($parts.Count)" }
-          $base64 = (($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join "") -replace '\s', ''
+          $sourceDirectory = Join-Path $PWD "game-mods/source-archive"
+          $orderedParts = @(
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part000",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part001",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part002",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part003",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part004",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part005a",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part005b1",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part005b2",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part006"
+          ) | ForEach-Object { Join-Path $sourceDirectory $_ }
+          foreach ($part in $orderedParts) {
+            if (-not (Test-Path $part)) { throw "SOTF-Archivteil fehlt: $part" }
+          }
+          $base64 = (($orderedParts | ForEach-Object { Get-Content $_ -Raw }) -join "") -replace '\s', ''
+          if ($base64.Length -ne 56548) { throw "SOTF-Base64-Länge ist falsch. Erwartet 56548, gefunden $($base64.Length)." }
           [IO.File]::WriteAllBytes($source, [Convert]::FromBase64String($base64))
           $hash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expected = "e5bf4843d50eb81f59f94f8ec213e4ab7c60532a160d7f640cffd7f17dc23ec9"
+          $expected = "e4b4e7f7a6098fe2307b1b91160fd4bd992f818b0bb902ec611a4af5921ff6a4"
           if ($hash -ne $expected) { throw "SHA-256 des rekonstruierten SOTF-Quellarchivs stimmt nicht. Ist: $hash" }
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [IO.Compression.ZipFile]::OpenRead($source)
