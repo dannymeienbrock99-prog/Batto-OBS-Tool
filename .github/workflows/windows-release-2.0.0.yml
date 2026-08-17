@@ -1,0 +1,312 @@
+name: Batto OBS Tool 2.0.0 Windows Release
+
+on:
+  push:
+    branches:
+      - release/windows-2.0.0-integrated
+    paths:
+      - "desktop/**"
+      - "modules/**"
+      - ".github/workflows/windows-release-2.0.0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: batto-obs-tool-2.0.0-windows
+  cancel-in-progress: true
+
+jobs:
+  build-test-install-publish:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - name: Checkout integrated release branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install build dependencies
+        shell: pwsh
+        env:
+          npm_config_ignore_scripts: "false"
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm install --no-audit --no-fund --ignore-scripts=false
+          if ($LASTEXITCODE -ne 0) { throw "npm install ist fehlgeschlagen." }
+          if (-not (Test-Path "node_modules/electron/dist/electron.exe")) { throw "Electron wurde nicht vollständig installiert." }
+          if (-not (Test-Path "node_modules/electron-builder/out/cli/cli.js")) { throw "electron-builder wurde nicht vollständig installiert." }
+          if (-not (Test-Path "node_modules/qrcode")) { throw "QR-Code-Laufzeit fehlt." }
+          if (-not (Test-Path "node_modules/ws")) { throw "WebSocket-Laufzeit fehlt." }
+
+      - name: Assemble one integrated production application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm run prepare:integrated
+          if ($LASTEXITCODE -ne 0) { throw "Die integrierte Produktionsquelle konnte nicht zusammengesetzt werden." }
+          foreach ($required in @(
+            "src/main.cjs",
+            "src/preload.cjs",
+            "src/renderer/index.html",
+            "src/renderer/integrated.js",
+            "src/services/mobile-bridge.cjs",
+            "src/services/stream-overlay-server.cjs",
+            "src/services/plugin-registry.cjs",
+            "src/mobile/index.html",
+            "src/stream-overlay/editor.html",
+            "modules/encoder-monitoring-overlay/src/server.cjs",
+            "modules/twitch-holo-chat/web/overlay.html",
+            "resources/team-logo.svg"
+          )) {
+            if (-not (Test-Path $required)) { throw "Integrierter Bestandteil fehlt: $required" }
+          }
+
+      - name: Validate syntax branding navigation data safety and installer rules
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm run check
+          if ($LASTEXITCODE -ne 0) { throw "Produktionsprüfung ist fehlgeschlagen." }
+
+      - name: Run integrated and module tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          node --test test/integrated-2.0.0.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw "Mindestens ein Integrations- oder Modultest ist fehlgeschlagen." }
+
+      - name: Build Windows x64 NSIS installer
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          npm_config_ignore_scripts: "false"
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm run dist:win
+          if ($LASTEXITCODE -ne 0) { throw "Windows-Installer konnte nicht gebaut werden." }
+          $installer = Get-ChildItem "dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "Batto-OBS-Tool-Setup-2.0.0.exe fehlt." }
+
+      - name: Validate unpacked application and self-test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $unpacked = Resolve-Path "dist/win-unpacked"
+          $exe = Get-ChildItem $unpacked -Filter "Batto OBS Tool.exe" -File -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "Ungepackte Batto-OBS-Tool-EXE fehlt." }
+          if (Get-ChildItem $unpacked -Filter "Creator Hub.exe" -File -Recurse) { throw "Alte separate Creator-Hub-EXE wurde eingepackt." }
+          if (Get-ChildItem $unpacked -Filter "Creator-Hub-.apk" -File -Recurse) { throw "Alte APK wurde unkontrolliert in den Windows-Release eingepackt." }
+          $resourceRoot = Join-Path $unpacked "resources"
+          if (-not (Test-Path (Join-Path $resourceRoot "app.asar"))) { throw "Electron-ASAR fehlt." }
+          if (-not (Test-Path (Join-Path $resourceRoot "resources/team-logo.svg"))) { throw "Externes Team-Alpha-Logo fehlt." }
+          $bytes = [IO.File]::ReadAllBytes($exe.FullName)
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Hauptanwendung besitzt keinen gültigen PE-Header." }
+          $selfTest = Start-Process -FilePath $exe.FullName -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Self-Test der ungepackten Anwendung fehlgeschlagen: $($selfTest.ExitCode)" }
+
+      - name: Install launch and verify the complete application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Get-ChildItem "dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "NSIS-Installer fehlt." }
+          $installerBytes = [IO.File]::ReadAllBytes($installer.FullName)
+          if ($installerBytes.Length -lt 2 -or $installerBytes[0] -ne 0x4D -or $installerBytes[1] -ne 0x5A) { throw "Installer besitzt keinen gültigen PE-Header." }
+
+          $installDir = Join-Path $env:RUNNER_TEMP "Batto-OBS-Tool-2.0.0-Test"
+          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
+          $installation = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -Wait -PassThru
+          if ($installation.ExitCode -ne 0) { throw "Stille Installation fehlgeschlagen: $($installation.ExitCode)" }
+
+          $installedExe = Join-Path $installDir "Batto OBS Tool.exe"
+          if (-not (Test-Path $installedExe)) { throw "Installierte Hauptanwendung fehlt." }
+          if (Test-Path (Join-Path $installDir "Creator Hub.exe")) { throw "Alte Creator-Hub-EXE wurde installiert." }
+          if (-not (Test-Path (Join-Path $installDir "resources/resources/team-logo.svg"))) { throw "Team-Alpha-Logo wurde nicht installiert." }
+
+          $installedSelfTest = Start-Process -FilePath $installedExe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($installedSelfTest.ExitCode -ne 0) { throw "Self-Test der installierten Anwendung fehlgeschlagen: $($installedSelfTest.ExitCode)" }
+
+          $first = Start-Process -FilePath $installedExe -PassThru
+          Start-Sleep -Seconds 18
+          if ($first.HasExited) { throw "Die installierte Anwendung wurde unmittelbar beendet. ExitCode: $($first.ExitCode)" }
+
+          function Wait-LocalEndpoint([string]$Url, [int]$Seconds = 40) {
+            $deadline = (Get-Date).AddSeconds($Seconds)
+            $lastError = $null
+            while ((Get-Date) -lt $deadline) {
+              try {
+                $result = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 3
+                if ($result.StatusCode -ge 200 -and $result.StatusCode -lt 400) { return $true }
+              } catch { $lastError = $_.Exception.Message }
+              Start-Sleep -Seconds 2
+            }
+            throw "Lokaler Dienst antwortet nicht: $Url. Letzter Fehler: $lastError"
+          }
+
+          Wait-LocalEndpoint "http://127.0.0.1:48620/api/status"
+          Wait-LocalEndpoint "http://127.0.0.1:48620/mobile/"
+          Wait-LocalEndpoint "http://127.0.0.1:48621/api/status"
+          Wait-LocalEndpoint "http://127.0.0.1:48621/overlay"
+          Wait-LocalEndpoint "http://127.0.0.1:48621/editor"
+          Wait-LocalEndpoint "http://127.0.0.1:17821/api/status"
+          Wait-LocalEndpoint "http://127.0.0.1:17822/api/status"
+          Wait-LocalEndpoint "http://127.0.0.1:17822/overlay"
+          Wait-LocalEndpoint "http://127.0.0.1:17822/editor"
+
+          $mobileStatus = Invoke-RestMethod -Uri "http://127.0.0.1:48620/api/status" -TimeoutSec 5
+          if ($null -ne $mobileStatus.pin) { throw "Die Handy-PIN wird über den öffentlichen Statusendpunkt preisgegeben." }
+          $streamStatus = Invoke-RestMethod -Uri "http://127.0.0.1:48621/api/status" -TimeoutSec 5
+          if (-not $streamStatus.active) { throw "Stream-Overlay meldet sich nicht als aktiv." }
+          $monitorStatus = Invoke-RestMethod -Uri "http://127.0.0.1:17822/api/status" -TimeoutSec 5
+          if (-not $monitorStatus.status.running) { throw "Monitoring-Overlay meldet sich nicht als aktiv." }
+
+          $second = Start-Process -FilePath $installedExe -PassThru
+          Start-Sleep -Seconds 6
+          $allProcesses = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $installedExe })
+          $mainProcesses = @($allProcesses | Where-Object {
+            $commandLine = [string]$_.CommandLine
+            $commandLine -notmatch '(?:^|\s)--type=' -and
+            $commandLine -notmatch '(?:^|\s)--utility-sub-type=' -and
+            $commandLine -notmatch '(?:^|\s)--crashpad-handler'
+          })
+          if ($mainProcesses.Count -ne 1) { throw "Single-Instance-Prüfung fehlgeschlagen. Hauptprozesse: $($mainProcesses.Count), Electron-Prozesse insgesamt: $($allProcesses.Count)" }
+
+          $visibleFiles = @(
+            "src/renderer/index.html",
+            "src/renderer/app.js",
+            "src/renderer/integrated.js",
+            "src/mobile/index.html",
+            "src/mobile/app.js",
+            "src/stream-overlay/editor.html",
+            "src/stream-overlay/overlay.html"
+          )
+          foreach ($file in $visibleFiles) {
+            $text = Get-Content $file -Raw
+            if ($text -match 'Creator Hub') { throw "Alte sichtbare Produktbezeichnung in $file." }
+            if ($text -match '\bKandidat\b') { throw "Alte Encoderbezeichnung in $file." }
+          }
+
+          @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $installedExe }) |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          Start-Sleep -Seconds 2
+
+          $uninstaller = Join-Path $installDir "Uninstall Batto OBS Tool.exe"
+          if (-not (Test-Path $uninstaller)) { throw "Deinstallationsprogramm fehlt." }
+          $uninstall = Start-Process -FilePath $uninstaller -ArgumentList "/S" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Stille Deinstallation fehlgeschlagen: $($uninstall.ExitCode)" }
+
+      - name: Package verified Windows release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $releaseDir = Join-Path $PWD "release-2.0.0"
+          Remove-Item -Recurse -Force $releaseDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $releaseDir | Out-Null
+          $installer = Get-ChildItem "dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "Verifizierter Installer fehlt." }
+          Copy-Item $installer.FullName (Join-Path $releaseDir $installer.Name)
+
+          @"
+          BATTO OBS TOOL 2.0.0 – WINDOWS-INSTALLATION
+
+          Ein Installer und eine Hauptanwendung. Der Installer startet das Programm nicht automatisch.
+          Nach der Installation Batto OBS Tool über Desktop oder Startmenü öffnen.
+
+          Enthalten:
+          - Hardwarediagnose, Internettest und dedizierte GPU-Auswahl
+          - OBS-WebSocket, Encoder-Empfehlung und bestätigungspflichtige Tests
+          - transparentes Hardware-/Encoder-Monitoring mit Frametime und 1-%-Low
+          - frei gestaltbares Stream-Overlay mit Team-Alpha-Logo
+          - Twitch-Hologramm
+          - Multi-Chat für Twitch, YouTube und lokale TikTok-/TikFinity-/Tiktory-Webhooks
+          - OBS-Gastquellen
+          - variables Touch-Deck mit Profilen, Ordnern und Mehrfachaktionen
+          - Plugin-Erkennung und native Kompatibilitätsaktionen
+          - lokale Handy-Kopplung über QR-Code und PIN
+          - sichere Altdatenmigration ohne Überschreiben neuer Profile
+
+          OBS WebSocket lokal unter 127.0.0.1:4455 aktivieren.
+          Handy und PC müssen sich im selben lokalen Netzwerk befinden.
+          "@ | Set-Content -Encoding UTF8 (Join-Path $releaseDir "INSTALLATION.txt")
+
+          $installerHash = Get-FileHash (Join-Path $releaseDir $installer.Name) -Algorithm SHA256
+          "$($installerHash.Hash.ToLowerInvariant())  $($installer.Name)" | Set-Content -Encoding ASCII (Join-Path $releaseDir "SHA256.txt")
+
+          @"
+          Batto OBS Tool 2.0.0 – geprüfter Windows-Build
+          Workflow: $env:GITHUB_RUN_ID
+          Commit: $env:GITHUB_SHA
+          Quellprüfung: bestanden
+          Integrations- und Modultests: bestanden
+          Self-Test ungepackt: bestanden
+          Stille Installation: bestanden
+          Self-Test installiert: bestanden
+          Normalstart: bestanden
+          Handy-Server und Weboberfläche: bestanden
+          Stream-Overlay: bestanden
+          Twitch-Hologramm: bestanden
+          Monitoring-Overlay: bestanden
+          Single-Instance: bestanden
+          Deinstallation: bestanden
+          "@ | Set-Content -Encoding UTF8 (Join-Path $releaseDir "BUILD-REPORT.txt")
+
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath "Batto-OBS-Tool-2.0.0-Windows.zip" -CompressionLevel Optimal
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path "Batto-OBS-Tool-2.0.0-Windows.zip"))
+          try {
+            $entries = @($archive.Entries | ForEach-Object FullName)
+            foreach ($required in @("Batto-OBS-Tool-Setup-2.0.0.exe", "INSTALLATION.txt", "SHA256.txt", "BUILD-REPORT.txt")) {
+              if ($entries -notcontains $required) { throw "Release-ZIP ist unvollständig: $required fehlt." }
+            }
+          } finally { $archive.Dispose() }
+
+          "RELEASE_INSTALLER=$((Resolve-Path (Join-Path $releaseDir $installer.Name)).Path)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_ZIP=$((Resolve-Path 'Batto-OBS-Tool-2.0.0-Windows.zip').Path)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_SHA=$((Resolve-Path (Join-Path $releaseDir 'SHA256.txt')).Path)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_INSTRUCTIONS=$((Resolve-Path (Join-Path $releaseDir 'INSTALLATION.txt')).Path)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_REPORT=$((Resolve-Path (Join-Path $releaseDir 'BUILD-REPORT.txt')).Path)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Upload verified Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Batto-OBS-Tool-2.0.0-Windows
+          path: |
+            desktop/Batto-OBS-Tool-2.0.0-Windows.zip
+            desktop/release-2.0.0/Batto-OBS-Tool-Setup-2.0.0.exe
+            desktop/release-2.0.0/INSTALLATION.txt
+            desktop/release-2.0.0/SHA256.txt
+            desktop/release-2.0.0/BUILD-REPORT.txt
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+      - name: Publish public GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $false
+          gh release view v2.0.0 *> $null
+          if ($LASTEXITCODE -eq 0) { gh release delete v2.0.0 --cleanup-tag --yes }
+          gh release create v2.0.0 `
+            "$env:RELEASE_ZIP" `
+            "$env:RELEASE_INSTALLER" `
+            "$env:RELEASE_SHA" `
+            "$env:RELEASE_INSTRUCTIONS" `
+            "$env:RELEASE_REPORT" `
+            --target "$env:GITHUB_SHA" `
+            --title "Batto OBS Tool 2.0.0" `
+            --notes "Vollständig integrierter und verifizierter Windows-x64-Release. Eine Hauptanwendung und ein NSIS-Installer. Enthalten sind Hardwarediagnose, OBS- und Encoderfunktionen, transparentes Monitoring, Stream-Overlay, Twitch-Hologramm, Multi-Chat, OBS-Gastquellen, Touch-Deck Pro, Plugin-Kompatibilität, lokale Handy-Kopplung und sichere Altdatenmigration."
+          if ($LASTEXITCODE -ne 0) { throw "GitHub-Release konnte nicht veröffentlicht werden." }
