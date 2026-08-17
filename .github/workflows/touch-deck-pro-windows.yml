@@ -36,6 +36,31 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Reconstruct and verify the SOTF game-module source archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $source = Join-Path $PWD "game-mods/CrazyBatto-SOTF-Universal-IntegrationModule-v0.3.0-source.zip"
+          $parts = @(Get-ChildItem "game-mods/source-archive" -Filter "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part*" -File | Sort-Object Name)
+          if ($parts.Count -ne 7) { throw "Das SOTF-Quellarchiv besitzt nicht alle sieben geprüften Teile. Gefunden: $($parts.Count)" }
+          $base64 = (($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join "") -replace '\s', ''
+          [IO.File]::WriteAllBytes($source, [Convert]::FromBase64String($base64))
+          $hash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = "e4b4e7f7a6098fe2307b1b91160fd4bd992f818b0bb902ec611a4af5921ff6a4"
+          if ($hash -ne $expected) { throw "SHA-256 des rekonstruierten SOTF-Quellarchivs stimmt nicht. Ist: $hash" }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead($source)
+          try {
+            if ($archive.Entries.Count -lt 27) { throw "Das SOTF-Quellarchiv ist unvollständig. Einträge: $($archive.Entries.Count)" }
+            if (-not ($archive.Entries | Where-Object FullName -Match '/README\.md$')) { throw "README im SOTF-Quellarchiv fehlt." }
+            if (-not ($archive.Entries | Where-Object FullName -Match '/LICENSE$')) { throw "Lizenz im SOTF-Quellarchiv fehlt." }
+            if (-not ($archive.Entries | Where-Object FullName -Match 'CrazyBatto\.SotfDeathCounter\.Core\.csproj$')) { throw "Core-Projekt im SOTF-Quellarchiv fehlt." }
+            if (-not ($archive.Entries | Where-Object FullName -Match 'CrazyBatto\.SotfDeathCounter\.RedLoader\.csproj$')) { throw "RedLoader-Projekt im SOTF-Quellarchiv fehlt." }
+            if (-not ($archive.Entries | Where-Object FullName -Match 'CrazyBatto\.SotfDeathCounter\.LocalApi\.csproj$')) { throw "LocalApi-Projekt im SOTF-Quellarchiv fehlt." }
+          } finally { $archive.Dispose() }
+          Write-Host "SOTF-Quellarchiv geprüft: $source"
+          Write-Host "SHA-256: $hash"
+
       - name: Install desktop dependencies
         shell: pwsh
         working-directory: desktop
@@ -97,13 +122,9 @@ jobs:
           $helper = Get-ChildItem "game-mods/publish" -Filter "CrazyBatto-SOTF-Mod-Installer.exe" -File | Select-Object -First 1
           if (-not $helper) { throw "CrazyBatto-SOTF-Mod-Installer.exe fehlt." }
           $source = "game-mods/CrazyBatto-SOTF-Universal-IntegrationModule-v0.3.0-source.zip"
-          if (-not (Test-Path $source)) { throw "SOTF-Quellmodul fehlt." }
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $source))
-          try {
-            if ($archive.Entries.Count -lt 100) { throw "Das SOTF-Quellarchiv ist unvollständig." }
-            if (-not ($archive.Entries | Where-Object FullName -Match '/README\.md$')) { throw "README im SOTF-Quellarchiv fehlt." }
-          } finally { $archive.Dispose() }
+          if (-not (Test-Path $source)) { throw "Rekonstruiertes SOTF-Quellmodul fehlt." }
+          $helperBytes = [IO.File]::ReadAllBytes($helper.FullName)
+          if ($helperBytes.Length -lt 2 -or $helperBytes[0] -ne 0x4D -or $helperBytes[1] -ne 0x5A) { throw "SOTF-Mod-Installer besitzt keinen gültigen PE-Header." }
 
       - name: Package application and SOTF integration module
         shell: pwsh
