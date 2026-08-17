@@ -40,6 +40,10 @@
       {
         "from": "resources/team-logo.png",
         "to": "resources/team-logo.png"
+      },
+      {
+        "from": "resources/team-logo.svg",
+        "to": "resources/team-logo.svg"
       }
     ],
     "directories": {
