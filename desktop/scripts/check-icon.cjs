@@ -21,13 +21,17 @@ const generator = fs.readFileSync(generatorPath, "utf8");
 if (!generator.includes("width: 256") || !generator.includes("height: 256")) {
   throw new Error("Der Logo-Generator erzeugt kein 256 × 256 Pixel großes Windows-Icon.");
 }
+for (const output of ["build/icon.png", "resources/team-logo.png", "src/renderer/assets/team-alpha-logo.png", "src/stream-overlay/team-logo.png"]) {
+  if (!generator.includes(output.split("/").at(-1))) throw new Error(`Logo-Generator berücksichtigt ${output} nicht.`);
+}
 
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 if (packageJson.build?.win?.icon !== "build/icon.png") throw new Error("Das Windows-Programm verwendet nicht das erzeugte 256px-Logo build/icon.png.");
-if (packageJson.build?.nsis?.installerIcon !== "build/icon.ico") throw new Error("Der Installer verwendet nicht das Team-Alpha-Quellicon.");
-if (packageJson.build?.nsis?.uninstallerIcon !== "build/icon.ico") throw new Error("Der Deinstaller verwendet nicht das Team-Alpha-Quellicon.");
+if (packageJson.build?.nsis?.installerIcon || packageJson.build?.nsis?.uninstallerIcon) {
+  throw new Error("NSIS darf kein zu kleines separates Icon überschreiben, sondern muss das 256px-App-Logo erben.");
+}
 if (!String(packageJson.scripts?.["predist:win"] || "").includes("generate-icon.cjs")) {
   throw new Error("Das 256px-Logo wird vor dem Windows-Build nicht erzeugt.");
 }
 
-console.log(`Team-Alpha-Branding geprüft: Quellicon ${icon.length} Bytes, 256px-App-Logo wird vor dem Build erzeugt.`);
+console.log(`Team-Alpha-Branding geprüft: Quellicon ${icon.length} Bytes, 256px-App-Logo wird vor dem Build erzeugt und von NSIS übernommen.`);
