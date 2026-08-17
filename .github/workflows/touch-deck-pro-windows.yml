@@ -1,0 +1,237 @@
+name: Batto OBS Tool Touch-Deck Pro Windows Package
+
+on:
+  push:
+    branches:
+      - feat/touch-deck-pro-plugin-sidebar
+    paths:
+      - "desktop/**"
+      - "game-mods/**"
+      - ".github/workflows/touch-deck-pro-windows.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "desktop/**"
+      - "game-mods/**"
+      - ".github/workflows/touch-deck-pro-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: batto-touch-deck-pro-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-package:
+    runs-on: windows-2025
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Use .NET 8 for the graphical SOTF mod installer
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Reconstruct and verify the SOTF game-module source archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $source = Join-Path $PWD "game-mods/CrazyBatto-SOTF-Universal-IntegrationModule-v0.3.0-source.zip"
+          $sourceDirectory = Join-Path $PWD "game-mods/source-archive"
+          $orderedParts = @(
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part000",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part001",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part002",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part003",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part004",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part005a",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part005b1",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part005b2",
+            "CrazyBatto-SOTF-IntegrationModule-v0.3.0-game-source.zip.b64.part006"
+          ) | ForEach-Object { Join-Path $sourceDirectory $_ }
+          foreach ($part in $orderedParts) {
+            if (-not (Test-Path $part)) { throw "SOTF-Archivteil fehlt: $part" }
+          }
+          $base64 = (($orderedParts | ForEach-Object { Get-Content $_ -Raw }) -join "") -replace '\s', ''
+          if ($base64.Length -ne 56548) { throw "SOTF-Base64-Länge ist falsch. Erwartet 56548, gefunden $($base64.Length)." }
+          [IO.File]::WriteAllBytes($source, [Convert]::FromBase64String($base64))
+          $hash = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = "e4b4e7f7a6098fe2307b1b91160fd4bd992f818b0bb902ec611a4af5921ff6a4"
+          if ($hash -ne $expected) { throw "SHA-256 des rekonstruierten SOTF-Quellarchivs stimmt nicht. Ist: $hash" }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead($source)
+          try {
+            if ($archive.Entries.Count -lt 27) { throw "Das SOTF-Quellarchiv ist unvollständig. Einträge: $($archive.Entries.Count)" }
+            if (-not ($archive.Entries | Where-Object FullName -Match '/README\.md$')) { throw "README im SOTF-Quellarchiv fehlt." }
+            if (-not ($archive.Entries | Where-Object FullName -Match '/LICENSE$')) { throw "Lizenz im SOTF-Quellarchiv fehlt." }
+            if (-not ($archive.Entries | Where-Object FullName -Match 'CrazyBatto\.SotfDeathCounter\.Core\.csproj$')) { throw "Core-Projekt im SOTF-Quellarchiv fehlt." }
+            if (-not ($archive.Entries | Where-Object FullName -Match 'CrazyBatto\.SotfDeathCounter\.RedLoader\.csproj$')) { throw "RedLoader-Projekt im SOTF-Quellarchiv fehlt." }
+            if (-not ($archive.Entries | Where-Object FullName -Match 'CrazyBatto\.SotfDeathCounter\.LocalApi\.csproj$')) { throw "LocalApi-Projekt im SOTF-Quellarchiv fehlt." }
+          } finally { $archive.Dispose() }
+
+          $verifyDirectory = Join-Path $env:RUNNER_TEMP "crazy-batto-sotf-source-verify"
+          Remove-Item -Recurse -Force $verifyDirectory -ErrorAction SilentlyContinue
+          [IO.Compression.ZipFile]::ExtractToDirectory($source, $verifyDirectory)
+          $root = @(Get-ChildItem $verifyDirectory -Directory)
+          if ($root.Count -ne 1) { throw "Das entpackte SOTF-Quellarchiv besitzt keinen eindeutigen Wurzelordner." }
+          foreach ($required in @(
+            "README.md",
+            "LICENSE",
+            "src/CrazyBatto.SotfDeathCounter.Core/CrazyBatto.SotfDeathCounter.Core.csproj",
+            "src/CrazyBatto.SotfDeathCounter.RedLoader/CrazyBatto.SotfDeathCounter.RedLoader.csproj",
+            "src/CrazyBatto.SotfDeathCounter.LocalApi/CrazyBatto.SotfDeathCounter.LocalApi.csproj"
+          )) {
+            if (-not (Test-Path (Join-Path $root[0].FullName $required))) { throw "Entpackte SOTF-Quelldatei fehlt: $required" }
+          }
+          Write-Host "SOTF-Quellarchiv vollständig extrahiert und geprüft: $source"
+          Write-Host "SHA-256: $hash"
+
+      - name: Install desktop dependencies
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm install --no-audit --no-fund --ignore-scripts=false
+          if ($LASTEXITCODE -ne 0) { throw "npm install ist fehlgeschlagen." }
+
+      - name: Assemble and test Batto OBS Tool
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw "Touch-Deck-Pro- oder Integrationstests sind fehlgeschlagen." }
+          foreach ($required in @(
+            "src/renderer/touch-deck-pro-v2.js",
+            "src/renderer/touch-deck-pro-v2.css",
+            "src/renderer/index.html"
+          )) {
+            if (-not (Test-Path $required)) { throw "Vorbereitete Touch-Deck-Pro-Datei fehlt: $required" }
+          }
+          $index = Get-Content "src/renderer/index.html" -Raw
+          if ($index -notmatch 'touch-deck-pro-v2\.css') { throw "Touch-Deck-Pro-CSS ist nicht eingebunden." }
+          if ($index -notmatch 'touch-deck-pro-v2\.js') { throw "Touch-Deck-Pro-JavaScript ist nicht eingebunden." }
+
+      - name: Build Windows x64 application installer
+        shell: pwsh
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          npm_config_ignore_scripts: "false"
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm run dist:win
+          if ($LASTEXITCODE -ne 0) { throw "Windows-Installer konnte nicht gebaut werden." }
+          $installer = Get-ChildItem "dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "Batto-OBS-Tool-Setup-2.0.0.exe fehlt." }
+          $unpacked = Resolve-Path "dist/win-unpacked"
+          $exe = Get-ChildItem $unpacked -Filter "Batto OBS Tool.exe" -File -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "Ungepackte Hauptanwendung fehlt." }
+          $selfTest = Start-Process -FilePath $exe.FullName -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Self-Test fehlgeschlagen: $($selfTest.ExitCode)" }
+
+      - name: Build graphical Sons of the Forest mod installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet publish "game-mods/SOTF-Mod-Installer/CrazyBatto.SotfModInstaller.csproj" `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o "game-mods/publish"
+          if ($LASTEXITCODE -ne 0) { throw "Grafischer SOTF-Mod-Installer konnte nicht gebaut werden." }
+          $helper = Get-ChildItem "game-mods/publish" -Filter "CrazyBatto-SOTF-Mod-Installer.exe" -File | Select-Object -First 1
+          if (-not $helper) { throw "CrazyBatto-SOTF-Mod-Installer.exe fehlt." }
+          $source = "game-mods/CrazyBatto-SOTF-Universal-IntegrationModule-v0.3.0-source.zip"
+          if (-not (Test-Path $source)) { throw "Rekonstruiertes SOTF-Quellmodul fehlt." }
+          $helperBytes = [IO.File]::ReadAllBytes($helper.FullName)
+          if ($helperBytes.Length -lt 2 -or $helperBytes[0] -ne 0x4D -or $helperBytes[1] -ne 0x5A) { throw "SOTF-Mod-Installer besitzt keinen gültigen PE-Header." }
+
+      - name: Package application and SOTF integration module
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $release = Join-Path $PWD "release-touch-deck-pro"
+          Remove-Item -Recurse -Force $release -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $release | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $release "SOTF-Spielmod") | Out-Null
+
+          $installer = Get-ChildItem "desktop/dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
+          Copy-Item $installer.FullName (Join-Path $release $installer.Name)
+          Copy-Item "game-mods/publish/CrazyBatto-SOTF-Mod-Installer.exe" (Join-Path $release "SOTF-Spielmod/CrazyBatto-SOTF-Mod-Installer.exe")
+          Copy-Item "game-mods/CrazyBatto-SOTF-Universal-IntegrationModule-v0.3.0-source.zip" (Join-Path $release "SOTF-Spielmod/CrazyBatto-SOTF-Universal-IntegrationModule-v0.3.0-source.zip")
+          Copy-Item "game-mods/README-SOTF-MOD.txt" (Join-Path $release "SOTF-Spielmod/README-SOTF-MOD.txt")
+
+          @"
+          BATTO OBS TOOL 2.0.0 – TOUCH-DECK-PRO-PAKET
+
+          1. Batto-OBS-Tool-Setup-2.0.0.exe installieren.
+          2. Für Sons of the Forest den Ordner "SOTF-Spielmod" öffnen.
+          3. CrazyBatto-SOTF-Mod-Installer.exe starten.
+
+          Touch-Deck Pro enthält jetzt:
+          - linke Plugin-/Aktionsbibliothek mit Suche
+          - Umschaltung Tasten / Plugins
+          - aufklappbare Plugin-Gruppen
+          - Aktion per Klick oder Drag-and-drop auf eine Taste
+          - mittleres variables Tastenraster
+          - rechten Tasten-Inspector mit Mehrfachaktionen
+          - leere, unbeschriftete Standardtasten
+          - Profile, Ordner, Import/Export, Kopieren/Einfügen und Verzögerungen
+          - Beibehaltung verdeckter Tasten beim Verkleinern des Rasters
+
+          Das SOTF-Quellpaket ist kein beliebiges vorgebautes Spiel-DLL. Der mitgelieferte grafische
+          Mod-Installer baut es gegen die RedLoader- und Spiel-Assemblies auf deinem Computer und
+          installiert nur dann, wenn DLL und manifest.json erfolgreich erzeugt wurden.
+          "@ | Set-Content -Encoding UTF8 (Join-Path $release "INSTALLATION.txt")
+
+          $hashLines = Get-ChildItem $release -File -Recurse | ForEach-Object {
+            $hash = Get-FileHash $_.FullName -Algorithm SHA256
+            $relative = [IO.Path]::GetRelativePath($release, $_.FullName)
+            "$($hash.Hash.ToLowerInvariant())  $relative"
+          }
+          $hashLines | Set-Content -Encoding ASCII (Join-Path $release "SHA256.txt")
+
+          $zip = Join-Path $PWD "Batto-OBS-Tool-2.0.0-TouchDeck-Pro-Windows.zip"
+          Remove-Item $zip -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$release/*" -DestinationPath $zip -CompressionLevel Optimal
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+          try {
+            $entries = @($archive.Entries | ForEach-Object FullName)
+            foreach ($required in @(
+              "Batto-OBS-Tool-Setup-2.0.0.exe",
+              "INSTALLATION.txt",
+              "SHA256.txt",
+              "SOTF-Spielmod/CrazyBatto-SOTF-Mod-Installer.exe",
+              "SOTF-Spielmod/CrazyBatto-SOTF-Universal-IntegrationModule-v0.3.0-source.zip",
+              "SOTF-Spielmod/README-SOTF-MOD.txt"
+            )) {
+              if ($entries -notcontains $required) { throw "Paket-ZIP ist unvollständig: $required fehlt." }
+            }
+          } finally { $archive.Dispose() }
+
+      - name: Upload verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Batto-OBS-Tool-2.0.0-TouchDeck-Pro-Windows
+          path: Batto-OBS-Tool-2.0.0-TouchDeck-Pro-Windows.zip
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
