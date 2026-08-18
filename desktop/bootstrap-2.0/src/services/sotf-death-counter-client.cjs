@@ -67,7 +67,9 @@ class SotfDeathCounterClient extends EventEmitter {
     timeoutMs = 1500,
     intervalMs = 5000,
     offlineIntervalMs = 15000,
-    heartbeatMs = 60000
+    heartbeatMs = 60000,
+    moduleVersion = "0.3.3",
+    bundle = null
   } = {}) {
     super();
     this.baseUrl = normalizeLoopbackBaseUrl(baseUrl);
@@ -85,6 +87,8 @@ class SotfDeathCounterClient extends EventEmitter {
     this.lastCheckedAt = 0;
     this.lastEmittedAt = 0;
     this.lastChangeSignature = "";
+    this.moduleVersion = safeText(moduleVersion, 80) || "0.3.3";
+    this.bundle = bundle && typeof bundle === "object" ? { ...bundle } : null;
   }
 
   urls() {
@@ -100,8 +104,9 @@ class SotfDeathCounterClient extends EventEmitter {
     return {
       active: this.connected,
       connected: this.connected,
-      module: "CrazyBatto-SOTF-DeathCounter-Module-v0.3.0",
-      version: "0.3.0",
+      module: `CrazyBatto-SOTF-DeathCounter-Module-v${this.moduleVersion}`,
+      version: this.moduleVersion,
+      bundle: this.bundle,
       ...this.urls(),
       snapshot: this.latest,
       error: this.lastError,

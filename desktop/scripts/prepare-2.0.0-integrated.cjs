@@ -44,7 +44,7 @@ ensureDir(source);
 for (const file of [
   "common.cjs", "obs-websocket.cjs", "plugin-registry.cjs", "deck-store.cjs", "migration.cjs",
   "action-executor.cjs", "mobile-bridge.cjs", "stream-overlay-server.cjs", "multi-chat.cjs",
-  "twitch-holo-server.cjs", "stream-deck-plugin-host.cjs", "sotf-death-counter-client.cjs"
+  "twitch-holo-server.cjs", "stream-deck-plugin-host.cjs", "sotf-death-counter-client.cjs", "heart-rate-manager.cjs"
 ]) copyFile(path.join(bootstrap, "services", file), path.join(source, "services", file));
 copyTree(path.join(bootstrap, "stream-overlay"), path.join(source, "stream-overlay"));
 copyTree(path.join(bootstrap, "mobile"), path.join(source, "mobile"));
@@ -150,11 +150,14 @@ if (packageJson.main !== "src/main.cjs") throw new Error(`Falscher Programmeinst
 const required = [
   "src/main.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/app.js",
   "src/renderer/integrated.js", "src/renderer/integrated.css", "src/renderer/assets/team-alpha-logo.svg",
+  "src/renderer/assets/team-alpha-logo.png", "src/renderer/assets/overview-dragon-pc.png",
   "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs",
   "src/services/mobile-bridge.cjs", "src/services/stream-overlay-server.cjs", "src/services/plugin-registry.cjs",
   "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/services/stream-deck-plugin-host.cjs",
-  "src/services/sotf-death-counter-client.cjs", "src/mobile/index.html",
-  "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "resources/team-logo.svg",
+  "src/services/sotf-death-counter-client.cjs", "src/services/heart-rate-manager.cjs", "src/mobile/index.html",
+  "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "src/stream-overlay/team-logo.png",
+  "resources/team-logo.svg", "resources/team-logo.png",
+  "resources/sotf-death-counter/CrazyBatto.SotfDeathCounter.dll", "resources/sotf-death-counter/manifest.json",
   "modules/encoder-monitoring-overlay/src/server.cjs", "modules/twitch-holo-chat/web/overlay.html"
 ];
 for (const relative of required) {

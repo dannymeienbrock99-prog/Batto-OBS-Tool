@@ -21,6 +21,132 @@
     standard: { label: "Stream Deck · 15", rows: 3, columns: 5 },
     xl: { label: "Stream Deck XL · 32", rows: 4, columns: 8 }
   });
+  const nativeActionFields = Object.freeze({
+    "obs.scene": [
+      { key: "sceneName", label: "OBS-Szene", placeholder: "Gaming", required: true }
+    ],
+    "obs.source.toggle": [
+      { key: "sceneName", label: "OBS-Szene", placeholder: "Gaming", required: true },
+      { key: "sourceName", label: "Quelle", placeholder: "Webcam", required: true }
+    ],
+    "obs.input.mute": [
+      { key: "inputName", label: "Audioquelle", placeholder: "Mikrofon", required: true },
+      { key: "toggle", label: "Bei jedem Druck umschalten", type: "checkbox", default: true },
+      { key: "muted", label: "Stummschalten", type: "checkbox", default: true }
+    ],
+    "obs.input.volume": [
+      { key: "inputName", label: "Audioquelle", placeholder: "Desktop-Audio", required: true },
+      { key: "volumeMul", label: "Lautstärke (0 bis 2)", type: "number", min: 0, max: 2, step: 0.05, default: 1, required: true }
+    ],
+    "system.launch": [
+      { key: "path", label: "Programm, Datei oder Ordner", placeholder: "C:\\Programme\\App\\App.exe", required: true }
+    ],
+    "system.url": [
+      { key: "url", label: "Webadresse", type: "url", placeholder: "https://example.com", required: true }
+    ],
+    "system.hotkey": [
+      { key: "keys", label: "Tastenkombination", placeholder: "CTRL+SHIFT+F1", required: true, help: "Tasten mit + trennen." }
+    ],
+    "system.command": [
+      { key: "file", label: "Ausführbare Datei", placeholder: "powershell.exe", required: true },
+      { key: "args", label: "Argumente", type: "lines", placeholder: "Ein Argument pro Zeile" },
+      { key: "timeoutMs", label: "Zeitlimit in ms", type: "number", min: 1000, max: 120000, step: 1000, default: 15000 }
+    ],
+    "discord.webhook": [
+      { key: "webhookUrl", label: "Discord-Webhook-Adresse", type: "password", placeholder: "https://discord.com/api/webhooks/…", required: true },
+      { key: "message", label: "Nachricht", type: "textarea", maxlength: 1900, required: true }
+    ],
+    "icue.profile": [
+      { key: "profile", label: "iCUE-Profil", placeholder: "Streaming" }
+    ],
+    "obsbot.camera.select": [
+      { key: "keys", label: "OBSBOT-Hotkey", placeholder: "CTRL+SHIFT+1", help: "Optional: Tasten mit + trennen." }
+    ],
+    "obsbot.camera.settings": [
+      { key: "keys", label: "OBSBOT-Hotkey", placeholder: "CTRL+SHIFT+2", help: "Optional: Tasten mit + trennen." }
+    ],
+    "obsbot.camera.reset": [
+      { key: "keys", label: "OBSBOT-Hotkey", placeholder: "CTRL+SHIFT+3", help: "Optional: Tasten mit + trennen." }
+    ],
+    "tiktok.event": [
+      { key: "eventType", label: "Ereignis", type: "select", options: [["tiktok", "TikTok"], ["chat", "Chat"], ["gift", "Geschenk"], ["follow", "Follow"], ["like", "Like"]], default: "tiktok" },
+      { key: "name", label: "Name", placeholder: "Zuschauer" },
+      { key: "text", label: "Text oder Geschenk", type: "textarea", placeholder: "Ereignis" },
+      { key: "value", label: "Wert", type: "number", min: 0, step: 1, default: 0 }
+    ],
+    "tikfinity.webhook": [
+      { key: "eventType", label: "TikFinity-Ereignis", type: "select", options: [["chat", "Chat"], ["gift", "Geschenk"], ["follow", "Follow"], ["like", "Like"]], default: "chat" },
+      { key: "name", label: "Name", placeholder: "Zuschauer" },
+      { key: "text", label: "Text oder Geschenk", type: "textarea", placeholder: "Ereignis" },
+      { key: "value", label: "Wert", type: "number", min: 0, step: 1, default: 0 }
+    ],
+    "overlay.poll": [
+      { key: "text", label: "Antwort / Option", placeholder: "Option A", required: true, help: "Jeder Tastendruck zählt Stimmen für diese Option." },
+      { key: "value", label: "Stimmen pro Tastendruck", type: "number", min: 1, step: 1, default: 1, required: true }
+    ],
+    "overlay.wordcloud": [
+      { key: "text", label: "Wörter", type: "textarea", placeholder: "Wörter durch Leerzeichen oder Zeilen trennen", required: true }
+    ],
+    "overlay.wheel": [],
+    "youtube.channel": [
+      { key: "channelUrl", label: "Kanaladresse oder Kanal-ID", placeholder: "https://youtube.com/@…", required: true }
+    ],
+    "youtube.latest": [
+      { key: "channelId", label: "YouTube-Kanal-ID", required: true },
+      { key: "apiKey", label: "YouTube-API-Schlüssel", type: "password", required: true }
+    ],
+    "youtube.refresh": [
+      { key: "channelId", label: "YouTube-Kanal-ID", required: true },
+      { key: "apiKey", label: "YouTube-API-Schlüssel", type: "password", required: true }
+    ],
+    "youtube.ticker.status": [
+      { key: "channelId", label: "YouTube-Kanal-ID", required: true },
+      { key: "apiKey", label: "YouTube-API-Schlüssel", type: "password", required: true }
+    ],
+    "youtube.viewer.count": [
+      { key: "videoId", label: "Video-ID", required: true },
+      { key: "apiKey", label: "YouTube-API-Schlüssel", type: "password", required: true }
+    ],
+    "youtube.chat.send": [
+      { key: "liveChatId", label: "Live-Chat-ID", required: true },
+      { key: "accessToken", label: "OAuth-Zugriffstoken", type: "password", required: true },
+      { key: "message", label: "Chatnachricht", type: "textarea", maxlength: 200, required: true }
+    ],
+    "youtube.music.playlist": [
+      { key: "playlistUrl", label: "YouTube-Music-Playlist", type: "url", placeholder: "https://music.youtube.com/playlist?list=…", required: true }
+    ],
+    "youtube.music.like": [{ key: "keys", label: "Desktop-App-Hotkey", placeholder: "CTRL+ALT+L", required: true }],
+    "youtube.music.dislike": [{ key: "keys", label: "Desktop-App-Hotkey", placeholder: "CTRL+ALT+D", required: true }],
+    "youtube.music.shuffle": [{ key: "keys", label: "Desktop-App-Hotkey", placeholder: "CTRL+ALT+S", required: true }],
+    "youtube.music.repeat": [{ key: "keys", label: "Desktop-App-Hotkey", placeholder: "CTRL+ALT+R", required: true }],
+    "youtube.music.info": [{ key: "keys", label: "Desktop-App-Hotkey", placeholder: "CTRL+ALT+I", required: true }],
+    "giveaway.add": [{ key: "name", label: "Teilnehmername", placeholder: "Name", required: true }],
+    "sotf.counter.refresh": [],
+    "sotf.overlay.open": [],
+    "sotf.overlay.copy-url": [],
+    "obs.stream.toggle": [],
+    "obs.record.toggle": [],
+    "obs.virtualcam.toggle": [],
+    "media.playpause": [],
+    "media.next": [],
+    "media.previous": [],
+    "media.stop": [],
+    "media.volume.up": [],
+    "media.volume.down": [],
+    "media.mute": [],
+    "youtube.dashboard": [],
+    "youtube.music.open": [],
+    "discord.launch": [],
+    "obsbot.center": [],
+    "tiktok.live-studio.launch": [],
+    "giveaway.draw": [],
+    "icue.launch": [],
+    "bambulab.launch": [],
+    "bambulab.monitor": [],
+    "spotify.launch": [],
+    "volume.mixer": [],
+    "discord.volume.mixer": []
+  });
   const blankButton = (index) => ({
     id: `button-${index + 1}`,
     title: "",
@@ -51,6 +177,8 @@
   let fitFrame = 0;
   let resizeObserver = null;
   let lastViewSignature = "";
+  let inspectorCatalogKey = "";
+  let editingActionIndex = -1;
   const groupState = new Map();
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -97,6 +225,7 @@
       for (const action of plugin.actions || []) {
         if (action.visibleInActionsList === false || action.raw?.supportedInTouchDeck === false) continue;
         result.push({
+          catalogKey: `${plugin.id}::${action.id}`,
           pluginId: plugin.id,
           pluginName: plugin.name,
           pluginIcon: plugin.icon || "",
@@ -104,11 +233,17 @@
           actionId: action.id,
           actionName: action.name,
           actionIcon: action.icon || action.states?.find((entry) => entry.image)?.image || plugin.icon || "",
+          propertyInspectorPath: action.propertyInspectorPath || action.raw?.propertyInspectorPath || plugin.propertyInspectorPath || "",
           tooltip: action.tooltip || plugin.description || ""
         });
       }
     }
     return result.sort((a, b) => `${a.pluginName} ${a.actionName}`.localeCompare(`${b.pluginName} ${b.actionName}`, "de"));
+  }
+
+  function catalogEntry(catalog = actionCatalog()) {
+    const requested = inspectorCatalogKey || $("#tdp-action-type")?.value || "";
+    return catalog.find((entry) => entry.catalogKey === requested) || catalog[0] || null;
   }
 
   function filteredPlugins() {
@@ -228,7 +363,8 @@
               <div class="tdp-subheading"><h3>Mehrfachaktionen</h3><span id="tdp-action-count">0</span></div>
               <div id="tdp-actions" class="tdp-action-list"></div>
               <label>Aktion<select id="tdp-action-type"></select></label>
-              <label>Einstellungen als JSON<textarea id="tdp-action-settings" rows="5">{}</textarea></label>
+              <div id="tdp-action-properties" class="tdp-action-properties" aria-live="polite"></div>
+              <button id="tdp-open-property-inspector" class="tdp-property-inspector-button" type="button" hidden>⚙ Original-Plugin konfigurieren</button>
               <label>Verzögerung in ms<input id="tdp-action-delay" type="number" min="0" max="120000" value="0"></label>
               <button id="tdp-add-action" type="button">Aktion hinzufügen</button>
               <div class="tdp-save-row">
@@ -250,12 +386,7 @@
     });
     $("#tdp-tab-actions").addEventListener("click", () => setLibraryTab("actions"));
     $("#tdp-tab-plugins").addEventListener("click", () => setLibraryTab("plugins"));
-    $("#tdp-rescan").addEventListener("click", async () => {
-      state.plugins = await call("plugins:scan");
-      renderLibrary();
-      renderInspector();
-      toast("Plugins und Aktionen neu eingelesen.");
-    });
+    $("#tdp-rescan").addEventListener("click", scanPlugins);
     $("#tdp-profile").addEventListener("change", async (event) => {
       if (!discardDraftIfNeeded()) { render(); return; }
       selectedIndex = -1;
@@ -295,6 +426,13 @@
     $("#tdp-move-key").addEventListener("click", beginTouchMove);
     $("#tdp-assignment-mode").addEventListener("change", (event) => { assignmentMode = event.currentTarget.value === "append" ? "append" : "replace"; });
     $("#tdp-cancel-assignment").addEventListener("click", cancelPendingAssignment);
+    $("#tdp-action-type").addEventListener("change", (event) => {
+      inspectorCatalogKey = event.currentTarget.value;
+      editingActionIndex = -1;
+      renderActionProperties(catalogEntry(), {});
+      updateActionEditorButton();
+    });
+    $("#tdp-open-property-inspector").addEventListener("click", openSelectedPropertyInspector);
     $("#tdp-add-action").addEventListener("click", addActionFromInspector);
     $("#tdp-save-key").addEventListener("click", saveKey);
     $("#tdp-discard-key").addEventListener("click", discardKey);
@@ -317,6 +455,24 @@
     $("#tdp-tab-actions").setAttribute("aria-selected", String(next === "actions"));
     $("#tdp-tab-plugins").setAttribute("aria-selected", String(next === "plugins"));
     renderLibrary();
+  }
+
+  async function scanPlugins() {
+    state.plugins = await call("plugins:scan");
+    lastLibrarySignature = "";
+    renderLibrary();
+    renderInspector();
+    toast("Plugins und Aktionen neu eingelesen.");
+  }
+
+  async function importPlugin(channel) {
+    const result = await call(channel);
+    if (!result) return;
+    state.plugins = result.snapshot || result;
+    lastLibrarySignature = "";
+    renderLibrary();
+    renderInspector();
+    toast("Stream-Deck-Plugin importiert und eingelesen.");
   }
 
   function setMode(next) {
@@ -342,17 +498,40 @@
       libraryTab,
       searchText,
       pendingAction?.actionId || "",
-      pluginState.scannedAt || 0,
+      state?.modules?.sotfDeathCounter?.connected || false,
+      state?.modules?.sotfDeathCounter?.version || "",
+      state?.modules?.sotfDeathCounter?.bundle?.version || "",
       [...groupState.entries()],
-      (pluginState.plugins || []).map((plugin) => [plugin.id, plugin.enabled, plugin.status, plugin.actions?.length || 0])
+      (pluginState.plugins || []).map((plugin) => [
+        plugin.id,
+        plugin.name,
+        plugin.version,
+        plugin.enabled,
+        plugin.status,
+        plugin.actions?.map((action) => [action.id, action.name, action.propertyInspectorPath]) || []
+      ])
     ]);
     if (signature === lastLibrarySignature) return;
     lastLibrarySignature = signature;
     target.replaceChildren();
     const plugins = filteredPlugins();
     if (libraryTab === "plugins") {
+      const tools = document.createElement("section");
+      tools.className = "tdp-plugin-tools";
+      tools.innerHTML = `
+        <strong>Elgato-Plugins laden</strong>
+        <small>Originale .streamDeckPlugin-Pakete oder entpackte .sdPlugin-Ordner werden direkt in Touch-Deck eingebunden.</small>
+        <div>
+          <button type="button" data-plugin-import>Paket laden</button>
+          <button type="button" data-plugin-folder>Ordner laden</button>
+          <button type="button" data-plugin-scan>Scannen</button>
+        </div>`;
+      $("[data-plugin-import]", tools).addEventListener("click", () => importPlugin("plugins:import"));
+      $("[data-plugin-folder]", tools).addEventListener("click", () => importPlugin("plugins:import-folder"));
+      $("[data-plugin-scan]", tools).addEventListener("click", scanPlugins);
+      target.append(tools);
       if (!plugins.length) {
-        target.innerHTML = '<p class="tdp-library-empty">Keine installierten Plugins gefunden.</p>';
+        target.insertAdjacentHTML("beforeend", '<p class="tdp-library-empty">Keine installierten Plugins gefunden.</p>');
         return;
       }
       for (const plugin of plugins) target.append(pluginRow(plugin));
@@ -370,14 +549,30 @@
   function pluginRow(plugin) {
     const row = document.createElement("article");
     row.className = `tdp-plugin-row${plugin.enabled ? "" : " disabled"}`;
+    const isSotf = plugin.id === "crazybatto.sotf-death-counter";
+    const sotf = state?.modules?.sotfDeathCounter || {};
+    const bundleVersion = sotf.bundle?.version || sotf.version || plugin.version || "";
+    const status = isSotf
+      ? `${sotf.connected ? "Verbunden" : "Nicht verbunden"}${bundleVersion ? ` · Modul v${bundleVersion}` : ""}${sotf.bundle?.available ? " · Installationspaket bereit" : ""}`
+      : plugin.status || plugin.description || "";
     row.innerHTML = `
       <div class="tdp-plugin-icon">${iconMarkup(plugin.icon, pluginFallback(plugin))}</div>
-      <div class="tdp-plugin-copy"><strong>${html(plugin.name)}</strong><small>${html(plugin.version || (plugin.native ? "Native Batto-Aktion" : "Installiert"))}</small><span>${html(plugin.status || plugin.description || "")}</span></div>
-      <label class="tdp-switch" title="Plugin aktivieren oder deaktivieren"><input type="checkbox" ${plugin.enabled ? "checked" : ""}><span></span></label>`;
-    $("input", row).addEventListener("change", async (event) => {
+      <div class="tdp-plugin-copy"><strong>${html(plugin.name)}</strong><small>${html(plugin.version || (plugin.native ? "Native Batto-Aktion" : "Installiert"))}</small><span class="${isSotf ? (sotf.connected ? "connected" : "disconnected") : ""}">${html(status)}</span></div>
+      <div class="tdp-plugin-controls">
+        ${isSotf && sotf.bundle?.available ? '<button type="button" data-sotf-install title="Gebündeltes RedLoader-Modul installieren">Mod installieren</button>' : ""}
+        <label class="tdp-switch" title="Plugin aktivieren oder deaktivieren"><input type="checkbox" ${plugin.enabled ? "checked" : ""}><span></span></label>
+      </div>`;
+    $(".tdp-switch input", row).addEventListener("change", async (event) => {
       state.plugins = await call("plugins:enable", { pluginId: plugin.id, enabled: event.currentTarget.checked });
+      lastLibrarySignature = "";
       renderLibrary();
       renderInspector();
+    });
+    $("[data-sotf-install]", row)?.addEventListener("click", async () => {
+      const result = await call("sotf:install-module");
+      if (!result) return;
+      await refresh();
+      toast(`SOTF-Modul v${result.version || bundleVersion} installiert.`);
     });
     return row;
   }
@@ -411,10 +606,13 @@
       item.draggable = true;
       item.title = "Antippen und danach die gewünschte Taste wählen";
       const transfer = {
+        catalogKey: `${plugin.id}::${action.id}`,
         pluginId: plugin.id,
         pluginName: plugin.name,
+        pluginNative: Boolean(plugin.native),
         actionId: action.id,
         actionName: action.name,
+        propertyInspectorPath: action.propertyInspectorPath || action.raw?.propertyInspectorPath || plugin.propertyInspectorPath || "",
         icon: action.icon || action.states?.find((entry) => entry.image)?.image || plugin.icon || ""
       };
       item.innerHTML = `<span class="tdp-drag-handle">⠿</span><span class="tdp-action-icon">${iconMarkup(transfer.icon, pluginFallback(plugin))}</span><span><strong>${html(action.name)}</strong><small>${html(action.tooltip || action.id)}</small></span>`;
@@ -524,14 +722,28 @@
   }
 
   function previewLayout(event) {
-    if (event?.currentTarget && ["tdp-rows", "tdp-columns"].includes(event.currentTarget.id)) {
+    const controlId = event?.currentTarget?.id || "";
+    const capacityChanged = !controlId || ["tdp-rows", "tdp-columns"].includes(controlId);
+    if (["tdp-rows", "tdp-columns"].includes(controlId)) {
       $("#tdp-preset").value = "custom";
     }
     layoutPreview = layoutFromControls();
     updateLayoutOutputs(layoutPreview);
     const currentProfile = profile();
     const currentFolder = folder(currentProfile);
-    if (currentProfile && currentFolder) renderGrid(currentProfile, currentFolder, layoutPreview);
+    if (currentProfile && currentFolder) {
+      if (capacityChanged) renderGrid(currentProfile, currentFolder, layoutPreview);
+      else {
+        const grid = $("#tdp-grid");
+        applyGridPresentation(grid, currentFolder, layoutPreview);
+        for (const element of $$(".tdp-key", grid)) {
+          const index = Number(element.dataset.index);
+          const button = index === selectedIndex && draft ? draft : currentFolder.buttons?.[index] || blankButton(index);
+          element.hidden = Boolean(layoutPreview.hideUnused && !isUsed(button));
+        }
+        scheduleGridFit();
+      }
+    }
     $("#tdp-draft-state").textContent = "Rastervorschau – noch nicht gespeichert";
     $("#tdp-draft-state").classList.add("dirty");
   }
@@ -591,6 +803,13 @@
     $("#tdp-draft-state").classList.toggle("dirty", draftDirty || layoutDirty);
 
     const grid = $("#tdp-grid");
+    applyGridPresentation(grid, currentFolder, layout);
+    grid.replaceChildren(...visible.map((button, index) => keyElement(currentProfile, currentFolder, layout, button, index)));
+    scheduleGridFit();
+  }
+
+  function applyGridPresentation(grid, currentFolder, layout) {
+    if (!grid) return;
     grid.dataset.fit = layout.autoFit === false ? "fixed" : "auto";
     grid.dataset.labels = layout.showLabels === false ? "hidden" : "visible";
     grid.style.setProperty("--tdp-columns", String(layout.columns));
@@ -600,8 +819,6 @@
     grid.style.setProperty("--tdp-button-radius", `${layout.buttonRadius ?? 12}px`);
     grid.style.setProperty("--tdp-gap", `${layout.gap}px`);
     grid.style.setProperty("--tdp-folder-background", currentFolder.background || "#090f18");
-    grid.replaceChildren(...visible.map((button, index) => keyElement(currentProfile, currentFolder, layout, button, index)));
-    scheduleGridFit();
   }
 
   function isUsed(button) {
@@ -610,25 +827,12 @@
 
   function keyElement(currentProfile, currentFolder, layout, sourceButton, index) {
     const button = index === selectedIndex && draft ? draft : sourceButton;
-    const used = isUsed(button);
     const element = document.createElement("button");
     element.type = "button";
-    element.className = `tdp-key${used ? " used" : " empty"}${index === selectedIndex ? " selected" : ""}${index === moveSourceIndex ? " move-source" : ""}${index === selectedIndex && draftDirty ? " preview" : ""}`;
+    element.className = "tdp-key";
     element.dataset.index = String(index);
     element.draggable = mode === "edit";
-    element.style.setProperty("--tdp-key-color", button.color || "#152130");
-    element.style.setProperty("--tdp-key-text", button.textColor || "#ffffff");
-    element.setAttribute("aria-label", used ? (button.title || `Belegte Taste ${index + 1}`) : `Unbelegte Taste ${index + 1}`);
-    element.hidden = Boolean(layout.hideUnused && !used);
-
-    if (used) {
-      const image = button.icon && /^data:image\//.test(button.icon)
-        ? `<img src="${html(button.icon)}" alt="">`
-        : button.folderId
-          ? '<span class="tdp-key-folder" aria-hidden="true">▰</span>'
-          : "";
-      element.innerHTML = `${image}<strong>${html(button.title || (button.folderId ? "Ordner" : ""))}</strong>${button.subtitle ? `<span>${html(button.subtitle)}</span>` : ""}<small>${button.actions?.length > 1 ? `${button.actions.length} Aktionen` : button.actions?.[0]?.title || ""}</small>`;
-    }
+    updateKeyAppearance(element, button, index, layout);
 
     element.addEventListener("click", async () => {
       if (mode === "run") return executeKey(element, currentProfile, currentFolder, sourceButton, index);
@@ -637,8 +841,9 @@
       selectKey(index, sourceButton);
     });
     element.addEventListener("dblclick", async () => {
-      if (mode === "edit" && button.folderId) {
-        await call("deck:activate-folder", { profileId: currentProfile.id, folderId: button.folderId });
+      const activeButton = index === selectedIndex && draft ? draft : sourceButton;
+      if (mode === "edit" && activeButton.folderId) {
+        await call("deck:activate-folder", { profileId: currentProfile.id, folderId: activeButton.folderId });
         selectedIndex = -1;
         draft = null;
         draftDirty = false;
@@ -676,6 +881,30 @@
       }
     });
     return element;
+  }
+
+  function updateKeyAppearance(element, button, index, layout) {
+    if (!element) return;
+    const used = isUsed(button);
+    element.classList.toggle("used", used);
+    element.classList.toggle("empty", !used);
+    element.classList.toggle("selected", index === selectedIndex);
+    element.classList.toggle("move-source", index === moveSourceIndex);
+    element.classList.toggle("preview", index === selectedIndex && draftDirty);
+    element.style.setProperty("--tdp-key-color", button.color || "#152130");
+    element.style.setProperty("--tdp-key-text", button.textColor || "#ffffff");
+    element.setAttribute("aria-label", used ? (button.title || `Belegte Taste ${index + 1}`) : `Unbelegte Taste ${index + 1}`);
+    element.hidden = Boolean(layout.hideUnused && !used);
+    if (!used) {
+      element.replaceChildren();
+      return;
+    }
+    const image = button.icon && /^data:image\//.test(button.icon)
+      ? `<img src="${html(button.icon)}" alt="">`
+      : button.folderId
+        ? '<span class="tdp-key-folder" aria-hidden="true">▰</span>'
+        : "";
+    element.innerHTML = `${image}<strong>${html(button.title || (button.folderId ? "Ordner" : ""))}</strong>${button.subtitle ? `<span>${html(button.subtitle)}</span>` : ""}<small>${button.actions?.length > 1 ? `${button.actions.length} Aktionen` : button.actions?.[0]?.title || ""}</small>`;
   }
 
   async function executeKey(element, currentProfile, currentFolder, button, index) {
@@ -727,12 +956,27 @@
   }
 
   function selectKey(index, button, force = false) {
+    if (!force && index === selectedIndex && draft) return;
     if (!force && index !== selectedIndex && !discardDraftIfNeeded()) return;
+    if (index !== selectedIndex) resetActionEditor();
     selectedIndex = index;
     draft = structuredClone(button || blankButton(index));
     draft.actions ||= [];
     draftDirty = false;
     render();
+  }
+
+  function resetActionEditor() {
+    editingActionIndex = -1;
+    inspectorCatalogKey = "";
+    const delay = $("#tdp-action-delay");
+    if (delay) delay.value = "0";
+    const properties = $("#tdp-action-properties");
+    if (properties) {
+      properties.replaceChildren();
+      delete properties.dataset.catalogKey;
+    }
+    updateActionEditorButton();
   }
 
   function discardDraftIfNeeded() {
@@ -748,9 +992,11 @@
     draft.textColor = $("#tdp-text-color").value;
     draft.folderId = $("#tdp-target-folder").value;
     draftDirty = true;
-    const currentProfile = profile();
-    const currentFolder = folder(currentProfile);
-    if (currentProfile && currentFolder) renderGrid(currentProfile, currentFolder);
+    const currentFolder = folder(profile());
+    const element = $(`.tdp-key[data-index="${selectedIndex}"]`, $("#tdp-grid"));
+    if (currentFolder && element) updateKeyAppearance(element, draft, selectedIndex, layoutPreview || currentFolder);
+    $("#tdp-draft-state").textContent = "Nicht gespeicherte Tastenvorschau";
+    $("#tdp-draft-state").classList.add("dirty");
   }
 
   function renderInspector(currentProfile = profile(), currentFolder = folder(currentProfile)) {
@@ -775,17 +1021,25 @@
     const catalog = actionCatalog();
     const actionSelect = $("#tdp-action-type");
     actionSelect.innerHTML = catalog.length
-      ? catalog.map((entry) => `<option value="${html(entry.actionId)}">${html(entry.pluginName)} · ${html(entry.actionName)}</option>`).join("")
+      ? catalog.map((entry) => `<option value="${html(entry.catalogKey)}">${html(entry.pluginName)} · ${html(entry.actionName)}</option>`).join("")
       : '<option value="">Keine Aktion verfügbar</option>';
+    const selectedEntry = catalogEntry(catalog);
+    inspectorCatalogKey = selectedEntry?.catalogKey || "";
+    actionSelect.value = inspectorCatalogKey;
+    const properties = $("#tdp-action-properties");
+    if (properties?.dataset.catalogKey !== inspectorCatalogKey) renderActionProperties(selectedEntry, {});
 
     $("#tdp-action-count").textContent = String(draft.actions?.length || 0);
     const list = $("#tdp-actions");
     list.replaceChildren(...(draft.actions || []).map((action, actionIndex) => {
       const row = document.createElement("article");
       row.className = "tdp-action-row";
-      row.innerHTML = `<span class="tdp-action-order">${actionIndex + 1}</span><div><strong>${html(action.title || action.type)}</strong><code>${html(action.type)}</code><small>${Number(action.delayMs || 0)} ms</small></div><div class="tdp-action-row-buttons"><button type="button" data-direction="up" title="Nach oben">↑</button><button type="button" data-direction="down" title="Nach unten">↓</button><button type="button" data-remove title="Entfernen">×</button></div>`;
+      row.innerHTML = `<span class="tdp-action-order">${actionIndex + 1}</span><div><strong>${html(action.title || action.type)}</strong><code>${html(action.type)}</code><small>${Number(action.delayMs || 0)} ms</small></div><div class="tdp-action-row-buttons"><button type="button" data-edit title="Bearbeiten">✎</button><button type="button" data-direction="up" title="Nach oben">↑</button><button type="button" data-direction="down" title="Nach unten">↓</button><button type="button" data-remove title="Entfernen">×</button></div>`;
+      $("[data-edit]", row).addEventListener("click", () => editActionInInspector(action, actionIndex, catalog));
       $("[data-remove]", row).addEventListener("click", () => {
         draft.actions.splice(actionIndex, 1);
+        if (editingActionIndex === actionIndex) resetActionEditor();
+        else if (editingActionIndex > actionIndex) editingActionIndex -= 1;
         draftDirty = true;
         renderInspector(currentProfile, currentFolder);
         renderGrid(currentProfile, currentFolder);
@@ -795,11 +1049,268 @@
         const next = actionIndex + direction;
         if (next < 0 || next >= draft.actions.length) return;
         [draft.actions[actionIndex], draft.actions[next]] = [draft.actions[next], draft.actions[actionIndex]];
+        if (editingActionIndex === actionIndex) editingActionIndex = next;
+        else if (editingActionIndex === next) editingActionIndex = actionIndex;
         draftDirty = true;
         renderInspector(currentProfile, currentFolder);
       }));
       return row;
     }));
+    updateActionEditorButton();
+  }
+
+  function renderActionProperties(entry, values = {}) {
+    const target = $("#tdp-action-properties");
+    const propertyInspectorButton = $("#tdp-open-property-inspector");
+    if (!target || !propertyInspectorButton) return;
+    target.replaceChildren();
+    target.dataset.catalogKey = entry?.catalogKey || "";
+    propertyInspectorButton.hidden = !entry?.propertyInspectorPath;
+    propertyInspectorButton.disabled = !entry?.propertyInspectorPath;
+    if (!entry) {
+      target.innerHTML = '<p class="tdp-action-property-note">Keine Aktion ausgewählt.</p>';
+      return;
+    }
+
+    if (entry.propertyInspectorPath) {
+      const note = document.createElement("p");
+      note.className = "tdp-action-property-note tdp-action-property-note-native";
+      note.textContent = "Dieses originale Elgato-Plugin bringt seinen eigenen Einstellungsdialog mit.";
+      target.append(note);
+    }
+
+    const fields = nativeActionFields[entry.actionId];
+    if (Array.isArray(fields)) {
+      if (!fields.length) {
+        const note = document.createElement("p");
+        note.className = "tdp-action-property-note";
+        note.textContent = "Für diese Aktion sind keine weiteren Angaben nötig.";
+        target.append(note);
+        return;
+      }
+      const form = document.createElement("div");
+      form.className = "tdp-action-field-grid";
+      for (const field of fields) form.append(actionField(field, values[field.key]));
+      target.append(form);
+      return;
+    }
+
+    const note = document.createElement("p");
+    note.className = "tdp-action-property-note";
+    note.textContent = entry.propertyInspectorPath
+      ? "Zusätzliche einfache Werte können bei Bedarf hier ergänzt werden."
+      : "Für diese Plugin-Aktion sind keine festen Felder veröffentlicht. Werte lassen sich als Name und Wert eintragen.";
+    target.append(note);
+    const list = document.createElement("div");
+    list.className = "tdp-key-value-list";
+    list.dataset.genericSettings = "true";
+    target.append(list);
+    const entries = Object.entries(values && typeof values === "object" ? values : {});
+    for (const [key, value] of entries.length ? entries : [["", ""]]) addKeyValueRow(list, key, value);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "tdp-add-property";
+    add.textContent = "+ Eigenschaft";
+    add.addEventListener("click", () => addKeyValueRow(list, "", "", true));
+    target.append(add);
+  }
+
+  function actionField(field, suppliedValue) {
+    const label = document.createElement("label");
+    const value = suppliedValue ?? field.default ?? "";
+    let control;
+    if (field.type === "checkbox") {
+      label.className = "tdp-property-check";
+      control = document.createElement("input");
+      control.type = "checkbox";
+      control.checked = Boolean(value);
+      label.append(control, document.createTextNode(` ${field.label}`));
+    } else {
+      label.append(document.createTextNode(field.label));
+      if (field.type === "select") {
+        control = document.createElement("select");
+        for (const [optionValue, optionLabel] of field.options || []) {
+          const option = document.createElement("option");
+          option.value = optionValue;
+          option.textContent = optionLabel;
+          control.append(option);
+        }
+      } else if (["textarea", "list", "lines"].includes(field.type)) {
+        control = document.createElement("textarea");
+        control.rows = ["list", "lines"].includes(field.type) ? 3 : 4;
+      } else {
+        control = document.createElement("input");
+        control.type = field.type || "text";
+      }
+      control.value = ["list", "lines"].includes(field.type) && Array.isArray(value) ? value.join("\n") : String(value);
+      if (field.placeholder) control.placeholder = field.placeholder;
+      if (field.required) control.required = true;
+      if (field.min !== undefined) control.min = String(field.min);
+      if (field.max !== undefined) control.max = String(field.max);
+      if (field.step !== undefined) control.step = String(field.step);
+      if (field.maxlength !== undefined) control.maxLength = Number(field.maxlength);
+      if (field.type === "password") control.autocomplete = "off";
+      label.append(control);
+    }
+    control.dataset.settingKey = field.key;
+    control.dataset.settingKind = field.type || "text";
+    if (field.required) control.dataset.required = "true";
+    if (field.help) {
+      const help = document.createElement("small");
+      help.textContent = field.help;
+      label.append(help);
+    }
+    return label;
+  }
+
+  function settingValueType(value) {
+    if (Array.isArray(value)) return "list";
+    if (typeof value === "boolean") return "boolean";
+    if (typeof value === "number") return "number";
+    return "string";
+  }
+
+  function addKeyValueRow(list, key = "", value = "", focus = false) {
+    const row = document.createElement("div");
+    row.className = "tdp-key-value-row";
+    const keyInput = document.createElement("input");
+    keyInput.type = "text";
+    keyInput.placeholder = "Name";
+    keyInput.setAttribute("aria-label", "Eigenschaftsname");
+    keyInput.dataset.settingName = "true";
+    keyInput.value = key;
+    const valueInput = document.createElement("input");
+    valueInput.type = "text";
+    valueInput.placeholder = "Wert";
+    valueInput.setAttribute("aria-label", "Eigenschaftswert");
+    valueInput.dataset.settingValue = "true";
+    valueInput.value = Array.isArray(value) ? value.join(", ") : String(value ?? "");
+    const typeSelect = document.createElement("select");
+    typeSelect.setAttribute("aria-label", "Wertetyp");
+    typeSelect.dataset.settingValueType = "true";
+    for (const [type, label] of [["string", "Text"], ["number", "Zahl"], ["boolean", "Ja/Nein"], ["list", "Liste"]]) {
+      const option = document.createElement("option");
+      option.value = type;
+      option.textContent = label;
+      typeSelect.append(option);
+    }
+    typeSelect.value = settingValueType(value);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.title = "Eigenschaft entfernen";
+    remove.textContent = "×";
+    remove.addEventListener("click", () => row.remove());
+    row.append(keyInput, valueInput, typeSelect, remove);
+    list.append(row);
+    if (focus) keyInput.focus();
+  }
+
+  function listValue(value) {
+    return String(value || "")
+      .split(/\r?\n|,/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+
+  function lineValue(value) {
+    return String(value || "")
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+
+  function readActionSettings() {
+    const target = $("#tdp-action-properties");
+    const result = {};
+    for (const control of $$('[data-setting-key]', target)) {
+      const key = control.dataset.settingKey;
+      const kind = control.dataset.settingKind;
+      let value;
+      if (kind === "checkbox") value = control.checked;
+      else if (kind === "number") {
+        if (control.value === "") value = undefined;
+        else {
+          value = Number(control.value);
+          if (!Number.isFinite(value)) throw new Error(`„${control.closest("label")?.firstChild?.textContent || key}“ muss eine Zahl sein.`);
+        }
+      } else if (kind === "list") value = listValue(control.value);
+      else if (kind === "lines") value = lineValue(control.value);
+      else value = control.value.trim();
+      if (control.dataset.required === "true" && (value === "" || value === undefined || (Array.isArray(value) && !value.length))) {
+        control.focus();
+        throw new Error(`Bitte „${control.closest("label")?.firstChild?.textContent || key}“ ausfüllen.`);
+      }
+      if (value !== "" && value !== undefined) result[key] = value;
+    }
+    for (const row of $$(".tdp-key-value-row", target)) {
+      const key = $("[data-setting-name]", row).value.trim();
+      const raw = $("[data-setting-value]", row).value.trim();
+      if (!key && !raw) continue;
+      if (!key) throw new Error("Für jeden Plugin-Wert wird ein Name benötigt.");
+      const type = $("[data-setting-value-type]", row).value;
+      if (type === "number") {
+        const number = Number(raw);
+        if (!Number.isFinite(number)) throw new Error(`„${key}“ muss eine Zahl sein.`);
+        result[key] = number;
+      } else if (type === "boolean") result[key] = /^(true|1|ja|yes|an)$/i.test(raw);
+      else if (type === "list") result[key] = listValue(raw);
+      else result[key] = raw;
+    }
+    return result;
+  }
+
+  function editActionInInspector(action, actionIndex, catalog = actionCatalog()) {
+    const entry = catalog.find((candidate) => candidate.actionId === action.type && (!action.pluginId || candidate.pluginId === action.pluginId))
+      || catalog.find((candidate) => candidate.actionId === action.type);
+    if (!entry) return toast("Diese Plugin-Aktion ist aktuell nicht installiert.", true);
+    inspectorCatalogKey = entry.catalogKey;
+    editingActionIndex = actionIndex;
+    $("#tdp-action-type").value = entry.catalogKey;
+    $("#tdp-action-delay").value = String(Math.max(0, Number(action.delayMs) || 0));
+    renderActionProperties(entry, action.settings || {});
+    updateActionEditorButton();
+    $("#tdp-action-type").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function updateActionEditorButton() {
+    const button = $("#tdp-add-action");
+    if (button) button.textContent = editingActionIndex >= 0 ? "Aktion aktualisieren" : "Aktion hinzufügen";
+  }
+
+  async function openSelectedPropertyInspector() {
+    const entry = catalogEntry();
+    if (!entry?.propertyInspectorPath) return toast("Diese Aktion besitzt keinen Property Inspector.", true);
+    let settings;
+    try { settings = readActionSettings(); }
+    catch (error) { return toast(error.message, true); }
+    const currentProfile = profile();
+    const currentFolder = folder(currentProfile);
+    const button = $("#tdp-open-property-inspector");
+    button.disabled = true;
+    toast("Originaler Plugin-Einstellungsdialog wird geöffnet …");
+    try {
+      const result = await call("plugins:property-inspector", {
+        action: { type: entry.actionId, title: entry.actionName, pluginId: entry.pluginId, settings },
+        context: {
+          profileId: currentProfile?.id,
+          folderId: currentFolder?.id,
+          buttonIndex: selectedIndex,
+          columns: currentFolder?.columns,
+          rows: currentFolder?.rows,
+          multiAction: (draft?.actions?.length || 0) + (editingActionIndex < 0 ? 1 : 0) > 1
+        }
+      });
+      const savedSettings = result?.settings && typeof result.settings === "object" ? result.settings : settings;
+      renderActionProperties(entry, savedSettings);
+      if (editingActionIndex >= 0 && draft?.actions?.[editingActionIndex]) {
+        draft.actions[editingActionIndex].settings = structuredClone(savedSettings);
+        draft.actions[editingActionIndex].pluginId = entry.pluginId;
+        draftDirty = true;
+      }
+      toast("Plugin-Einstellungen gespeichert.");
+    } catch {} finally {
+      button.disabled = false;
+    }
   }
 
   function actionFromTransfer(transfer) {
@@ -807,6 +1318,7 @@
       id: `action-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       type: transfer.actionId,
       title: `${transfer.pluginName} · ${transfer.actionName}`,
+      pluginId: transfer.pluginId || "",
       settings: {},
       delayMs: 0
     };
@@ -854,6 +1366,9 @@
     selectedIndex = index;
     draft = structuredClone(next);
     draftDirty = false;
+    inspectorCatalogKey = transfer.catalogKey || `${transfer.pluginId || ""}::${transfer.actionId}`;
+    editingActionIndex = Math.max(0, next.actions.length - 1);
+    if ($("#tdp-action-properties")) delete $("#tdp-action-properties").dataset.catalogKey;
     pendingAction = null;
     lastLibrarySignature = "";
     render();
@@ -863,21 +1378,30 @@
   function addActionFromInspector() {
     if (selectedIndex < 0 || !draft) return toast("Zuerst eine Taste auswählen.", true);
     let settings;
-    try { settings = JSON.parse($("#tdp-action-settings").value || "{}"); }
-    catch { return toast("Die Aktionseinstellungen enthalten kein gültiges JSON.", true); }
-    const type = $("#tdp-action-type").value;
-    if (!type) return toast("Keine Aktion verfügbar.", true);
-    const title = $("#tdp-action-type").selectedOptions[0]?.textContent || type;
-    draft.actions ||= [];
-    draft.actions.push({
-      id: `action-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    try { settings = readActionSettings(); }
+    catch (error) { return toast(error.message, true); }
+    const entry = catalogEntry();
+    if (!entry) return toast("Keine Aktion verfügbar.", true);
+    const type = entry.actionId;
+    const title = `${entry.pluginName} · ${entry.actionName}`;
+    const nextAction = {
+      id: editingActionIndex >= 0 && draft.actions?.[editingActionIndex]?.id
+        ? draft.actions[editingActionIndex].id
+        : `action-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       type,
       title,
+      pluginId: entry.pluginId,
       settings,
       delayMs: Math.max(0, Math.min(120000, Number($("#tdp-action-delay").value) || 0))
-    });
+    };
+    draft.actions ||= [];
+    if (editingActionIndex >= 0 && draft.actions[editingActionIndex]) draft.actions[editingActionIndex] = nextAction;
+    else draft.actions.push(nextAction);
     if (!draft.title) draft.title = title.split(" · ").at(-1) || title;
     draftDirty = true;
+    editingActionIndex = -1;
+    $("#tdp-action-delay").value = "0";
+    renderActionProperties(entry, {});
     render();
   }
 
@@ -1028,15 +1552,19 @@
   }
 
   function viewStateSignature(next) {
+    const deck = next?.deck || {};
     const plugins = next?.plugins || {};
+    const sotf = next?.modules?.sotfDeathCounter || {};
     return JSON.stringify([
-      next?.deck || null,
-      plugins.scannedAt || 0,
+      [deck.version, deck.updatedAt, deck.activeProfileId],
+      [sotf.connected, sotf.version, sotf.bundle?.available, sotf.bundle?.version, sotf.error],
       (plugins.plugins || []).map((plugin) => [
         plugin.id,
+        plugin.name,
+        plugin.version,
         plugin.enabled,
         plugin.status,
-        plugin.actions?.map((action) => [action.id, action.name, action.visibleInActionsList]) || []
+        plugin.actions?.map((action) => [action.id, action.name, action.visibleInActionsList, action.propertyInspectorPath]) || []
       ])
     ]);
   }

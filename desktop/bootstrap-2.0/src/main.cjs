@@ -1,6 +1,7 @@
 "use strict";
 
 const fs = require("node:fs");
+const crypto = require("node:crypto");
 const path = require("node:path");
 const os = require("node:os");
 const {
@@ -10,6 +11,7 @@ const {
   dialog,
   ipcMain,
   safeStorage,
+  session,
   shell
 } = require("electron");
 const {
@@ -30,10 +32,15 @@ const { LegacyMigration } = require("./services/migration.cjs");
 const { ActionExecutor } = require("./services/action-executor.cjs");
 const { StreamDeckPluginHost } = require("./services/stream-deck-plugin-host.cjs");
 const { SotfDeathCounterClient } = require("./services/sotf-death-counter-client.cjs");
+const { HeartRateManager } = require("./services/heart-rate-manager.cjs");
 const { deepClone, ensureDirectory, readJson, safeText, writeJsonAtomic } = require("./services/common.cjs");
 const { MonitoringOverlayServer } = require("../modules/encoder-monitoring-overlay/src/server.cjs");
 
 app.setName("Batto OBS Tool");
+if (process.platform === "win32") app.setAppUserModelId("de.crazybatto.battoobstool");
+
+const SOTF_BUNDLE_SHA256 = "170c59f26b543e7b8d9467263e7ae749c9a36eb7d45f25f56b306cbacd2bba3a";
+const SOTF_BUNDLE_MANIFEST_SHA256 = "2e8251e4ad1b78e9348c49e44f25120c742617260b835e6fb430a81c212e344c";
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) app.exit(0);
@@ -63,7 +70,10 @@ let migration = null;
 let actionExecutor = null;
 let pluginHost = null;
 let sotfDeathCounter = null;
+let heartRate = null;
+let bluetoothSelection = null;
 let sampler = null;
+let decryptedSecretsCache = null;
 const moduleErrors = {};
 const obs = new ObsWebSocketClient();
 
@@ -76,6 +86,38 @@ function appResource(...parts) {
   return fs.existsSync(packaged) ? packaged : development;
 }
 function modulePath(name, ...parts) { return path.join(__dirname, "..", "modules", name, ...parts); }
+
+function sotfBundle() {
+  const directory = appResource("sotf-death-counter");
+  const dllPath = path.join(directory, "CrazyBatto.SotfDeathCounter.dll");
+  const manifestPath = path.join(directory, "manifest.json");
+  const manifest = readJson(manifestPath, null);
+  if (!manifest || !fs.existsSync(dllPath)) return { available: false, version: "", error: "Gebündeltes SOTF-Modul fehlt." };
+  const sha256 = crypto.createHash("sha256").update(fs.readFileSync(dllPath)).digest("hex");
+  const manifestSha256 = crypto.createHash("sha256").update(fs.readFileSync(manifestPath)).digest("hex");
+  const id = safeText(manifest.id || "CrazyBatto_SotfDeathCounter", 160);
+  if (sha256 !== SOTF_BUNDLE_SHA256) return { available: false, version: "", error: "Die Prüfsumme des gebündelten SOTF-Moduls stimmt nicht." };
+  if (manifestSha256 !== SOTF_BUNDLE_MANIFEST_SHA256) return { available: false, version: "", error: "Die Prüfsumme des gebündelten SOTF-Manifests stimmt nicht." };
+  if (id !== "CrazyBatto_SotfDeathCounter" || safeText(manifest.version || "", 80) !== "0.3.3") {
+    return { available: false, version: "", error: "Das gebündelte SOTF-Manifest passt nicht zu Modul v0.3.3." };
+  }
+  return {
+    available: true,
+    version: safeText(manifest.version || "", 80),
+    id,
+    name: safeText(manifest.name || "CrazyBatto SOTF Death Counter", 200),
+    sha256,
+    manifestSha256,
+    dllPath,
+    manifestPath
+  };
+}
+
+function publicSotfBundle() {
+  const bundle = sotfBundle();
+  const { dllPath: _dllPath, manifestPath: _manifestPath, ...publicBundle } = bundle;
+  return publicBundle;
+}
 
 function defaultAppSettings() {
   return {
@@ -112,6 +154,7 @@ function saveSettings() {
 
 function secretFile() { return userDataFile("secrets.dat.json"); }
 function readSecrets() {
+  if (decryptedSecretsCache) return { ...decryptedSecretsCache };
   const value = readJson(secretFile(), {}) || {};
   const result = {};
   for (const [key, encoded] of Object.entries(value)) {
@@ -121,16 +164,23 @@ function readSecrets() {
         : "";
     } catch { result[key] = ""; }
   }
-  return result;
+  decryptedSecretsCache = result;
+  return { ...result };
 }
 function writeSecret(key, value) {
   const current = readJson(secretFile(), {}) || {};
-  if (!value) delete current[key];
+  const nextCache = readSecrets();
+  if (!value) {
+    delete current[key];
+    delete nextCache[key];
+  }
   else {
     if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows-Verschlüsselung ist momentan nicht verfügbar.");
     current[key] = safeStorage.encryptString(String(value)).toString("base64");
+    nextCache[key] = String(value);
   }
   writeJsonAtomic(secretFile(), current);
+  decryptedSecretsCache = nextCache;
 }
 
 function errorPayload(error) {
@@ -179,7 +229,8 @@ function currentState() {
       streamOverlay: streamOverlayServer?.status() || { active: false, error: moduleErrors.streamOverlay?.message || "" },
       twitchHolo: holoServer?.status() || { active: false, error: moduleErrors.holo?.message || "" },
       streamDeckPlugins: pluginHost?.status() || { active: false, sessions: [], feedback: {} },
-      sotfDeathCounter: sotfDeathCounter?.status() || { active: false, error: "SOTF-Modul wird geladen." }
+      sotfDeathCounter: sotfDeathCounter?.status() || { active: false, error: "SOTF-Modul wird geladen." },
+      heartRate: heartRate ? { ...heartRate.status(), tokenStored: Boolean(readSecrets().pulsoidToken) } : { active: false }
     },
     errors: deepClone(moduleErrors),
     sampledAt: Date.now()
@@ -233,6 +284,36 @@ function queueTelemetryRefresh(delayMs = 250) {
   telemetryEventTimer.unref?.();
 }
 
+function finishBluetoothSelection(deviceId = "") {
+  const pending = bluetoothSelection;
+  bluetoothSelection = null;
+  clearTimeout(pending?.timer);
+  const requested = String(deviceId || "");
+  const selected = requested && pending?.devices?.some((device) => device.deviceId === requested) ? requested : "";
+  try { pending?.callback?.(selected); } catch {}
+  return Boolean(selected);
+}
+
+function configureBluetooth(window) {
+  const appSession = window.webContents.session || session.defaultSession;
+  const isMainContents = (webContents) => webContents === window.webContents;
+  appSession.setPermissionCheckHandler((webContents, permission) => isMainContents(webContents) && ["bluetooth", "bluetooth-scanning"].includes(permission));
+  appSession.setPermissionRequestHandler((webContents, permission, callback) => callback(isMainContents(webContents) && ["bluetooth", "bluetooth-scanning"].includes(permission)));
+  appSession.setDevicePermissionHandler((details) => details.deviceType === "bluetooth" && String(details.origin || "").startsWith("file://"));
+  window.webContents.on("select-bluetooth-device", (event, devices, callback) => {
+    event.preventDefault();
+    if (bluetoothSelection && bluetoothSelection.callback !== callback) finishBluetoothSelection("");
+    const sanitized = (devices || []).slice(0, 40).map((device) => ({
+      deviceId: safeText(device.deviceId, 500),
+      deviceName: safeText(device.deviceName || "Unbenannter BLE-Sensor", 160)
+    }));
+    const timer = bluetoothSelection?.timer || setTimeout(() => finishBluetoothSelection(""), 30000);
+    timer.unref?.();
+    bluetoothSelection = { callback, devices: sanitized, timer };
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("heart-rate:ble-devices", sanitized);
+  });
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1540,
@@ -242,6 +323,7 @@ function createMainWindow() {
     backgroundColor: "#060d15",
     show: false,
     title: "Batto OBS Tool",
+    icon: appResource("team-logo.png"),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -255,6 +337,7 @@ function createMainWindow() {
     }
   });
   mainWindow.loadFile(rendererFile("index.html"));
+  configureBluetooth(mainWindow);
   mainWindow.once("ready-to-show", () => mainWindow.show());
   mainWindow.on("closed", () => { mainWindow = null; });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -282,6 +365,70 @@ function openLocalWindow(url, title, width = 1480, height = 900) {
   child.on("closed", () => childWindows.delete(child));
   child.loadURL(url);
   return true;
+}
+
+async function openPluginPropertyInspector(payload = {}) {
+  const action = payload.action && typeof payload.action === "object" ? payload.action : {};
+  const context = payload.context && typeof payload.context === "object" ? payload.context : {};
+  const inspector = await pluginHost.createPropertyInspector(action, context);
+  const child = new BrowserWindow({
+    width: 520,
+    height: 760,
+    minWidth: 360,
+    minHeight: 480,
+    parent: mainWindow || undefined,
+    show: false,
+    autoHideMenuBar: true,
+    title: "Batto Touch-Deck – Plugin-Eigenschaften",
+    icon: appResource("team-logo.png"),
+    backgroundColor: "#10151d",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      backgroundThrottling: true,
+      spellcheck: false,
+      navigateOnDragDrop: false
+    }
+  });
+  childWindows.add(child);
+  child.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  const completion = new Promise((resolve) => {
+    child.once("closed", () => {
+      childWindows.delete(child);
+      resolve({
+        settings: pluginHost.closePropertyInspector(inspector.id) || {},
+        context: inspector.context
+      });
+    });
+  });
+  try {
+    await child.loadFile(inspector.filePath);
+    const bootstrap = `(() => {
+      if (typeof globalThis.connectElgatoStreamDeckSocket !== "function") {
+        throw new Error("Dieses Plugin stellt keine connectElgatoStreamDeckSocket-Funktion bereit.");
+      }
+      globalThis.connectElgatoStreamDeckSocket(
+        ${JSON.stringify(String(inspector.port))},
+        ${JSON.stringify(inspector.id)},
+        ${JSON.stringify(inspector.registerEvent)},
+        ${JSON.stringify(inspector.info)},
+        ${JSON.stringify(inspector.actionInfo)}
+      );
+      return true;
+    })()`;
+    await child.webContents.executeJavaScript(bootstrap, true);
+    child.show();
+    return await completion;
+  } catch (error) {
+    if (!child.isDestroyed()) child.destroy();
+    await completion;
+    throw error;
+  }
 }
 
 function preferredGpu() {
@@ -416,7 +563,7 @@ async function startModules() {
   try {
     streamOverlayServer = new StreamOverlayServer({
       webRoot: path.join(__dirname, "stream-overlay"), configFile: userDataFile("stream-overlay.json"),
-      logoPath: appResource("team-logo.svg"), preferredPort: 48621
+      logoPath: appResource("team-logo.png"), preferredPort: 48621
     });
     await streamOverlayServer.start();
   } catch (error) { moduleErrors.streamOverlay = errorPayload(error); streamOverlayServer = null; }
@@ -428,14 +575,39 @@ async function startModules() {
 
   multiChat = new MultiChat({ settingsFile: userDataFile("multi-chat.json"), overlayServer: streamOverlayServer });
   multiChat.on("message", (message) => {
-    if (message.platform === "twitch") holoServer?.publishMessage({
+    holoServer?.publishMessage({
       id: message.id, username: message.name, displayName: message.name, userId: message.userId,
-      text: message.text, color: message.color,
+      text: message.text, color: message.color, platform: message.platform, timestamp: message.timestamp,
       roles: { broadcaster: message.role === "broadcaster", moderator: message.role === "moderator", vip: message.role === "vip", subscriber: message.role === "subscriber" }
     });
     scheduleState();
   });
+  multiChat.on("command", ({ command }) => {
+    if (["ttsstop", "tts-stop"].includes(command)) multiChat.clearTts();
+    if (["ttsskip", "tts-skip"].includes(command)) multiChat.skipTts();
+    if (["holoclear", "holo-clear"].includes(command)) holoServer?.clear();
+    if (["overlayclear", "overlay-clear"].includes(command)) streamOverlayServer?.clearEvents();
+    if (["deaths", "tode", "sotf"].includes(command)) void sotfDeathCounter?.refresh?.();
+  });
   multiChat.on("changed", scheduleState);
+  streamOverlayServer?.on("event", (event) => {
+    if (event.data?.multiChatForwarded || !event.text) return;
+    const type = String(event.type || "").toLowerCase();
+    if (!["chat", "comment", "message", "tiktok", "tikfinity", "tiktory", "youtube", "twitch"].includes(type)) return;
+    multiChat.ingest({
+      ...event,
+      platform: event.platform && event.platform !== "local" ? event.platform : ["tiktok", "tikfinity", "tiktory"].includes(type) ? "tiktok" : type === "youtube" ? "youtube" : type === "twitch" ? "twitch" : "local"
+    });
+  });
+  multiChat.start();
+
+  heartRate = new HeartRateManager({ settingsFile: userDataFile("heart-rate.json"), overlayServer: streamOverlayServer });
+  heartRate.on("changed", scheduleState);
+  heartRate.applyOverlaySettings();
+  const pulsoidToken = readSecrets().pulsoidToken || "";
+  if (pulsoidToken && heartRate.settings.autoConnect && heartRate.settings.source === "pulsoid") {
+    void heartRate.connectPulsoid(pulsoidToken).catch((error) => { moduleErrors.heartRate = errorPayload(error); scheduleState(); });
+  }
 
   pluginRegistry = new PluginRegistry({ stateFile: userDataFile("plugin-state.json"), pluginRoots: [pluginImportRoot(), ...defaultPluginRoots()] });
   pluginRegistry.scan();
@@ -450,7 +622,8 @@ async function startModules() {
   pluginHost.on("host-error", (error) => { moduleErrors.streamDeckPluginHost = errorPayload(error); scheduleState(); });
   pluginHost.on("plugin-error", ({ pluginId, error }) => { moduleErrors[`plugin:${pluginId}`] = { message: error }; scheduleState(); });
 
-  sotfDeathCounter = new SotfDeathCounterClient();
+  const bundledSotf = publicSotfBundle();
+  sotfDeathCounter = new SotfDeathCounterClient({ moduleVersion: bundledSotf.version || "0.3.3", bundle: bundledSotf });
   sotfDeathCounter.on("changed", scheduleState);
   await sotfDeathCounter.start();
 
@@ -496,7 +669,8 @@ async function connectObs(payload = {}) {
     port: Math.max(1, Math.min(65535, Number(payload.port) || appSettings.obs.port || 4455)),
     autoConnect: payload.autoConnect === undefined ? appSettings.obs.autoConnect : Boolean(payload.autoConnect)
   };
-  if (payload.password !== undefined) writeSecret("obsPassword", password);
+  if (payload.password !== undefined && payload.rememberPassword !== false) writeSecret("obsPassword", password);
+  if (payload.rememberPassword === false) writeSecret("obsPassword", "");
   saveSettings();
   await obs.connect({ ...appSettings.obs, password });
   latestObs = await obs.snapshot();
@@ -508,6 +682,33 @@ async function autoConnectObs() {
   if (!appSettings.obs.autoConnect) return;
   try { await connectObs({}); }
   catch (error) { moduleErrors.obs = errorPayload(error); latestObs = { available: false, ...obs.status(), error: errorPayload(error) }; }
+}
+
+async function installBundledSotfModule() {
+  const bundle = sotfBundle();
+  if (!bundle.available) throw new Error(bundle.error || "Gebündeltes SOTF-Modul fehlt.");
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "RedLoader-Mods-Ordner auswählen",
+    buttonLabel: "Modul hier installieren",
+    properties: ["openDirectory"]
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  const target = ensureDirectory(path.join(result.filePaths[0], bundle.id || "CrazyBatto_SotfDeathCounter"));
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const outputs = [
+    [bundle.dllPath, path.join(target, "CrazyBatto.SotfDeathCounter.dll")],
+    [bundle.manifestPath, path.join(target, "manifest.json")]
+  ];
+  const backups = [];
+  for (const [source, destination] of outputs) {
+    if (fs.existsSync(destination)) {
+      const backup = `${destination}.backup-${timestamp}`;
+      fs.copyFileSync(destination, backup);
+      backups.push(backup);
+    }
+    fs.copyFileSync(source, destination);
+  }
+  return { installed: true, target, backups, bundle: publicSotfBundle() };
 }
 
 function registerIpc() {
@@ -576,10 +777,12 @@ function registerIpc() {
     if (result.canceled || !result.filePaths[0]) return null;
     return pluginRegistry.importPath(result.filePaths[0], pluginImportRoot());
   });
+  handle("plugins:property-inspector", openPluginPropertyInspector);
 
   handle("sotf:refresh", () => sotfDeathCounter.refresh());
   handle("sotf:open-overlay", () => openLocalWindow(sotfDeathCounter.urls().overlayUrl, "Batto OBS Tool – SOTF Todeszähler", 1280, 760));
   handle("sotf:copy-overlay", () => { const url = sotfDeathCounter.urls().overlayUrl; clipboard.writeText(url); return url; });
+  handle("sotf:install-module", installBundledSotfModule);
 
   handle("mobile:status", () => mobileBridge?.status() || { active: false });
   handle("mobile:approve", (payload) => mobileBridge.approve(payload.requestId));
@@ -615,10 +818,29 @@ function registerIpc() {
   handle("chat:twitch-send", (payload) => multiChat.sendTwitch(payload.text));
   handle("chat:youtube-connect", (payload) => multiChat.connectYouTube({ ...payload, apiKey: payload.apiKey || readSecrets().youtubeApiKey || "" }));
   handle("chat:youtube-disconnect", () => { multiChat.disconnectYouTube(); return multiChat.snapshot(); });
+  handle("chat:tikfinity-connect", (payload) => multiChat.connectTikfinity(payload));
+  handle("chat:tikfinity-disconnect", () => multiChat.disconnectTikfinity());
   handle("chat:clear", () => multiChat.clear());
   handle("chat:test", (payload) => multiChat.ingest({ platform: payload.platform || "twitch", name: payload.name || "Crazy_Batto", text: payload.text || "Testnachricht", role: payload.role || "broadcaster" }));
+  handle("chat:tts-voices", () => multiChat.listVoices());
   handle("chat:tts-skip", () => multiChat.skipTts());
   handle("chat:tts-clear", () => multiChat.clearTts());
+
+  handle("heart-rate:update", (payload) => heartRate.updateSettings(payload));
+  handle("heart-rate:pulsoid-connect", async (payload) => {
+    const token = String(payload.token || readSecrets().pulsoidToken || "").trim();
+    if (payload.token) writeSecret("pulsoidToken", token);
+    heartRate.updateSettings({ source: "pulsoid", autoConnect: payload.autoConnect !== false });
+    return heartRate.connectPulsoid(token);
+  });
+  handle("heart-rate:pulsoid-disconnect", () => heartRate.disconnectPulsoid());
+  handle("heart-rate:pulsoid-forget", () => { writeSecret("pulsoidToken", ""); return heartRate.forgetPulsoidToken(); });
+  handle("heart-rate:ble-select", (payload) => ({ selected: finishBluetoothSelection(payload.deviceId) }));
+  handle("heart-rate:ble-connected", (payload) => heartRate.setBleConnected(true, payload.deviceName));
+  handle("heart-rate:ble-value", (payload) => heartRate.ingestBle(payload.bpm, payload.measuredAt, payload.deviceName));
+  handle("heart-rate:ble-disconnect", () => heartRate.setBleConnected(false));
+  handle("heart-rate:copy-overlay", () => { const url = heartRate.overlayUrl(); clipboard.writeText(url); return url; });
+  handle("heart-rate:preview", (payload) => heartRate.ingest({ bpm: payload.bpm, measuredAt: Date.now(), source: "preview" }));
 
   handle("guests:list", async (payload) => ({ sceneName: payload.sceneName, items: await obs.getSceneItems(payload.sceneName) }));
   handle("guests:apply", async (payload) => {
@@ -728,6 +950,8 @@ app.on("before-quit", () => {
   clearTimeout(telemetryEventTimer);
   clearTimeout(stateTimer);
   multiChat?.stop();
+  heartRate?.stop();
+  finishBluetoothSelection("");
   void obs.disconnect();
   void mobileBridge?.stop();
   void streamOverlayServer?.stop();

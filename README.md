@@ -18,9 +18,11 @@ Die 2.0-Quellen führen den bisherigen Editor und die erweiterten Funktionen in 
 - Profile, Ordner, variable Raster, Mehrfachaktionen, Import/Export und berührbares Verschieben,
 - automatische Suche in den originalen Elgato-Pluginordnern,
 - sicherer Import von `.streamDeckPlugin`-Paketen und `.sdPlugin`-Ordnern,
-- lokale Elgato-WebSocket-Laufzeit für ungeschützte Node-/Windows-Originalplugins,
+- lokale Elgato-WebSocket-Laufzeit und originale Property Inspectors für ungeschützte Node-/Windows-Originalplugins direkt im Touch-Deck,
 - klare Kennzeichnung fehlender oder geschützter Marketplace-Laufzeiten ohne DRM-Umgehung,
-- direkte lokale Anbindung an `CrazyBatto-SOTF-DeathCounter-Module-v0.3.0` samt OBS-Overlay.
+- gebündeltes `CrazyBatto-SOTF-DeathCounter-Module-v0.3.3` mit lokaler Verbindungsanzeige, Installation und OBS-Overlay,
+- gemeinsamer Chat für Twitch, YouTube und lokale TikFinity-TikTok-Ereignisse mit Bot-Befehlen, Hologramm und Windows-Sprachausgabe,
+- Herzfrequenz-Overlay über Pulsoid Cloud oder direktes Standard-Bluetooth-LE.
 
 ## Aufbau
 
@@ -35,7 +37,8 @@ Enthalten:
 - manuell übertragbare Encoder-Empfehlungen,
 - bestätigungspflichtige CPU- und OBS-Aufnahmetests,
 - transparentes Hardware-/Encoder-Monitoring,
-- Twitch-Hologrammfarben für Namen und Nachrichten,
+- persistente Twitch-/Multi-Chat-Hologrammfarben für Namen und Nachrichten mit Live-Vorschau,
+- lokale OBS-Browserquellen für Chat, Hologramm und Herzfrequenz,
 - variables Touch-Deck für Maus und Touch-Monitore.
 
 ## Branches
@@ -48,6 +51,8 @@ Enthalten:
 - kein automatischer Start einer zweiten App nach der Installation,
 - Single-Instance-Sperre gegen doppelte Hauptfenster,
 - OBS-Verbindung ausschließlich lokal,
+- TikFinity wird ausschließlich über `ws://127.0.0.1:21213/` gelesen; ein nicht dokumentierter TikTok-Schreibzugriff wird nicht vorgetäuscht,
+- Pulsoid-Tokens und Chat-Zugangsdaten werden über Electron `safeStorage` geschützt und nie in OBS-URLs geschrieben,
 - keine veröffentlichte Testwerte-Schaltfläche und kein öffentliches Demo-API,
 - alte Creator-Hub-Produktnamen und alte separate EXEs sind nicht Bestandteil des Releases.
 

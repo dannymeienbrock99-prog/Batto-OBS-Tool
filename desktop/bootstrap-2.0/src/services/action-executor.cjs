@@ -271,10 +271,23 @@ class ActionExecutor extends EventEmitter {
           value: Number(settings.value) || 0,
           timestamp: Date.now()
         });
-      case "overlay.poll":
-      case "overlay.wordcloud":
+      case "overlay.poll": {
+        const option = safeText(settings.text || settings.option || settings.question, 160).trim();
+        if (!option) throw new Error("Antwort oder Option für die Umfrage fehlt.");
+        return this.publishOverlayEvent({
+          type: "poll",
+          text: option,
+          value: Math.max(1, Number(settings.value) || 1),
+          timestamp: Date.now()
+        });
+      }
+      case "overlay.wordcloud": {
+        const text = safeText(settings.text || settings.words, 500).trim();
+        if (!text) throw new Error("Text für die Wortwolke fehlt.");
+        return this.publishOverlayEvent({ type: "chat", platform: "touch-deck-wordcloud", name: "Wortwolke", text, timestamp: Date.now() });
+      }
       case "overlay.wheel":
-        return this.publishOverlayEvent({ type: type.split(".")[1], ...settings, timestamp: Date.now() });
+        return this.publishOverlayEvent({ type: "wheel", timestamp: Date.now() });
 
       case "youtube.dashboard":
         await this.shell.openExternal("https://studio.youtube.com/");

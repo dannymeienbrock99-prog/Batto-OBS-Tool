@@ -9,6 +9,51 @@ const { ensureDirectory, readJson, safeText, writeJsonAtomic } = require("./comm
 const { EXTRA_BUILT_IN_PLUGINS } = require("./native-plugin-additions.cjs");
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]);
+const EMULATED_STREAM_DECK_VERSION = "7.1";
+
+function compareVersions(left, right) {
+  const parse = (value) => String(value || "")
+    .split(".")
+    .map((part) => Number.parseInt(part, 10))
+    .map((part) => Number.isFinite(part) ? part : 0);
+  const leftParts = parse(left);
+  const rightParts = parse(right);
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = (leftParts[index] || 0) - (rightParts[index] || 0);
+    if (difference) return Math.sign(difference);
+  }
+  return 0;
+}
+
+function pathIsInside(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return Boolean(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+function containedFile(root, candidate) {
+  try {
+    const realRoot = fs.realpathSync(root);
+    const realCandidate = fs.realpathSync(candidate);
+    return pathIsInside(realRoot, realCandidate) && fs.statSync(realCandidate).isFile() ? realCandidate : "";
+  } catch {
+    return "";
+  }
+}
+
+function existingPathEscapesRoot(root, candidates) {
+  let realRoot;
+  try { realRoot = fs.realpathSync(root); } catch { return true; }
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue;
+    try {
+      if (!pathIsInside(realRoot, fs.realpathSync(candidate))) return true;
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
 
 function uniquePaths(values) {
   return [...new Set(values.filter(Boolean).map((value) => path.resolve(value)))];
@@ -101,9 +146,11 @@ function resolveManifestAsset(pluginRoot, value) {
     path.resolve(pluginRoot, `${value}.svg`),
     path.resolve(pluginRoot, `${value}.jpg`)
   ];
-  return candidates.find((candidate) => {
-    try { return fs.statSync(candidate).isFile(); } catch { return false; }
-  }) || null;
+  for (const candidate of candidates) {
+    const resolved = containedFile(pluginRoot, candidate);
+    if (resolved) return resolved;
+  }
+  return null;
 }
 
 function fileToDataUrl(file, maximumBytes = 1_500_000) {
@@ -138,6 +185,8 @@ function actionFromManifest(action, pluginRoot, index) {
         image: fileToDataUrl(resolveManifestAsset(pluginRoot, state.Image || state.image))
       }))
     : [];
+  const supportsWindows = !Array.isArray(action.OS || action.os)
+    || (action.OS || action.os).some((platform) => String(platform).toLowerCase() === "windows");
   return {
     id: uuid,
     name,
@@ -150,8 +199,8 @@ function actionFromManifest(action, pluginRoot, index) {
     raw: {
       uuid,
       name,
-      supportedInTouchDeck: !(Array.isArray(action.Controllers || action.controllers))
-        || (action.Controllers || action.controllers).some((controller) => String(controller).toLowerCase() === "keypad"),
+      supportedInTouchDeck: supportsWindows && (!(Array.isArray(action.Controllers || action.controllers))
+        || (action.Controllers || action.controllers).some((controller) => String(controller).toLowerCase() === "keypad")),
       propertyInspectorPath: action.PropertyInspectorPath || action.propertyInspectorPath || ""
     }
   };
@@ -168,27 +217,51 @@ function normalizePlugin(manifest, manifestFile, root) {
     || walk(pluginRoot, 2).find((file) => IMAGE_EXTENSIONS.has(path.extname(file).toLowerCase()))
     || null;
   const executable = safeText(manifest.CodePathWin || manifest.codePathWin || manifest.CodePath || manifest.codePath || "", 1000);
-  const resolvedExecutable = executable ? path.resolve(pluginRoot, executable) : "";
-  const executablePath = resolvedExecutable && (resolvedExecutable === pluginRoot || resolvedExecutable.startsWith(`${pluginRoot}${path.sep}`))
-    ? resolvedExecutable
-    : "";
-  const executableExists = Boolean(executablePath && fs.existsSync(executablePath));
-  const extension = path.extname(executablePath).toLowerCase();
+  const executableCandidates = executable
+    ? [path.resolve(pluginRoot, executable), ...(path.extname(executable) ? [] : [path.resolve(pluginRoot, `${executable}.exe`)])]
+    : [];
+  const executablePath = executableCandidates.map((candidate) => containedFile(pluginRoot, candidate)).find(Boolean) || "";
+  const executableExists = Boolean(executablePath);
+  const declaredOutsideRoot = Boolean(executable && !pathIsInside(path.resolve(pluginRoot), path.resolve(pluginRoot, executable)));
+  const existingOutsideRoot = existingPathEscapesRoot(pluginRoot, executableCandidates);
+  const unsafeExecutable = declaredOutsideRoot || existingOutsideRoot;
+  const extension = path.extname(executablePath || executable).toLowerCase();
   const runtimeKind = [".js", ".cjs", ".mjs"].includes(extension) ? "node" : extension === ".exe" ? "native" : executablePath ? "unsupported" : "none";
   const protectedPackage = Boolean(manifest.DRM || manifest.Protected || manifest.protected || manifest.Marketplace?.Protected);
-  const runtimeStatus = protectedPackage
-    ? "protected"
-    : executableExists && runtimeKind !== "unsupported"
-      ? "ready"
-      : executable
-        ? "missing"
-        : "none";
+  const requiredNodeMajor = Math.max(0, Number.parseInt(String(manifest.Nodejs?.Version || manifest.nodejs?.version || "0"), 10) || 0);
+  const hostNodeMajor = Math.max(0, Number.parseInt(String(process.versions.node || "0"), 10) || 0);
+  const supportedWindows = !Array.isArray(manifest.OS || manifest.os)
+    || (manifest.OS || manifest.os).some((entry) => String(entry?.Platform || entry?.platform || entry).toLowerCase() === "windows");
+  const minimumSoftware = safeText(manifest.Software?.MinimumVersion || manifest.software?.minimumVersion || "", 40);
+  const sdkVersion = Number(manifest.SDKVersion || manifest.sdkVersion) || null;
+  let runtimeStatus = "none";
+  if (protectedPackage) runtimeStatus = "protected";
+  else if (!supportedWindows) runtimeStatus = "unsupported-os";
+  else if (sdkVersion && ![2, 3].includes(sdkVersion)) runtimeStatus = "sdk-version";
+  else if (unsafeExecutable) runtimeStatus = "unsafe-path";
+  else if (minimumSoftware && compareVersions(minimumSoftware, EMULATED_STREAM_DECK_VERSION) > 0) runtimeStatus = "software-version";
+  else if (runtimeKind === "node" && requiredNodeMajor > hostNodeMajor) runtimeStatus = "node-version";
+  else if (executableExists && runtimeKind === "unsupported") runtimeStatus = "unsupported-runtime";
+  else if (executableExists) runtimeStatus = "ready";
+  else if (executable) runtimeStatus = "missing";
   const status = !actions.length
     ? "Manifest erkannt – keine Aktionen veröffentlicht"
     : runtimeStatus === "ready"
       ? "Originale Elgato-Laufzeit für Touch-Deck bereit"
       : runtimeStatus === "protected"
         ? "Geschütztes Marketplace-Plugin – benötigt die Elgato Stream-Deck-App"
+        : runtimeStatus === "unsupported-os"
+          ? "Plugin unterstützt laut Manifest kein Windows"
+          : runtimeStatus === "sdk-version"
+            ? `Plugin benötigt die nicht unterstützte SDK-Version ${sdkVersion}`
+          : runtimeStatus === "node-version"
+            ? `Plugin benötigt Node.js ${requiredNodeMajor}; eingebettet ist Node.js ${hostNodeMajor}`
+            : runtimeStatus === "software-version"
+              ? `Plugin benötigt Stream Deck ${minimumSoftware}; Batto emuliert das Keypad-Protokoll ${EMULATED_STREAM_DECK_VERSION}`
+              : runtimeStatus === "unsafe-path"
+                ? "Plugin-Laufzeit liegt außerhalb des Plugin-Ordners und wurde blockiert"
+                : runtimeStatus === "unsupported-runtime"
+                  ? `Nicht unterstützte Plugin-Laufzeit „${extension || "ohne Dateiendung"}“`
         : runtimeStatus === "missing"
           ? "Manifest erkannt – Laufzeit fehlt, ist inkompatibel oder geschützt"
           : "Manifest erkannt – keine ausführbare Plugin-Laufzeit angegeben";
@@ -209,7 +282,11 @@ function normalizePlugin(manifest, manifestFile, root) {
       kind: runtimeKind,
       status: runtimeStatus,
       codePath: executable,
-      sdkVersion: Number(manifest.SDKVersion || manifest.sdkVersion) || null,
+      sdkVersion,
+      nodeVersion: requiredNodeMajor || null,
+      hostNodeVersion: hostNodeMajor || null,
+      minimumSoftwareVersion: minimumSoftware || null,
+      emulatedSoftwareVersion: EMULATED_STREAM_DECK_VERSION,
       protected: protectedPackage
     },
     propertyInspectorPath: manifest.PropertyInspectorPath || manifest.propertyInspectorPath || "",
@@ -320,9 +397,9 @@ const BUILT_IN_PLUGINS = Object.freeze([
   {
     id: "crazybatto.sotf-death-counter",
     name: "Sons of the Forest Todeszähler",
-    version: "0.3.0",
+    version: "0.3.3",
     category: "Gaming",
-    description: "Direkte lokale Anbindung an das CrazyBatto SOTF DeathCounter Module v0.3.0.",
+    description: "Direkte lokale Anbindung an das gebündelte CrazyBatto SOTF DeathCounter Module v0.3.3.",
     actions: [["sotf.counter.refresh", "Todeszähler aktualisieren"], ["sotf.overlay.open", "Todeszähler-Overlay öffnen"], ["sotf.overlay.copy-url", "OBS-Overlay-Adresse kopieren"]]
   }
 ].map((plugin) => ({
@@ -434,6 +511,12 @@ class PluginRegistry extends EventEmitter {
             const existing = plugins.find((item) => item.id.toLowerCase() === key);
             if (existing?.native) {
               existing.originalPlugin = plugin;
+              const knownActions = new Set(existing.actions.map((action) => action.id.toLowerCase()));
+              for (const action of plugin.actions) {
+                if (knownActions.has(action.id.toLowerCase())) continue;
+                existing.actions.push({ ...action, originalPluginId: plugin.id });
+                knownActions.add(action.id.toLowerCase());
+              }
               existing.status = plugin.runtime.status === "ready"
                 ? `Native Aktionen + originale Elgato-Laufzeit ${plugin.version || "erkannt"}`
                 : `Native Aktionen + Originalmanifest (${plugin.status})`;
@@ -448,7 +531,10 @@ class PluginRegistry extends EventEmitter {
       }
     }
     const disabled = new Set((this.state.disabled || []).map((value) => String(value).toLowerCase()));
-    for (const plugin of plugins) plugin.enabled = !disabled.has(plugin.id.toLowerCase());
+    for (const plugin of plugins) {
+      plugin.enabled = !disabled.has(plugin.id.toLowerCase());
+      if (plugin.originalPlugin) plugin.originalPlugin.enabled = plugin.enabled;
+    }
     this.plugins = plugins.sort((left, right) => left.category.localeCompare(right.category, "de") || left.name.localeCompare(right.name, "de"));
     this.iconPacks = this.scanIconPacks();
     this.emit("changed", this.snapshot());
@@ -562,7 +648,9 @@ class PluginRegistry extends EventEmitter {
 
 module.exports = {
   BUILT_IN_PLUGINS,
+  EMULATED_STREAM_DECK_VERSION,
   PluginRegistry,
+  compareVersions,
   defaultIconPackRoots,
   defaultPluginRoots,
   discoverPluginDirectories,

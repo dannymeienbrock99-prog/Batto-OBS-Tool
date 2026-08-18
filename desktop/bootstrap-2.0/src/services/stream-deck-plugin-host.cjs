@@ -2,6 +2,7 @@
 
 const childProcess = require("node:child_process");
 const crypto = require("node:crypto");
+const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { EventEmitter } = require("node:events");
@@ -9,7 +10,9 @@ const { WebSocket, WebSocketServer } = require("ws");
 const { readJson, safeText, writeJsonAtomic } = require("./common.cjs");
 
 const DEVICE_ID = "batto-touch-monitor";
+const VIRTUAL_DEVICE_TYPE = 11;
 const REGISTER_EVENT = "registerPlugin";
+const PROPERTY_INSPECTOR_REGISTER_EVENT = "registerPropertyInspector";
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 function normalizedDeviceSize(value = {}) {
@@ -20,7 +23,7 @@ function normalizedDeviceSize(value = {}) {
 }
 
 function deviceInfo(size) {
-  return { name: "Batto Touch Monitor", size: normalizedDeviceSize(size), type: 0 };
+  return { name: "Batto Touch Monitor", size: normalizedDeviceSize(size), type: VIRTUAL_DEVICE_TYPE };
 }
 
 function contextId(pluginId, actionId, context = {}) {
@@ -34,6 +37,36 @@ function coordinates(context = {}) {
   return { column: index % columns, row: Math.floor(index / columns) };
 }
 
+function jsonObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function resourceMap(value) {
+  const result = {};
+  for (const [rawKey, rawPath] of Object.entries(jsonObject(value))) {
+    if (typeof rawPath !== "string") continue;
+    const key = safeText(rawKey, 240);
+    if (!key) continue;
+    Object.defineProperty(result, key, { configurable: true, enumerable: true, value: safeText(rawPath, 32768), writable: true });
+  }
+  return result;
+}
+
+function actionPayload(context = {}, settings = {}, resources = {}) {
+  const isInMultiAction = Boolean(context.multiAction);
+  const payload = {
+    controller: "Keypad",
+    isInMultiAction,
+    resources: resourceMap(resources),
+    settings: jsonObject(settings)
+  };
+  if (!isInMultiAction) payload.coordinates = coordinates(context);
+  if (context.state !== undefined && context.state !== null && Number.isFinite(Number(context.state))) {
+    payload.state = Math.max(0, Math.round(Number(context.state)));
+  }
+  return payload;
+}
+
 function pluginInfo(plugin, size = { columns: 5, rows: 3 }) {
   return {
     application: {
@@ -41,9 +74,10 @@ function pluginInfo(plugin, size = { columns: 5, rows: 3 }) {
       language: "de",
       platform: "windows",
       platformVersion: os.release(),
-      version: "2.0.0"
+      version: "7.1.0"
     },
     colors: {
+      buttonMouseOverBackgroundColor: "#1d2b3c",
       buttonPressedBackgroundColor: "#26344d",
       buttonPressedBorderColor: "#34d6ff",
       buttonPressedTextColor: "#ffffff",
@@ -63,14 +97,19 @@ class StreamDeckPluginHost extends EventEmitter {
     this.shell = shell;
     this.registrationTimeoutMs = registrationTimeoutMs;
     this.idleTimeoutMs = Math.max(15000, Math.min(30 * 60 * 1000, Number(idleTimeoutMs) || 120000));
-    this.state = readJson(this.stateFile, { contexts: {}, global: {}, feedback: {} }) || { contexts: {}, global: {}, feedback: {} };
+    this.state = readJson(this.stateFile, { contexts: {}, global: {}, resources: {}, feedback: {} }) || { contexts: {}, global: {}, resources: {}, feedback: {} };
     this.state.contexts ||= {};
     this.state.global ||= {};
+    this.state.resources ||= {};
+    for (const [context, resources] of Object.entries(this.state.resources)) this.state.resources[context] = resourceMap(resources);
     this.state.feedback ||= {};
     this.server = null;
     this.sessions = new Map();
     this.socketSessions = new WeakMap();
+    this.inspectorSockets = new WeakMap();
     this.pendingByUuid = new Map();
+    this.pendingPropertyInspectors = new Map();
+    this.propertyInspectors = new Map();
     this.visibleContexts = new Map();
     this.deviceSize = normalizedDeviceSize();
     this.persistTimer = null;
@@ -105,6 +144,13 @@ class StreamDeckPluginHost extends EventEmitter {
         pid: session.child?.pid || null,
         error: session.error || ""
       })),
+      propertyInspectors: [...this.propertyInspectors.values()].map((inspector) => ({
+        id: inspector.id,
+        pluginId: inspector.plugin.id,
+        actionId: inspector.actionId,
+        connected: inspector.socket?.readyState === WebSocket.OPEN,
+        error: inspector.error || ""
+      })),
       feedback: { ...this.state.feedback }
     };
   }
@@ -112,14 +158,23 @@ class StreamDeckPluginHost extends EventEmitter {
   handleConnection(socket) {
     socket.on("message", (data) => this.handleMessage(socket, data));
     socket.on("error", (error) => {
+      const inspector = this.inspectorSockets.get(socket);
+      if (inspector) inspector.error = safeText(error?.message || error, 500);
       const session = this.socketSessions.get(socket);
       if (session) session.error = safeText(error?.message || error, 500);
     });
     socket.on("close", () => {
+      const inspector = this.inspectorSockets.get(socket);
+      if (inspector?.socket === socket) {
+        inspector.socket = null;
+        this.inspectorSockets.delete(socket);
+        this.emit("changed", this.status());
+      }
       const session = this.socketSessions.get(socket);
       if (session?.socket === socket) {
         session.socket = null;
-        this.emit("changed", this.status());
+        const key = session.plugin.id.toLowerCase();
+        if (this.sessions.get(key) === session) this.stopSession(key, "Plugin-WebSocket wurde getrennt");
       }
     });
   }
@@ -128,6 +183,38 @@ class StreamDeckPluginHost extends EventEmitter {
     let message;
     try { message = JSON.parse(String(raw)); }
     catch { return; }
+    if (message?.event === PROPERTY_INSPECTOR_REGISTER_EVENT && message.uuid) {
+      const id = String(message.uuid);
+      const inspector = this.pendingPropertyInspectors.get(id) || this.propertyInspectors.get(id);
+      if (!inspector) {
+        socket.close(1008, "Unbekannter Property Inspector");
+        return;
+      }
+      const firstRegistration = this.pendingPropertyInspectors.has(id);
+      if (inspector.socket && inspector.socket !== socket) {
+        this.inspectorSockets.delete(inspector.socket);
+        try { inspector.socket.close(1000, "Property Inspector wurde neu geladen"); } catch {}
+      }
+      inspector.socket = socket;
+      inspector.error = "";
+      this.inspectorSockets.set(socket, inspector);
+      this.pendingPropertyInspectors.delete(inspector.id);
+      this.propertyInspectors.set(inspector.id, inspector);
+      if (firstRegistration) {
+        try {
+          this.send(inspector.session, {
+            action: inspector.actionId,
+            event: "propertyInspectorDidAppear",
+            context: inspector.context,
+            device: DEVICE_ID
+          });
+        } catch (error) {
+          inspector.error = safeText(error?.message || error, 500);
+        }
+      }
+      this.emit("changed", this.status());
+      return;
+    }
     if (message?.event === REGISTER_EVENT && message.uuid) {
       const session = this.pendingByUuid.get(String(message.uuid).toLowerCase());
       if (!session) {
@@ -145,6 +232,14 @@ class StreamDeckPluginHost extends EventEmitter {
       });
       session.resolveReady?.(session);
       this.emit("changed", this.status());
+      return;
+    }
+    const inspector = this.inspectorSockets.get(socket);
+    if (inspector) {
+      this.handlePropertyInspectorCommand(inspector, message).catch((error) => {
+        inspector.error = safeText(error?.message || error, 500);
+        this.emit("plugin-error", { pluginId: inspector.plugin.id, error: inspector.error });
+      });
       return;
     }
     const session = this.socketSessions.get(socket);
@@ -183,10 +278,7 @@ class StreamDeckPluginHost extends EventEmitter {
     this.deviceSize = next;
     for (const session of this.sessions.values()) {
       if (session.socket?.readyState !== WebSocket.OPEN) continue;
-      try {
-        this.send(session, { event: "deviceDidDisconnect", device: DEVICE_ID });
-        this.send(session, { event: "deviceDidConnect", device: DEVICE_ID, deviceInfo: deviceInfo(this.deviceSize) });
-      } catch {}
+      try { this.send(session, { event: "deviceDidChange", device: DEVICE_ID, deviceInfo: deviceInfo(this.deviceSize) }); } catch {}
     }
     this.emit("changed", this.status());
   }
@@ -205,29 +297,86 @@ class StreamDeckPluginHost extends EventEmitter {
     this.emit("feedback", { context, ...this.state.feedback[context] });
   }
 
+  notifyPropertyInspectors(session, context, createMessage) {
+    for (const inspector of this.propertyInspectors.values()) {
+      if (inspector.session !== session || (context && inspector.context !== context) || inspector.socket?.readyState !== WebSocket.OPEN) continue;
+      try { inspector.socket.send(JSON.stringify(createMessage(inspector))); }
+      catch (error) { inspector.error = safeText(error?.message || error, 500); }
+    }
+  }
+
+  contextDataFor(session, context) {
+    const visible = this.visibleContexts.get(context)?.contextData;
+    if (visible) return visible;
+    for (const inspector of [...this.propertyInspectors.values(), ...this.pendingPropertyInspectors.values()]) {
+      if (inspector.session === session && inspector.context === context) return inspector.contextData || {};
+    }
+    return {};
+  }
+
   async handlePluginCommand(session, message = {}) {
     const context = safeText(message.context || session.plugin.id, 240);
-    const payload = message.payload && typeof message.payload === "object" ? message.payload : {};
+    const payload = jsonObject(message.payload);
     switch (message.event) {
-      case "setSettings":
+      case "setSettings": {
         this.state.contexts[context] = payload;
         this.persist();
+        this.notifyPropertyInspectors(session, context, (inspector) => ({
+          action: inspector.actionId,
+          event: "didReceiveSettings",
+          context,
+          device: DEVICE_ID,
+          payload: actionPayload(inspector.contextData, payload, this.state.resources[context])
+        }));
         break;
-      case "getSettings":
+      }
+      case "getSettings": {
+        const contextData = this.contextDataFor(session, context);
         this.send(session, {
           action: message.action,
           event: "didReceiveSettings",
           context,
-          device: message.device || DEVICE_ID,
-          payload: { settings: this.state.contexts[context] || {}, coordinates: { column: 0, row: 0 }, isInMultiAction: false }
+          device: DEVICE_ID,
+          id: message.id,
+          payload: actionPayload(contextData, this.state.contexts[context], this.state.resources[context])
         });
+        break;
+      }
+      case "setResources": {
+        const resources = resourceMap(message.payload);
+        this.state.resources[context] = resources;
+        this.persist();
+        this.notifyPropertyInspectors(session, context, (inspector) => ({
+          action: inspector.actionId,
+          event: "didReceiveResources",
+          context,
+          device: DEVICE_ID,
+          payload: actionPayload(inspector.contextData, this.state.contexts[context], resources)
+        }));
+        break;
+      }
+      case "getResources": {
+        const contextData = this.contextDataFor(session, context);
+        this.send(session, {
+          action: message.action,
+          event: "didReceiveResources",
+          context,
+          device: DEVICE_ID,
+          id: message.id,
+          payload: actionPayload(contextData, this.state.contexts[context], this.state.resources[context])
+        });
+        break;
+      }
+      case "getSecrets":
+        this.send(session, { event: "didReceiveSecrets", payload: { secrets: {} } });
         break;
       case "setGlobalSettings":
         this.state.global[session.plugin.id] = payload;
         this.persist();
+        this.notifyPropertyInspectors(session, null, () => ({ event: "didReceiveGlobalSettings", payload: { settings: payload } }));
         break;
       case "getGlobalSettings":
-        this.send(session, { event: "didReceiveGlobalSettings", context: session.plugin.id, payload: { settings: this.state.global[session.plugin.id] || {} } });
+        this.send(session, { event: "didReceiveGlobalSettings", context: session.plugin.id, id: message.id, payload: { settings: this.state.global[session.plugin.id] || {} } });
         break;
       case "setTitle":
         this.updateFeedback(context, { title: safeText(payload.title, 200), target: payload.target ?? 0 });
@@ -248,6 +397,9 @@ class StreamDeckPluginHost extends EventEmitter {
       case "setFeedbackLayout":
         this.updateFeedback(context, { [message.event === "setFeedback" ? "feedback" : "feedbackLayout"]: payload });
         break;
+      case "setTriggerDescription":
+        this.updateFeedback(context, { triggerDescription: payload });
+        break;
       case "openUrl": {
         const url = new URL(String(payload.url || ""));
         if (!/^https?:$/.test(url.protocol)) throw new Error("Ein Plugin wollte eine nicht erlaubte Adresse öffnen.");
@@ -258,11 +410,178 @@ class StreamDeckPluginHost extends EventEmitter {
         this.emit("plugin-log", { pluginId: session.plugin.id, message: safeText(payload.message, 2000) });
         break;
       case "sendToPropertyInspector":
+        for (const inspector of this.propertyInspectors.values()) {
+          if (inspector.context !== context || inspector.socket?.readyState !== WebSocket.OPEN) continue;
+          inspector.socket.send(JSON.stringify({ action: message.action, event: "sendToPropertyInspector", context, payload }));
+        }
         this.emit("property-inspector-message", { pluginId: session.plugin.id, action: message.action, context, payload });
         break;
       default:
         this.emit("plugin-command", { pluginId: session.plugin.id, message });
     }
+  }
+
+  async handlePropertyInspectorCommand(inspector, message = {}) {
+    const context = inspector.context;
+    const action = inspector.actionId;
+    const payload = jsonObject(message.payload);
+    switch (message.event) {
+      case "setSettings":
+        this.state.contexts[context] = payload;
+        this.persist();
+        this.send(inspector.session, {
+          action,
+          event: "didReceiveSettings",
+          context,
+          device: DEVICE_ID,
+          payload: actionPayload(inspector.contextData, payload, this.state.resources[context])
+        });
+        break;
+      case "getSettings":
+        inspector.socket.send(JSON.stringify({
+          action,
+          event: "didReceiveSettings",
+          context,
+          device: DEVICE_ID,
+          id: message.id,
+          payload: actionPayload(inspector.contextData, this.state.contexts[context], this.state.resources[context])
+        }));
+        break;
+      case "setResources": {
+        const resources = resourceMap(message.payload);
+        this.state.resources[context] = resources;
+        this.persist();
+        this.send(inspector.session, {
+          action,
+          event: "didReceiveResources",
+          context,
+          device: DEVICE_ID,
+          payload: actionPayload(inspector.contextData, this.state.contexts[context], resources)
+        });
+        break;
+      }
+      case "getResources":
+        inspector.socket.send(JSON.stringify({
+          action,
+          event: "didReceiveResources",
+          context,
+          device: DEVICE_ID,
+          id: message.id,
+          payload: actionPayload(inspector.contextData, this.state.contexts[context], this.state.resources[context])
+        }));
+        break;
+      case "getSecrets":
+        inspector.socket.send(JSON.stringify({ event: "didReceiveSecrets", payload: { secrets: {} } }));
+        break;
+      case "setGlobalSettings":
+        this.state.global[inspector.plugin.id] = payload;
+        this.persist();
+        this.send(inspector.session, { event: "didReceiveGlobalSettings", context: inspector.plugin.id, payload: { settings: payload } });
+        break;
+      case "getGlobalSettings":
+        inspector.socket.send(JSON.stringify({ event: "didReceiveGlobalSettings", context: inspector.plugin.id, id: message.id, payload: { settings: this.state.global[inspector.plugin.id] || {} } }));
+        break;
+      case "sendToPlugin":
+        this.send(inspector.session, { action, event: "sendToPlugin", context, payload });
+        break;
+      case "openUrl": {
+        const url = new URL(String(payload.url || ""));
+        if (!/^https?:$/.test(url.protocol)) throw new Error("Der Property Inspector wollte eine nicht erlaubte Adresse öffnen.");
+        await this.shell?.openExternal?.(url.toString());
+        break;
+      }
+      case "logMessage":
+        this.emit("plugin-log", { pluginId: inspector.plugin.id, message: safeText(payload.message, 2000) });
+        break;
+      default:
+        this.emit("property-inspector-command", { pluginId: inspector.plugin.id, message });
+    }
+  }
+
+  async createPropertyInspector(action = {}, context = {}) {
+    const actionId = safeText(action.type || action.action, 200);
+    const preferredPlugin = action.pluginId ? this.registry?.findPlugin?.(action.pluginId) : null;
+    const plugin = preferredPlugin && !preferredPlugin.native
+      && preferredPlugin.actions?.some((entry) => entry.id.toLowerCase() === actionId.toLowerCase())
+      ? preferredPlugin
+      : this.registry?.findPluginForAction?.(actionId);
+    if (!plugin) throw new Error(`Für „${actionId}“ wurde kein originales Stream-Deck-Plugin gefunden.`);
+    const declaredAction = plugin.actions?.find((entry) => entry.id.toLowerCase() === actionId.toLowerCase());
+    const relative = safeText(declaredAction?.propertyInspectorPath || plugin.propertyInspectorPath || "", 1000);
+    if (!relative) throw new Error(`„${declaredAction?.name || actionId}“ besitzt keinen Property Inspector.`);
+    if (![".htm", ".html"].includes(path.extname(relative).toLowerCase())) throw new Error("Property-Inspector-Datei muss eine HTML-Datei sein.");
+    let filePath;
+    try {
+      const declaredPath = path.resolve(plugin.root, relative);
+      const realRoot = fs.realpathSync(plugin.root);
+      const realFile = fs.realpathSync(declaredPath);
+      if (!realFile.startsWith(`${realRoot}${path.sep}`) || !fs.statSync(realFile).isFile()) throw new Error("unsafe");
+      filePath = realFile;
+    } catch {
+      throw new Error("Property-Inspector-Datei fehlt oder liegt außerhalb des Plugin-Ordners.");
+    }
+    const session = await this.ensureSession(plugin, context);
+    const id = `pi-${crypto.randomBytes(16).toString("hex")}`;
+    const actionContext = contextId(plugin.id, actionId, context);
+    this.state.contexts[actionContext] = { ...(this.state.contexts[actionContext] || {}), ...(action.settings || {}) };
+    this.persist();
+    if (!this.visibleContexts.has(actionContext)) {
+      this.send(session, {
+        event: "willAppear",
+        action: actionId,
+        context: actionContext,
+        device: DEVICE_ID,
+        payload: actionPayload(context, this.state.contexts[actionContext], this.state.resources[actionContext])
+      });
+      this.visibleContexts.set(actionContext, { pluginId: plugin.id, actionId, contextData: { ...context } });
+    }
+    const inspector = {
+      id,
+      plugin,
+      session,
+      actionId,
+      context: actionContext,
+      contextData: { ...context },
+      filePath,
+      socket: null,
+      error: ""
+    };
+    this.pendingPropertyInspectors.set(id, inspector);
+    return {
+      id,
+      port: this.port(),
+      filePath,
+      context: actionContext,
+      registerEvent: PROPERTY_INSPECTOR_REGISTER_EVENT,
+      info: JSON.stringify(pluginInfo(plugin, this.deviceSize)),
+      actionInfo: JSON.stringify({
+        action: actionId,
+        context: actionContext,
+        device: DEVICE_ID,
+        payload: actionPayload(context, this.state.contexts[actionContext], this.state.resources[actionContext])
+      })
+    };
+  }
+
+  closePropertyInspector(id, closeSocket = true) {
+    const inspector = this.propertyInspectors.get(String(id)) || this.pendingPropertyInspectors.get(String(id));
+    if (!inspector) return null;
+    const settings = { ...(this.state.contexts[inspector.context] || {}) };
+    this.propertyInspectors.delete(inspector.id);
+    this.pendingPropertyInspectors.delete(inspector.id);
+    if (inspector.socket) this.inspectorSockets.delete(inspector.socket);
+    try {
+      this.send(inspector.session, {
+        action: inspector.actionId,
+        event: "propertyInspectorDidDisappear",
+        context: inspector.context,
+        device: DEVICE_ID
+      });
+    } catch {}
+    if (closeSocket) try { inspector.socket?.close(1000, "Eigenschaften geschlossen"); } catch {}
+    this.scheduleSessionIdle(inspector.session);
+    this.emit("changed", this.status());
+    return settings;
   }
 
   clearSessionIdle(session) {
@@ -284,10 +603,22 @@ class StreamDeckPluginHost extends EventEmitter {
     const normalizedKey = String(key || "").toLowerCase();
     const session = this.sessions.get(normalizedKey);
     if (!session) return;
+    for (const inspector of [...this.propertyInspectors.values(), ...this.pendingPropertyInspectors.values()]) {
+      if (inspector.session === session) this.closePropertyInspector(inspector.id);
+    }
     this.clearSessionIdle(session);
     for (const [context, meta] of this.visibleContexts) {
       if (meta.pluginId.toLowerCase() !== normalizedKey) continue;
-      try { this.send(session, { event: "willDisappear", action: meta.actionId, context, device: DEVICE_ID, payload: { settings: this.state.contexts[context] || {}, controller: "Keypad", isInMultiAction: false } }); } catch {}
+      const contextData = meta.contextData || {};
+      try {
+        this.send(session, {
+          event: "willDisappear",
+          action: meta.actionId,
+          context,
+          device: DEVICE_ID,
+          payload: actionPayload(contextData, this.state.contexts[context], this.state.resources[context])
+        });
+      } catch {}
       this.visibleContexts.delete(context);
     }
     try { this.send(session, { event: "deviceDidDisconnect", device: DEVICE_ID }); } catch {}
@@ -307,6 +638,7 @@ class StreamDeckPluginHost extends EventEmitter {
       return existing;
     }
     if (existing?.readyPromise) return existing.readyPromise;
+    if (existing) this.stopSession(key, "Veraltete Plugin-Sitzung ersetzt", false);
     if (plugin.runtime?.status !== "ready" || !plugin.executableExists) {
       throw new Error(`Die Laufzeit von „${plugin.name}“ fehlt, ist inkompatibel oder durch die Elgato-Marketplace-Installation geschützt.`);
     }
@@ -332,7 +664,7 @@ class StreamDeckPluginHost extends EventEmitter {
     const environment = { ...process.env };
     if (plugin.runtime.kind === "node") {
       executable = process.execPath;
-      args = ["--enable-source-maps", plugin.executablePath, ...registrationArgs];
+      args = ["--enable-source-maps", "--no-global-search-paths", plugin.executablePath, ...registrationArgs];
       if (process.versions.electron) environment.ELECTRON_RUN_AS_NODE = "1";
     } else if (plugin.runtime.kind !== "native") {
       throw new Error(`Die Laufzeitart „${plugin.runtime.kind}“ von „${plugin.name}“ wird nicht unterstützt.`);
@@ -389,7 +721,11 @@ class StreamDeckPluginHost extends EventEmitter {
 
   async execute(action = {}, context = {}) {
     const actionId = safeText(action.type || action.action, 200);
-    const plugin = this.registry?.findPluginForAction?.(actionId);
+    const preferredPlugin = action.pluginId ? this.registry?.findPlugin?.(action.pluginId) : null;
+    const plugin = preferredPlugin && !preferredPlugin.native
+      && preferredPlugin.actions?.some((entry) => entry.id.toLowerCase() === actionId.toLowerCase())
+      ? preferredPlugin
+      : this.registry?.findPluginForAction?.(actionId);
     if (!plugin) throw new Error(`Für die originale Stream-Deck-Aktion „${actionId}“ wurde kein ausführbares Plugin gefunden.`);
     const declaredAction = plugin.actions?.find((entry) => entry.id.toLowerCase() === actionId.toLowerCase());
     if (declaredAction?.raw?.supportedInTouchDeck === false) throw new Error(`Aktion „${declaredAction.name}“ unterstützt keine Keypad-/Touch-Taste.`);
@@ -399,20 +735,18 @@ class StreamDeckPluginHost extends EventEmitter {
     const settings = { ...(this.state.contexts[id] || {}), ...configured };
     this.state.contexts[id] = settings;
     this.persist();
-    const payload = {
-      settings,
-      coordinates: coordinates(context),
-      controller: "Keypad",
-      isInMultiAction: Boolean(context.multiAction)
-    };
+    const payload = actionPayload(context, settings, this.state.resources[id]);
+    const keyPayload = context.multiAction
+      ? { ...payload, userDesiredState: Math.max(0, Math.round(Number(context.userDesiredState) || 0)) }
+      : payload;
     try {
       if (!this.visibleContexts.has(id)) {
         this.send(session, { event: "willAppear", action: actionId, context: id, device: DEVICE_ID, payload });
-        this.visibleContexts.set(id, { pluginId: plugin.id, actionId });
+        this.visibleContexts.set(id, { pluginId: plugin.id, actionId, contextData: { ...context } });
       }
-      this.send(session, { event: "keyDown", action: actionId, context: id, device: DEVICE_ID, payload: { ...payload, userDesiredState: undefined } });
+      this.send(session, { event: "keyDown", action: actionId, context: id, device: DEVICE_ID, payload: keyPayload });
       await wait(45);
-      this.send(session, { event: "keyUp", action: actionId, context: id, device: DEVICE_ID, payload: { ...payload, userDesiredState: undefined } });
+      this.send(session, { event: "keyUp", action: actionId, context: id, device: DEVICE_ID, payload: keyPayload });
       await wait(80);
       return { dispatched: true, pluginId: plugin.id, context: id, feedback: this.state.feedback[id] || null };
     } finally {
@@ -421,6 +755,7 @@ class StreamDeckPluginHost extends EventEmitter {
   }
 
   async stop() {
+    for (const inspector of [...this.propertyInspectors.values(), ...this.pendingPropertyInspectors.values()]) this.closePropertyInspector(inspector.id);
     for (const key of [...this.sessions.keys()]) this.stopSession(key, "Batto OBS Tool wird beendet", false);
     clearTimeout(this.persistTimer);
     this.persistTimer = null;
@@ -434,10 +769,13 @@ class StreamDeckPluginHost extends EventEmitter {
 
 module.exports = {
   DEVICE_ID,
+  PROPERTY_INSPECTOR_REGISTER_EVENT,
   StreamDeckPluginHost,
+  actionPayload,
   contextId,
   coordinates,
   deviceInfo,
   normalizedDeviceSize,
-  pluginInfo
+  pluginInfo,
+  resourceMap
 };

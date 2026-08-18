@@ -158,20 +158,72 @@
 
   let config = loadConfig();
   let previewReady = false;
+  let previewFrame = 0;
+  let saveQueue = Promise.resolve(true);
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
   }
 
   function normalizeUserKey(value) {
-    return String(value || "").trim().replace(/^@/, "").toLowerCase().slice(0, 80);
+    const key = String(value || "").replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/^@/, "").toLowerCase().slice(0, 80);
+    return ["__proto__", "constructor", "prototype"].includes(key) ? "" : key;
+  }
+
+  function boundedNumber(value, minimum, maximum, fallback) {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : fallback;
+  }
+
+  function normalizeStyle(value, fallback) {
+    const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const colors = (Array.isArray(source.colors) ? source.colors : [])
+      .map((entry) => String(entry || "").trim().toLowerCase())
+      .filter((entry) => /^#[0-9a-f]{6}$/.test(entry))
+      .slice(0, 6);
+    return {
+      enabled: source.enabled === undefined ? fallback.enabled !== false : source.enabled !== false,
+      colors: colors.length >= 2 ? colors : [...fallback.colors],
+      angle: boundedNumber(source.angle, 0, 360, fallback.angle),
+      speedSeconds: boundedNumber(source.speedSeconds, 0.6, 30, fallback.speedSeconds),
+      glow: boundedNumber(source.glow, 0, 50, fallback.glow),
+      brightness: boundedNumber(source.brightness, 0.5, 2, fallback.brightness),
+      saturation: boundedNumber(source.saturation, 0, 3, fallback.saturation),
+      fontWeight: Math.round(boundedNumber(source.fontWeight, 300, 1000, fallback.fontWeight))
+    };
+  }
+
+  function normalizeConfig(value = {}) {
+    const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const defaultStyle = normalizeStyle(source.defaultStyle, DEFAULT_CONFIG.defaultStyle);
+    const roleStyles = {};
+    for (const role of ["broadcaster", "moderator", "vip", "subscriber", "viewer"]) {
+      roleStyles[role] = normalizeStyle(source.roleStyles?.[role], normalizeStyle(DEFAULT_CONFIG.roleStyles[role], defaultStyle));
+    }
+    const userStyles = Object.create(null);
+    if (source.userStyles && typeof source.userStyles === "object" && !Array.isArray(source.userStyles)) {
+      for (const [rawKey, rawStyle] of Object.entries(source.userStyles).slice(0, 1000)) {
+        const key = normalizeUserKey(rawKey);
+        if (key && rawStyle && typeof rawStyle === "object" && !Array.isArray(rawStyle)) userStyles[key] = normalizeStyle(rawStyle, defaultStyle);
+      }
+    }
+    return {
+      enabled: source.enabled !== false, applyToName: source.applyToName !== false, applyToMessage: source.applyToMessage !== false,
+      useOriginalTwitchColorWhenDisabled: source.useOriginalTwitchColorWhenDisabled !== false,
+      reducedMotion: Boolean(source.reducedMotion), transparentBubbles: Boolean(source.transparentBubbles),
+      showRole: Boolean(source.showRole), showTime: Boolean(source.showTime),
+      align: source.align === "right" ? "right" : "left", newest: source.newest === "top" ? "top" : "bottom",
+      maximumMessages: Math.round(boundedNumber(source.maximumMessages, 1, 200, 40)),
+      displayMs: Math.round(boundedNumber(source.displayMs, 1000, 300000, 20000)),
+      defaultStyle, roleStyles, userStyles
+    };
   }
 
   function loadConfig() {
     try {
       const loaded = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      if (!loaded || typeof loaded !== "object" || Array.isArray(loaded)) return clone(DEFAULT_CONFIG);
-      return {
+      if (!loaded || typeof loaded !== "object" || Array.isArray(loaded)) return normalizeConfig(DEFAULT_CONFIG);
+      return normalizeConfig({
         ...clone(DEFAULT_CONFIG),
         ...loaded,
         defaultStyle: { ...clone(DEFAULT_CONFIG.defaultStyle), ...(loaded.defaultStyle || {}) },
@@ -179,15 +231,26 @@
         userStyles: loaded.userStyles && typeof loaded.userStyles === "object"
           ? loaded.userStyles
           : {}
-      };
+      });
     } catch {
-      return clone(DEFAULT_CONFIG);
+      return normalizeConfig(DEFAULT_CONFIG);
     }
   }
 
-  function saveConfig() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  async function saveConfig() {
+    config = normalizeConfig(config);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(config)); }
+    catch { setStatus("OBS-Stil wird synchronisiert; lokaler Browser-Speicher ist nicht verfügbar.", true); }
     applyConfigToPreview();
+    const snapshot = clone(config);
+    const request = saveQueue.catch(() => true).then(async () => {
+      const response = await fetch("/api/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(snapshot) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return true;
+    });
+    saveQueue = request.catch(() => false);
+    try { return await request; }
+    catch { setStatus("Lokal gespeichert; die OBS-Browserquelle konnte nicht synchronisiert werden.", true); return false; }
   }
 
   function previewApi() {
@@ -278,7 +341,7 @@
     fillStyle(currentTargetStyle());
   }
 
-  function saveCurrentStyle() {
+  async function saveCurrentStyle() {
     updateGlobalConfigFromInputs();
     const style = styleFromInputs();
     if (ui.target.value === "user") {
@@ -294,11 +357,12 @@
       config.roleStyles[ui.target.value] = style;
       setStatus(`Hologramm-Stil für „${ui.target.selectedOptions[0].textContent}“ gespeichert.`);
     }
-    saveConfig();
+    const synchronized = await saveConfig();
+    if (synchronized) setStatus("Hologramm-Stil ist mit der OBS-Browserquelle synchronisiert.");
     showPreviewForTarget();
   }
 
-  function removeCurrentUserStyle() {
+  async function removeCurrentUserStyle() {
     const key = normalizeUserKey(ui.userName.value);
     if (!key) {
       setStatus("Bitte den Twitch-Namen des Benutzerstils eintragen.", true);
@@ -309,9 +373,9 @@
       return;
     }
     delete config.userStyles[key];
-    saveConfig();
+    const synchronized = await saveConfig();
     fillStyle(config.defaultStyle);
-    setStatus(`Eigener Stil für @${key} entfernt. Jetzt greift wieder der Rollenstil.`);
+    if (synchronized) setStatus(`Eigener Stil für @${key} entfernt. Jetzt greift wieder der Rollenstil.`);
   }
 
   function rolesForTarget(target) {
@@ -330,7 +394,7 @@
     const target = ui.target.value;
     const userKey = normalizeUserKey(ui.userName.value) || "Test_User";
     api.addMessage({
-      id: `editor-${Date.now()}`,
+      id: "editor-live-preview",
       displayName: target === "user" ? userKey : ui.target.selectedOptions[0].textContent,
       username: target === "user" ? userKey : target,
       text: "So erscheinen Name und Chatfarbe im Twitch-Overlay.",
@@ -341,7 +405,7 @@
 
   async function copyConfig() {
     updateGlobalConfigFromInputs();
-    saveConfig();
+    await saveConfig();
     const text = JSON.stringify(config, null, 2);
     try {
       await navigator.clipboard.writeText(text);
@@ -379,17 +443,19 @@
   }
 
   function previewTemporaryStyle() {
-    updateGlobalConfigFromInputs();
-    const temporary = clone(config);
-    const target = ui.target.value;
-    if (target === "user") {
-      const key = normalizeUserKey(ui.userName.value) || "test_user";
-      temporary.userStyles[key] = styleFromInputs();
-    } else {
-      temporary.roleStyles[target] = styleFromInputs();
-    }
-    previewApi()?.configure(temporary);
-    showPreviewForTarget();
+    if (previewFrame) return;
+    previewFrame = requestAnimationFrame(() => {
+      previewFrame = 0;
+      updateGlobalConfigFromInputs();
+      const temporary = clone(config);
+      const target = ui.target.value;
+      if (target === "user") {
+        const key = normalizeUserKey(ui.userName.value) || "test_user";
+        temporary.userStyles[key] = styleFromInputs();
+      } else temporary.roleStyles[target] = styleFromInputs();
+      previewApi()?.configure(temporary);
+      showPreviewForTarget();
+    });
   }
 
   ui.preview.addEventListener("load", () => {
@@ -425,7 +491,7 @@
   ]) {
     input.addEventListener("change", () => {
       updateGlobalConfigFromInputs();
-      saveConfig();
+      void saveConfig();
       setStatus("Anzeigeoption gespeichert.");
     });
   }
@@ -441,8 +507,8 @@
     button.addEventListener("click", () => applyPreset(button.dataset.preset));
   });
 
-  ui.save.addEventListener("click", saveCurrentStyle);
-  ui.removeUserStyle.addEventListener("click", removeCurrentUserStyle);
+  ui.save.addEventListener("click", () => void saveCurrentStyle());
+  ui.removeUserStyle.addEventListener("click", () => void removeCurrentUserStyle());
   ui.exportConfig.addEventListener("click", () => void copyConfig());
   ui.previewClear.addEventListener("click", () => previewApi()?.clear());
   ui.previewStreamer.addEventListener("click", () => previewApi()?.addMessage({
@@ -464,5 +530,32 @@
   loadGlobalInputs();
   updateTargetUi();
   updateRangeOutputs();
-  setStatus("Bereit. Keine Discord-Verbindung und kein Server-Boost erforderlich.");
+  setStatus("Gespeicherter Hologramm-Stil wird geladen …");
+  fetch("/api/config", { cache: "no-store" })
+    .then((response) => response.ok ? response.json() : null)
+    .then(async (serverConfig) => {
+      let synchronized = true;
+      if (serverConfig && typeof serverConfig === "object" && Object.keys(serverConfig).length) {
+        config = normalizeConfig({
+          ...config,
+          ...serverConfig,
+          defaultStyle: { ...config.defaultStyle, ...(serverConfig.defaultStyle || {}) },
+          roleStyles: { ...config.roleStyles, ...(serverConfig.roleStyles || {}) },
+          userStyles: { ...config.userStyles, ...(serverConfig.userStyles || {}) }
+        });
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(config)); } catch {}
+        loadGlobalInputs();
+        updateTargetUi();
+        applyConfigToPreview();
+      } else {
+        synchronized = await saveConfig();
+      }
+      if (synchronized) setStatus("Hologramm-Stil ist mit der OBS-Browserquelle synchronisiert.");
+    })
+    .catch(() => setStatus("Editor bereit; gespeicherter OBS-Stil konnte nicht geladen werden.", true));
+
+  window.addEventListener("pagehide", () => {
+    if (previewFrame) cancelAnimationFrame(previewFrame);
+    previewFrame = 0;
+  }, { once: true });
 })();

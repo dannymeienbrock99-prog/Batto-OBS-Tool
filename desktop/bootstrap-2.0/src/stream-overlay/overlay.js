@@ -2,6 +2,7 @@
 
 (() => {
   const stage = document.getElementById("stage");
+  const onlyType = new URLSearchParams(location.search).get("only") || "";
   let config = { elements: [], backgroundOpacity: 0, backgroundColor: "#000000" };
   let socket = null;
   let reconnectDelay = 1000;
@@ -61,7 +62,7 @@
     element.append(feed);
   }
 
-  function renderElement(item) {
+  function renderElement(item, options = {}) {
     const element = createShell(item);
     if (!item.visible) element.hidden = true;
     switch (item.type) {
@@ -127,6 +128,14 @@
       case "heartRate": {
         const heart = document.createElement("div");
         heart.className = "heart";
+        heart.classList.toggle("is-beating", Boolean(options.heartBeat));
+        heart.dataset.layout = ["minimal", "hologram", "bar"].includes(item.settings?.layout) ? item.settings.layout : "minimal";
+        heart.classList.toggle("no-pulse", item.settings?.pulse === false);
+        heart.style.setProperty("--heart-color", item.settings?.heartColor || item.accentColor || "#ff526e");
+        heart.style.setProperty("--beat-duration", `${state.heartRate ? Math.max(.34, Math.min(1.4, 60 / state.heartRate)) : 1}s`);
+        const low = Number(item.settings?.lowBpm) || 55;
+        const high = Number(item.settings?.highBpm) || 150;
+        heart.classList.toggle("outside-range", Boolean(state.heartRate && (state.heartRate < low || state.heartRate > high)));
         heart.append(text("div", "pulse", "♥"), text("div", "bpm", state.heartRate ? `${state.heartRate} BPM` : "– BPM"));
         element.append(heart);
         break;
@@ -175,16 +184,17 @@
     return element;
   }
 
-  function render() {
+  function render(options = {}) {
     for (const timer of timers.values()) clearInterval(timer);
     timers.clear();
     stage.style.background = config.backgroundOpacity > 0
       ? `color-mix(in srgb, ${config.backgroundColor || "#000"} ${config.backgroundOpacity * 100}%, transparent)`
       : "transparent";
-    stage.replaceChildren(...(config.elements || []).map(renderElement));
+    const elements = onlyType ? (config.elements || []).filter((item) => item.type === onlyType) : (config.elements || []);
+    stage.replaceChildren(...elements.map((item) => renderElement(item, options)));
   }
 
-  function ingest(event) {
+  function ingest(event, { renderNow = true } = {}) {
     events.push(event);
     if (events.length > 200) events.splice(0, events.length - 200);
     const type = String(event.type || "").toLowerCase();
@@ -196,7 +206,8 @@
     if (/gift|geschenk/.test(type)) { state.gifts.push(event); state.gifts = state.gifts.slice(-30); }
     if (type === "like" || type === "likes") state.likes = Number(event.value) || state.likes + 1;
     if (type === "goal") state.goal = Number(event.value) || 0;
-    if (type === "heartrate" || type === "heart-rate" || type === "pulse") state.heartRate = Number(event.value) || 0;
+    const heartBeat = type === "heartrate" || type === "heart-rate" || type === "pulse";
+    if (heartBeat) state.heartRate = Number(event.value) || 0;
     if (type === "cohost" || type === "co-host") state.coHost = event.name || event.text || "";
     if (type === "poll") {
       const option = event.text || event.data?.option || "Option";
@@ -210,7 +221,8 @@
         setTimeout(() => { wheel.settings.spinning = false; render(); }, 3600);
       }
     }
-    render();
+    if (renderNow) render({ heartBeat });
+    return heartBeat;
   }
 
   function clear() {
@@ -233,7 +245,11 @@
         const packet = JSON.parse(message.data);
         if (packet.type === "config") { config = packet.config || config; render(); }
         if (packet.type === "event") ingest(packet.event || {});
-        if (packet.type === "history") for (const event of packet.events || []) ingest(event);
+        if (packet.type === "history") {
+          let heartBeat = false;
+          for (const event of packet.events || []) heartBeat = ingest(event, { renderNow: false }) || heartBeat;
+          render({ heartBeat });
+        }
         if (packet.type === "clear") clear();
       } catch {}
     });

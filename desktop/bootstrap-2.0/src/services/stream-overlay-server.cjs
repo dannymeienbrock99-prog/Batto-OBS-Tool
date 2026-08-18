@@ -187,6 +187,7 @@ class StreamOverlayServer extends EventEmitter {
       port: this.port,
       baseUrl: this.port ? `http://127.0.0.1:${this.port}` : "",
       overlayUrl: this.port ? `http://127.0.0.1:${this.port}/overlay` : "",
+      heartRateUrl: this.port ? `http://127.0.0.1:${this.port}/overlay?only=heartRate` : "",
       editorUrl: this.port ? `http://127.0.0.1:${this.port}/editor` : "",
       eventUrl: this.port ? `http://127.0.0.1:${this.port}/api/event` : "",
       chatUrl: this.port ? `http://127.0.0.1:${this.port}/api/chat` : "",

@@ -122,6 +122,13 @@ jobs:
           $index = Get-Content "src/renderer/index.html" -Raw
           if ($index -notmatch 'touch-deck-v3\.css') { throw "Touch-Deck-CSS ist nicht eingebunden." }
           if ($index -notmatch 'touch-deck-v3\.js') { throw "Touch-Deck-JavaScript ist nicht eingebunden." }
+          $bundledDll = "resources/sotf-death-counter/CrazyBatto.SotfDeathCounter.dll"
+          $bundledManifest = "resources/sotf-death-counter/manifest.json"
+          if (-not (Test-Path $bundledDll) -or -not (Test-Path $bundledManifest)) { throw "Gebündeltes SOTF-Modul v0.3.3 fehlt." }
+          if ((Get-FileHash $bundledDll -Algorithm SHA256).Hash.ToLowerInvariant() -ne "170c59f26b543e7b8d9467263e7ae749c9a36eb7d45f25f56b306cbacd2bba3a") { throw "SOTF-DLL v0.3.3 besitzt nicht die erwartete Prüfsumme." }
+          if ((Get-FileHash $bundledManifest -Algorithm SHA256).Hash.ToLowerInvariant() -ne "2e8251e4ad1b78e9348c49e44f25120c742617260b835e6fb430a81c212e344c") { throw "SOTF-Manifest v0.3.3 besitzt nicht die erwartete Prüfsumme." }
+          $bundledMetadata = Get-Content $bundledManifest -Raw | ConvertFrom-Json
+          if ($bundledMetadata.id -ne "CrazyBatto_SotfDeathCounter" -or $bundledMetadata.version -ne "0.3.3") { throw "SOTF-Manifest beschreibt nicht CrazyBatto_SotfDeathCounter v0.3.3." }
 
       - name: Build Windows x64 application installer
         shell: pwsh
@@ -138,6 +145,11 @@ jobs:
           $unpacked = Resolve-Path "dist/win-unpacked"
           $exe = Get-ChildItem $unpacked -Filter "Batto OBS Tool.exe" -File -Recurse | Select-Object -First 1
           if (-not $exe) { throw "Ungepackte Hauptanwendung fehlt." }
+          $unpackedSotfDll = Join-Path $unpacked "resources/resources/sotf-death-counter/CrazyBatto.SotfDeathCounter.dll"
+          $unpackedSotfManifest = Join-Path $unpacked "resources/resources/sotf-death-counter/manifest.json"
+          if (-not (Test-Path $unpackedSotfDll) -or -not (Test-Path $unpackedSotfManifest)) { throw "SOTF-Modul fehlt im ungepackten Windows-Build." }
+          if ((Get-FileHash $unpackedSotfDll -Algorithm SHA256).Hash.ToLowerInvariant() -ne "170c59f26b543e7b8d9467263e7ae749c9a36eb7d45f25f56b306cbacd2bba3a") { throw "SOTF-DLL im Windows-Build besitzt eine falsche Prüfsumme." }
+          if ((Get-FileHash $unpackedSotfManifest -Algorithm SHA256).Hash.ToLowerInvariant() -ne "2e8251e4ad1b78e9348c49e44f25120c742617260b835e6fb430a81c212e344c") { throw "SOTF-Manifest im Windows-Build besitzt eine falsche Prüfsumme." }
           $selfTest = Start-Process -FilePath $exe.FullName -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
           if ($selfTest.ExitCode -ne 0) { throw "Self-Test fehlgeschlagen: $($selfTest.ExitCode)" }
 
@@ -175,14 +187,16 @@ jobs:
           Copy-Item $installer.FullName (Join-Path $release $installer.Name)
           Copy-Item "game-mods/publish/CrazyBatto-SOTF-Mod-Installer.exe" (Join-Path $release "SOTF-Spielmod/CrazyBatto-SOTF-Mod-Installer.exe")
           Copy-Item "game-mods/CrazyBatto-SOTF-DeathCounter-Module-v0.3.0-source.zip" (Join-Path $release "SOTF-Spielmod/CrazyBatto-SOTF-DeathCounter-Module-v0.3.0-source.zip")
+          Copy-Item "desktop/resources/sotf-death-counter/CrazyBatto.SotfDeathCounter.dll" (Join-Path $release "SOTF-Spielmod/CrazyBatto.SotfDeathCounter.dll")
+          Copy-Item "desktop/resources/sotf-death-counter/manifest.json" (Join-Path $release "SOTF-Spielmod/manifest.json")
           Copy-Item "game-mods/README-SOTF-MOD.txt" (Join-Path $release "SOTF-Spielmod/README-SOTF-MOD.txt")
 
           @"
           BATTO OBS TOOL 2.0.0 – TOUCH-DECK- UND SOTF-PAKET
 
           1. Batto-OBS-Tool-Setup-2.0.0.exe installieren.
-          2. Für Sons of the Forest den Ordner "SOTF-Spielmod" öffnen.
-          3. CrazyBatto-SOTF-Mod-Installer.exe starten.
+          2. Im Touch-Deck bei „SOTF Todeszähler“ auf „Gebündeltes Modul installieren“ klicken.
+          3. Alternativ liegen DLL und manifest.json im Ordner "SOTF-Spielmod"; der Quellcode v0.3.0 bleibt separat für reproduzierbare Builds erhalten.
 
           Touch-Deck enthält jetzt:
           - linke Plugin-/Aktionsbibliothek mit Suche
@@ -192,15 +206,16 @@ jobs:
           - Ausführen-/Bearbeiten-Modus für Touch-Monitore und Vollbild
           - berührbares Verschieben per Quelltaste und Zieltaste
           - lokale Elgato-WebSocket-Laufzeit für ungeschützte Original-Plugins
+          - originale Property Inspectors direkt an der gewählten Taste, ohne JSON-Eingabefeld
           - mittleres variables Tastenraster
           - rechten Tasten-Inspector mit Mehrfachaktionen
           - leere, unbeschriftete Standardtasten
           - Profile, Ordner, Import/Export, Kopieren/Einfügen und Verzögerungen
           - Beibehaltung verdeckter Tasten beim Verkleinern des Rasters
 
-          Das SOTF-Quellpaket ist kein beliebiges vorgebautes Spiel-DLL. Der mitgelieferte grafische
-          Mod-Installer baut es gegen die RedLoader- und Spiel-Assemblies auf deinem Computer und
-          installiert nur dann, wenn DLL und manifest.json erfolgreich erzeugt wurden.
+          Das von Crazy_Batto bereitgestellte Safe-Mode-Modul v0.3.3 ist zusätzlich direkt gebündelt.
+          Der grafische Installer und das v0.3.0-Quellpaket bleiben für einen lokalen, reproduzierbaren
+          Build gegen die RedLoader- und Spiel-Assemblies auf deinem Computer enthalten.
           "@ | Set-Content -Encoding UTF8 (Join-Path $release "INSTALLATION.txt")
 
           $hashLines = Get-ChildItem $release -File -Recurse | ForEach-Object {
@@ -224,6 +239,8 @@ jobs:
               "SHA256.txt",
               "SOTF-Spielmod/CrazyBatto-SOTF-Mod-Installer.exe",
               "SOTF-Spielmod/CrazyBatto-SOTF-DeathCounter-Module-v0.3.0-source.zip",
+              "SOTF-Spielmod/CrazyBatto.SotfDeathCounter.dll",
+              "SOTF-Spielmod/manifest.json",
               "SOTF-Spielmod/README-SOTF-MOD.txt"
             )) {
               if ($entries -notcontains $required) { throw "Paket-ZIP ist unvollständig: $required fehlt." }

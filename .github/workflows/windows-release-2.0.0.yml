@@ -60,14 +60,20 @@ jobs:
             "src/preload.cjs",
             "src/renderer/index.html",
             "src/renderer/integrated.js",
+            "src/renderer/assets/team-alpha-logo.png",
+            "src/renderer/assets/overview-dragon-pc.png",
             "src/services/mobile-bridge.cjs",
             "src/services/stream-overlay-server.cjs",
+            "src/services/heart-rate-manager.cjs",
             "src/services/plugin-registry.cjs",
             "src/mobile/index.html",
             "src/stream-overlay/editor.html",
             "modules/encoder-monitoring-overlay/src/server.cjs",
             "modules/twitch-holo-chat/web/overlay.html",
-            "resources/team-logo.svg"
+            "resources/team-logo.svg",
+            "resources/team-logo.png",
+            "resources/sotf-death-counter/CrazyBatto.SotfDeathCounter.dll",
+            "resources/sotf-death-counter/manifest.json"
           )) {
             if (-not (Test-Path $required)) { throw "Integrierter Bestandteil fehlt: $required" }
           }
@@ -83,7 +89,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          node --test test/integrated-2.0.0.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs
+          npm test
           if ($LASTEXITCODE -ne 0) { throw "Mindestens ein Integrations- oder Modultest ist fehlgeschlagen." }
 
       - name: Build Windows x64 NSIS installer
@@ -110,6 +116,14 @@ jobs:
           $resourceRoot = Join-Path $unpacked "resources"
           if (-not (Test-Path (Join-Path $resourceRoot "app.asar"))) { throw "Electron-ASAR fehlt." }
           if (-not (Test-Path (Join-Path $resourceRoot "resources/team-logo.svg"))) { throw "Externes Team-Alpha-Logo fehlt." }
+          if (-not (Test-Path (Join-Path $resourceRoot "resources/team-logo.png"))) { throw "Externes Team-Alpha-PNG-Logo fehlt." }
+          $sotfDll = Join-Path $resourceRoot "resources/sotf-death-counter/CrazyBatto.SotfDeathCounter.dll"
+          $sotfManifest = Join-Path $resourceRoot "resources/sotf-death-counter/manifest.json"
+          if (-not (Test-Path $sotfDll) -or -not (Test-Path $sotfManifest)) { throw "Gebündeltes SOTF-Modul ist unvollständig." }
+          if ((Get-FileHash $sotfDll -Algorithm SHA256).Hash.ToLowerInvariant() -ne "170c59f26b543e7b8d9467263e7ae749c9a36eb7d45f25f56b306cbacd2bba3a") { throw "Gebündelte SOTF-DLL besitzt eine falsche Prüfsumme." }
+          if ((Get-FileHash $sotfManifest -Algorithm SHA256).Hash.ToLowerInvariant() -ne "2e8251e4ad1b78e9348c49e44f25120c742617260b835e6fb430a81c212e344c") { throw "Gebündeltes SOTF-Manifest besitzt eine falsche Prüfsumme." }
+          $sotfMetadata = Get-Content $sotfManifest -Raw | ConvertFrom-Json
+          if ($sotfMetadata.id -ne "CrazyBatto_SotfDeathCounter" -or $sotfMetadata.version -ne "0.3.3") { throw "Gebündeltes SOTF-Manifest beschreibt nicht Modul v0.3.3." }
           $bytes = [IO.File]::ReadAllBytes($exe.FullName)
           if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Hauptanwendung besitzt keinen gültigen PE-Header." }
           $selfTest = Start-Process -FilePath $exe.FullName -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
@@ -133,6 +147,14 @@ jobs:
           if (-not (Test-Path $installedExe)) { throw "Installierte Hauptanwendung fehlt." }
           if (Test-Path (Join-Path $installDir "Creator Hub.exe")) { throw "Alte Creator-Hub-EXE wurde installiert." }
           if (-not (Test-Path (Join-Path $installDir "resources/resources/team-logo.svg"))) { throw "Team-Alpha-Logo wurde nicht installiert." }
+          if (-not (Test-Path (Join-Path $installDir "resources/resources/team-logo.png"))) { throw "Team-Alpha-PNG-Logo wurde nicht installiert." }
+          $installedSotfDll = Join-Path $installDir "resources/resources/sotf-death-counter/CrazyBatto.SotfDeathCounter.dll"
+          $installedSotfManifest = Join-Path $installDir "resources/resources/sotf-death-counter/manifest.json"
+          if (-not (Test-Path $installedSotfDll) -or -not (Test-Path $installedSotfManifest)) { throw "SOTF-Modul wurde nicht vollständig installiert." }
+          if ((Get-FileHash $installedSotfDll -Algorithm SHA256).Hash.ToLowerInvariant() -ne "170c59f26b543e7b8d9467263e7ae749c9a36eb7d45f25f56b306cbacd2bba3a") { throw "Installierte SOTF-DLL besitzt eine falsche Prüfsumme." }
+          if ((Get-FileHash $installedSotfManifest -Algorithm SHA256).Hash.ToLowerInvariant() -ne "2e8251e4ad1b78e9348c49e44f25120c742617260b835e6fb430a81c212e344c") { throw "Installiertes SOTF-Manifest besitzt eine falsche Prüfsumme." }
+          $desktopShortcut = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::CommonDesktopDirectory)) "Batto OBS Tool.lnk"
+          if (-not (Test-Path $desktopShortcut)) { throw "Desktop-Verknüpfung Batto OBS Tool.lnk wurde nicht installiert." }
 
           $installedSelfTest = Start-Process -FilePath $installedExe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
           if ($installedSelfTest.ExitCode -ne 0) { throw "Self-Test der installierten Anwendung fehlgeschlagen: $($installedSelfTest.ExitCode)" }
@@ -228,11 +250,14 @@ jobs:
           - OBS-WebSocket, Encoder-Empfehlung und bestätigungspflichtige Tests
           - transparentes Hardware-/Encoder-Monitoring mit Frametime und 1-%-Low
           - frei gestaltbares Stream-Overlay mit Team-Alpha-Logo
-          - Twitch-Hologramm
-          - Multi-Chat für Twitch, YouTube und lokale TikTok-/TikFinity-/Tiktory-Webhooks
+          - persistentes Twitch-/Multi-Chat-Hologramm mit Live-Vorschau
+          - Multi-Chat für Twitch, YouTube und die lokale TikFinity-Ereignis-API
+          - Windows-Sprachausgabe mit installierten Stimmen und Bot-Befehlen
+          - Pulsoid- und Bluetooth-LE-Herzfrequenz mit lokaler OBS-Browserquelle
           - OBS-Gastquellen
           - variables Touch-Deck mit Profilen, Ordnern und Mehrfachaktionen
-          - Plugin-Erkennung und native Kompatibilitätsaktionen
+          - Elgato-Pluginimport und originale Property Inspectors direkt im Touch-Deck
+          - gebündeltes SOTF-DeathCounter-Safe-Mode-Modul v0.3.3
           - lokale Handy-Kopplung über QR-Code und PIN
           - sichere Altdatenmigration ohne Überschreiben neuer Profile
 
