@@ -16,7 +16,7 @@ internal static class Program
 
 internal sealed class InstallerForm : Form
 {
-    private const string SourceArchiveName = "CrazyBatto-SOTF-Universal-IntegrationModule-v0.3.0-source.zip";
+    private const string SourceArchiveName = "CrazyBatto-SOTF-DeathCounter-Module-v0.3.0-source.zip";
     private readonly TextBox _gamePath = new() { Dock = DockStyle.Fill };
     private readonly Button _browse = new() { Text = "Ordner wählen", AutoSize = true };
     private readonly Button _install = new() { Text = "Mod bauen und installieren", AutoSize = true, Height = 40 };

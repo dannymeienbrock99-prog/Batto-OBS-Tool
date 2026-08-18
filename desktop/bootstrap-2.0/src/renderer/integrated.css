@@ -55,19 +55,7 @@
 .plugin-actions strong { font-size: 10px; }
 .plugin-actions code { font-size: 8px; }
 .plugin-status { display: block; margin-top: 9px; color: #6fdba1; font-size: 9px; }
-.deck-pro-toolbar { display: grid; margin-bottom: 10px; grid-template-columns: minmax(170px, 1fr) auto minmax(170px, 1fr) auto auto; align-items: end; gap: 8px; }
-.deck-pro-layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 10px; }
-.deck-pro-stage-panel { min-width: 0; }
 .deck-grid-controls { display: grid; grid-template-columns: repeat(4, minmax(80px, 1fr)) minmax(180px, 1.4fr) auto; align-items: end; gap: 8px; }
-.deck-pro-grid { display: grid; margin-top: 12px; grid-template-columns: repeat(var(--columns, 5), minmax(64px, var(--button-size, 116px))); justify-content: center; gap: var(--button-gap, 12px); overflow: auto; padding: 8px; }
-.deck-pro-key { display: grid; min-width: 64px; aspect-ratio: 1; padding: 8px; align-content: center; justify-items: center; overflow: hidden; border-color: #33495a; color: var(--key-text, #fff); background: linear-gradient(145deg, color-mix(in srgb, var(--key-color, #152130) 85%, #2e5770), #08111a); }
-.deck-pro-key.used { border-color: color-mix(in srgb, var(--key-color, #52d7ff) 55%, #4a6a7d); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 3%), 0 7px 20px rgb(0 0 0 / 26%); }
-.deck-pro-key.selected { outline: 2px solid #56dcff; outline-offset: 2px; }
-.deck-pro-key img { width: 48%; max-height: 48%; object-fit: contain; }
-.deck-pro-key strong { max-width: 100%; margin-top: 5px; overflow: hidden; text-align: center; text-overflow: ellipsis; overflow-wrap: anywhere; font-size: 10px; }
-.deck-pro-key small { max-width: 100%; margin-top: 3px; overflow: hidden; color: rgb(255 255 255 / 52%); text-overflow: ellipsis; white-space: nowrap; font-size: 7px; }
-.deck-pro-inspector { display: grid; align-content: start; gap: 8px; overflow: auto; max-height: calc(100vh - 205px); }
-.deck-pro-inspector > label { margin: 0; }
 .two-column-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .deck-action-list { display: grid; gap: 6px; }
 .deck-action-row { display: grid; padding: 8px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 7px; border: 1px solid #2c4151; border-radius: 8px; background: #08121b; }
@@ -99,19 +87,18 @@
 .check-list { display: grid; padding-left: 18px; gap: 7px; color: #b9cad6; font-size: 11px; }
 @media (max-width: 1280px) {
   .module-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .deck-pro-layout { grid-template-columns: minmax(0, 1fr) 290px; }
   .deck-grid-controls { grid-template-columns: repeat(3, minmax(80px, 1fr)); }
   .plugin-category-body { grid-template-columns: 1fr; }
 }
 @media (max-width: 980px) {
-  .integrated-split, .mobile-connect-layout, .deck-pro-layout { grid-template-columns: 1fr; }
-  .chat-message-list, .deck-pro-inspector { max-height: none; }
-  .guest-toolbar, .deck-pro-toolbar { grid-template-columns: 1fr 1fr; }
+  .integrated-split, .mobile-connect-layout { grid-template-columns: 1fr; }
+  .chat-message-list { max-height: none; }
+  .guest-toolbar { grid-template-columns: 1fr 1fr; }
   .guest-list { grid-template-columns: 1fr; }
   .deck-grid-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 720px) {
   .module-status-grid, .diagnostic-grid, .form-grid { grid-template-columns: 1fr; }
-  .guest-toolbar, .deck-pro-toolbar { grid-template-columns: 1fr; }
+  .guest-toolbar { grid-template-columns: 1fr; }
   .toggle-grid { grid-template-columns: 1fr; }
 }

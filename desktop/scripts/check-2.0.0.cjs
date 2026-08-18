@@ -28,6 +28,7 @@ const required = [
   "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs",
   "src/services/common.cjs", "src/services/deck-store.cjs", "src/services/plugin-registry.cjs",
   "src/services/native-plugin-additions.cjs", "src/services/action-executor.cjs", "src/services/migration.cjs",
+  "src/services/stream-deck-plugin-host.cjs", "src/services/sotf-death-counter-client.cjs",
   "src/services/mobile-bridge.cjs", "src/services/multi-chat.cjs", "src/services/stream-overlay-server.cjs",
   "src/services/twitch-holo-server.cjs", "src/mobile/index.html", "src/mobile/styles.css", "src/mobile/app.js",
   "src/stream-overlay/editor.html", "src/stream-overlay/editor.css", "src/stream-overlay/editor.js",
@@ -35,6 +36,7 @@ const required = [
   "src/stream-overlay/team-logo.svg", "modules/encoder-monitoring-overlay/src/server.cjs",
   "modules/encoder-monitoring-overlay/src/telemetry.cjs", "modules/encoder-monitoring-overlay/web/overlay.css",
   "modules/twitch-holo-chat/web/overlay.html", "modules/twitch-holo-chat/web/overlay.js",
+  "src/renderer/touch-deck-v3.js", "src/renderer/touch-deck-v3.css",
   "build/installer.nsh", "build/license.txt", "resources/team-logo.svg", "package.json"
 ];
 required.forEach(read);
@@ -56,7 +58,7 @@ if (packageJson.build?.nsis?.oneClick !== false) fail("Installer muss den Assist
 if (packageJson.build?.nsis?.allowToChangeInstallationDirectory !== true) fail("Installationsordner muss auswählbar sein.");
 if (packageJson.build?.nsis?.runAfterFinish !== false) fail("Installer darf die App nicht automatisch starten.");
 if (packageJson.build?.nsis?.include !== "build/installer.nsh") fail("Installer-Erweiterung fehlt.");
-if (!packageJson.dependencies?.ws || !packageJson.dependencies?.qrcode) fail("WebSocket- oder QR-Abhängigkeit fehlt.");
+if (!packageJson.dependencies?.ws || !packageJson.dependencies?.qrcode || !packageJson.dependencies?.["adm-zip"]) fail("WebSocket-, ZIP- oder QR-Abhängigkeit fehlt.");
 if (!String(packageJson.scripts?.test || "").includes("integrated-2.0.0.test.cjs")) fail("2.0.0-Integrationstest ist nicht eingebunden.");
 
 const main = read("src/main.cjs");
@@ -78,12 +80,18 @@ const streamOverlayCss = read("src/stream-overlay/overlay.css");
 const monitoringCss = read("modules/encoder-monitoring-overlay/web/overlay.css");
 const hardware = read("src/services/hardware.cjs");
 const obsClient = read("src/services/obs-websocket.cjs");
+const streamDeckHost = read("src/services/stream-deck-plugin-host.cjs");
+const sotfClient = read("src/services/sotf-death-counter-client.cjs");
+const touchDeck = read("src/renderer/touch-deck-v3.js");
+const touchDeckCss = read("src/renderer/touch-deck-v3.css");
 
 requireText(main, "requestSingleInstanceLock", "Single-Instance-Sperre fehlt.");
 requireText(main, /new MobileBridge\(/, "Handy-Brücke wird nicht gestartet.");
 requireText(main, /new StreamOverlayServer\(/, "Stream-Overlay wird nicht gestartet.");
 requireText(main, /new MonitoringOverlayServer\(/, "Monitoring-Overlay wird nicht gestartet.");
 requireText(main, /new TwitchHoloServer\(/, "Twitch-Hologramm wird nicht gestartet.");
+requireText(main, /new StreamDeckPluginHost\(/, "Elgato Plugin-Host wird nicht geladen.");
+requireText(main, /new SotfDeathCounterClient\(/, "SOTF-Todeszähler wird nicht geladen.");
 requireText(main, 'sampler?.sample?.(hardware)', "Hardware wird nicht an die Telemetrie übergeben.");
 requireText(main, 'gpu: preferredGpu()', "Encoder-Empfehlung verwendet nicht die bevorzugte GPU.");
 requireText(main, 'handle("obs:forget-password"', "Gespeichertes OBS-Passwort kann nicht gelöscht werden.");
@@ -100,7 +108,7 @@ requireText(hardware, /score -= 1000/, "Integrierte GPU wird nicht abgewertet.")
 requireText(index, "Version 2.0.0", "Hauptfenster zeigt nicht Version 2.0.0.");
 requireText(index, "integrated.css", "Integrierte Styles werden nicht geladen.");
 requireText(index, "integrated.js", "Integrierte Oberfläche wird nicht geladen.");
-for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Touch-Deck Pro", "Handy verbinden", "Übernahme & Diagnose"]) {
+for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "SOTF Todeszähler", "Handy verbinden", "Übernahme & Diagnose"]) {
   requireText(integratedJs, label, `Navigationsbereich fehlt: ${label}`);
 }
 requireText(integratedCss, "overflow-x: hidden", "Horizontaler Überlauf ist nicht abgesichert.");
@@ -111,6 +119,7 @@ forbidText(visible, /Creator Hub/i, "Alte Produktbezeichnung ist in einer sichtb
 forbidText(visible, /\bKandidat\b/i, "Alte Encoderbezeichnung „Kandidat“ ist sichtbar.");
 forbidText(visible, /show-test-values|Testwerte anzeigen|createTestTelemetry/i, "Veröffentlichte Demo-/Testwerte-Funktion gefunden.");
 forbidText(index, /Encorder/i, "Falsche Schreibweise „Encorder“ im Hauptfenster.");
+forbidText(visible, /Touch-Deck Pro/i, "Der entfernte Produktbereich „Touch-Deck Pro“ ist noch sichtbar.");
 
 requireText(streamOverlayCss, /background:\s*transparent\s*!important/, "Stream-Overlay ist nicht vollständig transparent.");
 requireText(monitoringCss, /background:\s*transparent\s*!important/, "Monitoring-Overlay ist nicht vollständig transparent.");
@@ -139,6 +148,15 @@ for (const action of ["icue.launch", "bambulab.launch", "spotify.launch", "volum
   requireText(actionExecutor, action, `Native Aktionslaufzeit fehlt: ${action}`);
 }
 requireText(actionExecutor, "wird ohne passende Laufzeit nicht ausgeführt", "Unbekannte Plugin-Aktionen würden keinen klaren Fehler liefern.");
+requireText(pluginRegistry, ".streamdeckplugin", "Import originaler .streamDeckPlugin-Pakete fehlt.");
+requireText(pluginRegistry, "validateArchiveEntryName", "Sicherheitsprüfung für Plugin-Archive fehlt.");
+requireText(streamDeckHost, 'event: "keyDown"', "Elgato keyDown-Ereignis fehlt.");
+requireText(streamDeckHost, 'event: "keyUp"', "Elgato keyUp-Ereignis fehlt.");
+requireText(streamDeckHost, 'event: "willAppear"', "Elgato willAppear-Ereignis fehlt.");
+requireText(sotfClient, "api/v1/snapshot", "SOTF-Snapshot-Anbindung fehlt.");
+requireText(touchDeck, 'mode = "run"', "Touch-Deck-Ausführenmodus fehlt.");
+requireText(touchDeck, "finishTouchMove", "Berührbares Verschieben von Tasten fehlt.");
+requireText(touchDeckCss, "pointer: coarse", "Touch-Ziele für Touch-Monitore fehlen.");
 
 requireText(multiChat, "persistSettings()", "Multi-Chat-Einstellungen werden nicht sicher getrennt gespeichert.");
 requireText(multiChat, 'stored.twitch.oauth = ""', "Twitch-Token würde unverschlüsselt gespeichert.");

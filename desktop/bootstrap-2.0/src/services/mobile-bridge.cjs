@@ -23,7 +23,10 @@ const {
 
 function localAddresses() {
   const result = [];
-  for (const [interfaceName, values] of Object.entries(os.networkInterfaces())) {
+  let interfaces = {};
+  try { interfaces = os.networkInterfaces() || {}; }
+  catch { return result; }
+  for (const [interfaceName, values] of Object.entries(interfaces)) {
     for (const value of values || []) {
       if (value.internal || value.family !== "IPv4") continue;
       const address = value.address;

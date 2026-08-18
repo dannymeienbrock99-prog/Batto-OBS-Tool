@@ -1,5 +1,5 @@
-/* Touch-Deck Pro V2: plugin/action rail + deck canvas + key inspector */
-.touch-deck-pro-v2 {
+/* Touch-Deck V3: Plugin-Bibliothek, Touch-Monitor und Tasteninspektor */
+.touch-deck-v3 {
   min-width: 0;
   overflow: hidden;
 }
@@ -8,7 +8,7 @@
   display: grid;
   min-width: 0;
   height: calc(100vh - 118px);
-  min-height: 650px;
+  min-height: 0;
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
   color: #f2f5f8;
@@ -31,7 +31,7 @@
   display: grid;
   min-width: 0;
   padding: 11px 12px;
-  grid-template-columns: minmax(180px, .8fr) auto minmax(220px, 1fr) auto auto 42px;
+  grid-template-columns: minmax(160px, .8fr) auto minmax(180px, 1fr) auto auto auto 42px;
   align-items: end;
   gap: 8px;
   border: 1px solid #273342;
@@ -434,7 +434,7 @@
   .tdp-library { min-height: 650px; }
   .tdp-stage { min-height: 650px; }
   .tdp-inspector { grid-column: 1 / -1; min-height: 420px; border-top: 1px solid #353535; border-left: 0; }
-  .tdp-profilebar { grid-template-columns: minmax(160px, 1fr) auto minmax(180px, 1fr) auto auto 42px; }
+  .tdp-profilebar { grid-template-columns: minmax(150px, 1fr) auto minmax(170px, 1fr) auto auto auto 42px; }
 }
 
 @media (max-width: 820px) {
@@ -452,4 +452,75 @@
   .tdp-grid-panel,
   .tdp-save-row { grid-template-columns: 1fr; }
   .tdp-grid { padding: 14px; }
+}
+
+/* Ausführen-Modus: große berührbare Tasten ohne Editor-Chrom. */
+.tdp-shell[data-mode="run"] .tdp-library,
+.tdp-shell[data-mode="run"] .tdp-inspector,
+.tdp-shell[data-mode="run"] #tdp-grid-settings,
+.tdp-shell[data-mode="run"] #tdp-add-profile,
+.tdp-shell[data-mode="run"] #tdp-add-folder,
+.tdp-shell[data-mode="run"] #tdp-move-key,
+.tdp-shell[data-mode="run"] #tdp-import,
+.tdp-shell[data-mode="run"] #tdp-export { display: none; }
+.tdp-shell[data-mode="run"] .tdp-editor-layout { grid-template-columns: minmax(0, 1fr); border-color: #24435a; background: #060b13; }
+.tdp-shell[data-mode="run"] .tdp-profilebar { grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) auto; }
+.tdp-shell[data-mode="run"] .tdp-stage { min-height: 0; padding: 8px; background: radial-gradient(circle at 50% 0%, rgb(37 106 146 / 25%), transparent 48%), #060b13; }
+.tdp-shell[data-mode="run"] .tdp-grid-viewport { border-color: #17364a; background: linear-gradient(145deg, #050912, #0a1422); }
+.tdp-shell[data-mode="run"] .tdp-grid { max-width: 100%; max-height: 100%; }
+.tdp-shell[data-mode="run"] .tdp-key { border-radius: clamp(10px, 1.4vw, 18px); box-shadow: inset 0 1px rgb(255 255 255 / 9%), 0 12px 28px rgb(0 0 0 / 36%); touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.tdp-key.move-source { border-color: #bb7cff; outline: 3px solid rgb(187 124 255 / 42%); outline-offset: 2px; }
+.tdp-key.executing { transform: scale(.96); border-color: #76ddff; }
+.tdp-key.success { border-color: #65efae; box-shadow: 0 0 32px rgb(78 227 155 / 38%); }
+.tdp-key.failed { border-color: #ff7585; box-shadow: 0 0 32px rgb(255 75 95 / 35%); }
+
+/* Einheitliche moderne Glas-/Neonoberfläche statt getrenntem grauem Pluginbereich. */
+.tdp-heading,
+.tdp-profilebar,
+.tdp-editor-layout { backdrop-filter: blur(16px); }
+.tdp-profilebar { border-color: #294459; background: linear-gradient(135deg, rgb(16 29 45 / 96%), rgb(16 19 35 / 96%)); box-shadow: 0 14px 36px rgb(0 0 0 / 18%); }
+.tdp-editor-layout { border-color: #294459; box-shadow: 0 20px 60px rgb(0 0 0 / 24%); }
+.tdp-library,
+.tdp-inspector { background: #0d1522; }
+.tdp-library { border-right-color: #263b50; }
+.tdp-search-row,
+.tdp-library-tabs,
+.tdp-action-group,
+.tdp-plugin-row { border-color: #26384a; }
+.tdp-search-row input,
+.tdp-library-tabs button.active,
+.tdp-action-group-toggle,
+.tdp-action-group-body,
+.tdp-action-item,
+.tdp-plugin-row { background: #111c2b; }
+.tdp-action-group-toggle:hover,
+.tdp-action-item:hover { background: #17273a; }
+.tdp-action-icon { background: #1b2b3e; }
+
+body:has(#view-deck.active .tdp-shell[data-mode="run"]) .app-shell { grid-template-columns: minmax(0, 1fr); }
+body:has(#view-deck.active .tdp-shell[data-mode="run"]) .sidebar,
+body:has(#view-deck.active .tdp-shell[data-mode="run"]) .topbar { display: none; }
+body:has(#view-deck.active .tdp-shell[data-mode="run"]) .workspace { grid-template-rows: minmax(0, 1fr); }
+body:has(#view-deck.active .tdp-shell[data-mode="run"]) .content { height: 100vh; padding: 10px; overflow: hidden; }
+body:has(#view-deck.active .tdp-shell[data-mode="run"]) .tdp-shell { height: calc(100vh - 20px); }
+
+@media (pointer: coarse) {
+  .tdp-shell button,
+  .tdp-shell select,
+  .tdp-shell input { min-height: 48px; }
+  .tdp-action-item { min-height: 64px; touch-action: manipulation; }
+  .tdp-key { touch-action: manipulation; }
+}
+
+@media (max-height: 700px) {
+  .tdp-shell[data-mode="run"] { grid-template-rows: auto auto minmax(0, 1fr); gap: 6px; }
+  .tdp-shell[data-mode="run"] .tdp-heading p,
+  .tdp-shell[data-mode="run"] .tdp-heading .eyebrow { display: none; }
+  .tdp-shell[data-mode="run"] .tdp-heading h2 { font-size: 18px; }
+  .tdp-shell[data-mode="run"] .tdp-heading .button-row { margin-top: 0; }
+  .tdp-shell[data-mode="run"] .tdp-profilebar { padding: 6px; }
+  .tdp-shell[data-mode="run"] .tdp-profilebar label { font-size: 8px; }
+  .tdp-shell[data-mode="run"] .tdp-grid { padding: 10px; }
+  .tdp-shell[data-mode="run"] .tdp-stage-meta,
+  .tdp-shell[data-mode="run"] .tdp-stage-help { display: none; }
 }

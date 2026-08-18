@@ -164,6 +164,7 @@ test("production UI contains integrated pages and no visible old product name", 
   ].map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
   assert.doesNotMatch(visible, /Creator Hub/i);
   assert.doesNotMatch(visible, /\bKandidat\b/i);
-  for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Touch-Deck Pro", "Handy verbinden"]) assert.match(visible, new RegExp(label));
+  for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Touch-Deck", "SOTF Todeszähler", "Handy verbinden"]) assert.match(visible, new RegExp(label));
+  assert.doesNotMatch(visible, /Touch-Deck Pro/i);
   assert.match(fs.readFileSync(path.join(root, "modules", "encoder-monitoring-overlay", "web", "overlay.css"), "utf8"), /background:\s*transparent\s*!important/);
 });

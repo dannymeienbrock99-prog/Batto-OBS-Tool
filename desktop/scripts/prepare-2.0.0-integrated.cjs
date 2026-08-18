@@ -44,7 +44,7 @@ ensureDir(source);
 for (const file of [
   "common.cjs", "obs-websocket.cjs", "plugin-registry.cjs", "deck-store.cjs", "migration.cjs",
   "action-executor.cjs", "mobile-bridge.cjs", "stream-overlay-server.cjs", "multi-chat.cjs",
-  "twitch-holo-server.cjs"
+  "twitch-holo-server.cjs", "stream-deck-plugin-host.cjs", "sotf-death-counter-client.cjs"
 ]) copyFile(path.join(bootstrap, "services", file), path.join(source, "services", file));
 copyTree(path.join(bootstrap, "stream-overlay"), path.join(source, "stream-overlay"));
 copyTree(path.join(bootstrap, "mobile"), path.join(source, "mobile"));
@@ -152,7 +152,8 @@ const required = [
   "src/renderer/integrated.js", "src/renderer/integrated.css", "src/renderer/assets/team-alpha-logo.svg",
   "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs",
   "src/services/mobile-bridge.cjs", "src/services/stream-overlay-server.cjs", "src/services/plugin-registry.cjs",
-  "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/mobile/index.html",
+  "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/services/stream-deck-plugin-host.cjs",
+  "src/services/sotf-death-counter-client.cjs", "src/mobile/index.html",
   "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "resources/team-logo.svg",
   "modules/encoder-monitoring-overlay/src/server.cjs", "modules/twitch-holo-chat/web/overlay.html"
 ];

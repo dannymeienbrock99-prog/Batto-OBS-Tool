@@ -24,10 +24,12 @@ const { TwitchHoloServer } = require("./services/twitch-holo-server.cjs");
 const { MobileBridge } = require("./services/mobile-bridge.cjs");
 const { StreamOverlayServer } = require("./services/stream-overlay-server.cjs");
 const { MultiChat } = require("./services/multi-chat.cjs");
-const { PluginRegistry } = require("./services/plugin-registry.cjs");
+const { PluginRegistry, defaultPluginRoots } = require("./services/plugin-registry.cjs");
 const { DeckStore } = require("./services/deck-store.cjs");
 const { LegacyMigration } = require("./services/migration.cjs");
 const { ActionExecutor } = require("./services/action-executor.cjs");
+const { StreamDeckPluginHost } = require("./services/stream-deck-plugin-host.cjs");
+const { SotfDeathCounterClient } = require("./services/sotf-death-counter-client.cjs");
 const { deepClone, ensureDirectory, readJson, safeText, writeJsonAtomic } = require("./services/common.cjs");
 const { MonitoringOverlayServer } = require("../modules/encoder-monitoring-overlay/src/server.cjs");
 
@@ -55,12 +57,14 @@ let pluginRegistry = null;
 let deckStore = null;
 let migration = null;
 let actionExecutor = null;
+let pluginHost = null;
+let sotfDeathCounter = null;
 let sampler = null;
 const moduleErrors = {};
 const obs = new ObsWebSocketClient();
 
 function userDataFile(name) { return path.join(app.getPath("userData"), name); }
-function programDataRoot() { return ensureDirectory(path.join(process.env.ProgramData || "C:\\ProgramData", "Batto OBS Tool")); }
+function pluginImportRoot() { return ensureDirectory(userDataFile("Plugins")); }
 function rendererFile(name) { return path.join(__dirname, "renderer", name); }
 function appResource(...parts) {
   const development = path.join(__dirname, "..", "resources", ...parts);
@@ -169,7 +173,9 @@ function currentState() {
     modules: {
       monitoring: monitoringStatus(),
       streamOverlay: streamOverlayServer?.status() || { active: false, error: moduleErrors.streamOverlay?.message || "" },
-      twitchHolo: holoServer?.status() || { active: false, error: moduleErrors.holo?.message || "" }
+      twitchHolo: holoServer?.status() || { active: false, error: moduleErrors.holo?.message || "" },
+      streamDeckPlugins: pluginHost?.status() || { active: false, sessions: [], feedback: {} },
+      sotfDeathCounter: sotfDeathCounter?.status() || { active: false, error: "SOTF-Modul wird geladen." }
     },
     errors: deepClone(moduleErrors),
     sampledAt: Date.now()
@@ -191,8 +197,8 @@ function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1540,
     height: 940,
-    minWidth: 1060,
-    minHeight: 700,
+    minWidth: 640,
+    minHeight: 480,
     backgroundColor: "#060d15",
     show: false,
     title: "Batto OBS Tool",
@@ -372,12 +378,25 @@ async function startModules() {
   });
   multiChat.on("changed", scheduleState);
 
-  pluginRegistry = new PluginRegistry({ stateFile: userDataFile("plugin-state.json") });
+  pluginRegistry = new PluginRegistry({ stateFile: userDataFile("plugin-state.json"), pluginRoots: [pluginImportRoot(), ...defaultPluginRoots()] });
   pluginRegistry.scan();
   pluginRegistry.on("changed", scheduleState);
 
+  pluginHost = new StreamDeckPluginHost({
+    registry: pluginRegistry,
+    stateFile: userDataFile("stream-deck-plugin-host.json"),
+    shell
+  });
+  pluginHost.on("changed", scheduleState);
+  pluginHost.on("host-error", (error) => { moduleErrors.streamDeckPluginHost = errorPayload(error); scheduleState(); });
+  pluginHost.on("plugin-error", ({ pluginId, error }) => { moduleErrors[`plugin:${pluginId}`] = { message: error }; scheduleState(); });
+
+  sotfDeathCounter = new SotfDeathCounterClient();
+  sotfDeathCounter.on("changed", scheduleState);
+  await sotfDeathCounter.start();
+
   deckStore = new DeckStore(userDataFile("deck-profiles.json"));
-  actionExecutor = new ActionExecutor({ obs, shell, overlayServer: streamOverlayServer, multiChat, dataFile: userDataFile("action-data.json") });
+  actionExecutor = new ActionExecutor({ obs, shell, clipboard, overlayServer: streamOverlayServer, multiChat, pluginHost, sotfClient: sotfDeathCounter, dataFile: userDataFile("action-data.json") });
 
   migration = new LegacyMigration({ userData: app.getPath("userData"), deckStore, pluginRegistry });
   try { migration.run(); } catch (error) { moduleErrors.migration = errorPayload(error); }
@@ -404,7 +423,7 @@ async function executeMobilePayload(payload = {}) {
     const folder = profile?.folders.find((item) => item.id === payload.folderId) || profile?.folders[0];
     const button = folder?.buttons?.[Number(payload.buttonIndex)];
     if (!button?.actions?.length) throw new Error("Diese Taste ist nicht belegt.");
-    return { ok: true, results: await actionExecutor.executeMany(button.actions, { profileId: profile.id, folderId: folder.id }) };
+    return { ok: true, results: await actionExecutor.executeMany(button.actions, { profileId: profile.id, folderId: folder.id, buttonIndex: Number(payload.buttonIndex), columns: folder.columns, source: "mobile" }) };
   }
   if (payload.kind === "action" && payload.action) return actionExecutor.execute(payload.action, { source: "mobile" });
   throw new Error("Unbekannte Handy-Aktion.");
@@ -470,7 +489,7 @@ function registerIpc() {
     const folder = profile?.folders.find((item) => item.id === payload.folderId) || profile?.folders[0];
     const button = folder?.buttons?.[Number(payload.buttonIndex)];
     if (!button?.actions?.length) throw new Error("Diese Taste ist nicht belegt.");
-    return actionExecutor.executeMany(button.actions, { profileId: profile.id, folderId: folder.id });
+    return actionExecutor.executeMany(button.actions, { profileId: profile.id, folderId: folder.id, buttonIndex: Number(payload.buttonIndex), columns: folder.columns, source: "touch-deck" });
   });
   handle("deck:export", async () => {
     const result = await dialog.showSaveDialog(mainWindow, { title: "Touch-Deck exportieren", defaultPath: "Batto-OBS-Tool-Deck.json", filters: [{ name: "JSON", extensions: ["json"] }] });
@@ -488,10 +507,19 @@ function registerIpc() {
   handle("plugins:enable", (payload) => pluginRegistry.setEnabled(payload.pluginId, payload.enabled));
   handle("plugins:settings", (payload) => pluginRegistry.saveSettings(payload.pluginId, payload.settings));
   handle("plugins:import", async () => {
-    const result = await dialog.showOpenDialog(mainWindow, { title: "Plugin-Ordner auswählen", properties: ["openDirectory"] });
+    const result = await dialog.showOpenDialog(mainWindow, { title: "Elgato .streamDeckPlugin-Paket auswählen", properties: ["openFile"], filters: [{ name: "Elgato Stream Deck Plugin", extensions: ["streamDeckPlugin"] }] });
     if (result.canceled || !result.filePaths[0]) return null;
-    return pluginRegistry.importDirectory(result.filePaths[0], path.join(programDataRoot(), "Plugins"));
+    return pluginRegistry.importPath(result.filePaths[0], pluginImportRoot());
   });
+  handle("plugins:import-folder", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, { title: "*.sdPlugin-Ordner auswählen", properties: ["openDirectory"] });
+    if (result.canceled || !result.filePaths[0]) return null;
+    return pluginRegistry.importPath(result.filePaths[0], pluginImportRoot());
+  });
+
+  handle("sotf:refresh", () => sotfDeathCounter.refresh());
+  handle("sotf:open-overlay", () => openLocalWindow(sotfDeathCounter.urls().overlayUrl, "Batto OBS Tool – SOTF Todeszähler", 1280, 760));
+  handle("sotf:copy-overlay", () => { const url = sotfDeathCounter.urls().overlayUrl; clipboard.writeText(url); return url; });
 
   handle("mobile:status", () => mobileBridge?.status() || { active: false });
   handle("mobile:approve", (payload) => mobileBridge.approve(payload.requestId));
@@ -559,6 +587,7 @@ function registerIpc() {
   handle("app:open-path", async (payload) => { const error = await shell.openPath(payload.path); if (error) throw new Error(error); return true; });
   handle("app:open-url", async (payload) => { if (!/^https?:\/\//i.test(payload.url)) throw new Error("Ungültige Webadresse."); await shell.openExternal(payload.url); return true; });
   handle("app:copy", (payload) => { clipboard.writeText(String(payload.text || "")); return true; });
+  handle("window:toggle-fullscreen", () => { mainWindow?.setFullScreen(!mainWindow.isFullScreen()); return { fullscreen: Boolean(mainWindow?.isFullScreen()) }; });
   handle("app:close", () => { mainWindow?.close(); return true; });
 }
 
@@ -641,6 +670,8 @@ app.on("before-quit", () => {
   void mobileBridge?.stop();
   void streamOverlayServer?.stop();
   void holoServer?.stop();
+  sotfDeathCounter?.stop();
+  void pluginHost?.stop();
   try { monitoringServer?.stop?.(); } catch {}
   for (const window of childWindows) try { window.destroy(); } catch {}
 });

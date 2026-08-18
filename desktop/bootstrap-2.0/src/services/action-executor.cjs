@@ -102,12 +102,15 @@ function validateHttpUrl(value, allowedHosts = []) {
 }
 
 class ActionExecutor extends EventEmitter {
-  constructor({ obs, shell, overlayServer, multiChat, dataFile } = {}) {
+  constructor({ obs, shell, clipboard, overlayServer, multiChat, pluginHost, sotfClient, dataFile } = {}) {
     super();
     this.obs = obs;
     this.shell = shell;
     this.overlayServer = overlayServer;
     this.multiChat = multiChat;
+    this.clipboard = clipboard;
+    this.pluginHost = pluginHost;
+    this.sotfClient = sotfClient;
     this.dataFile = dataFile;
     this.data = readJson(dataFile, { giveaway: [], lastWinner: null }) || { giveaway: [], lastWinner: null };
   }
@@ -343,7 +346,25 @@ class ActionExecutor extends EventEmitter {
         this.overlayServer?.publishEvent({ type: "giveaway", name: winner, text: "Gewinner", timestamp: Date.now() });
         return this.data.lastWinner;
       }
+      case "sotf.counter.refresh":
+        if (!this.sotfClient) throw new Error("Die SOTF-Todeszähler-Anbindung ist nicht geladen.");
+        return this.sotfClient.refresh({ throwOnError: true });
+      case "sotf.overlay.open": {
+        if (!this.sotfClient) throw new Error("Die SOTF-Todeszähler-Anbindung ist nicht geladen.");
+        const url = this.sotfClient.urls().overlayUrl;
+        await this.shell.openExternal(url);
+        return { url };
+      }
+      case "sotf.overlay.copy-url": {
+        if (!this.sotfClient) throw new Error("Die SOTF-Todeszähler-Anbindung ist nicht geladen.");
+        const url = this.sotfClient.urls().overlayUrl;
+        this.clipboard?.writeText?.(url);
+        return { url, copied: Boolean(this.clipboard?.writeText) };
+      }
       default:
+        if (this.pluginHost?.registry?.findPluginForAction?.(type)) {
+          return this.pluginHost.execute({ type, settings }, context);
+        }
         throw new Error(`Aktion „${type}“ wird ohne passende Laufzeit nicht ausgeführt.`);
     }
   }

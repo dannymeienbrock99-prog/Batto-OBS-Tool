@@ -34,6 +34,8 @@
   let libraryTab = "actions";
   let searchText = "";
   let gridSettingsOpen = true;
+  let mode = "run";
+  let moveSourceIndex = -1;
   const groupState = new Map();
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -78,6 +80,7 @@
     for (const plugin of state?.plugins?.plugins || []) {
       if (!plugin.enabled) continue;
       for (const action of plugin.actions || []) {
+        if (action.visibleInActionsList === false || action.raw?.supportedInTouchDeck === false) continue;
         result.push({
           pluginId: plugin.id,
           pluginName: plugin.name,
@@ -122,14 +125,16 @@
 
   function markup() {
     return `
-      <div class="tdp-shell">
+      <div class="tdp-shell" data-mode="run">
         <header class="tdp-heading">
           <div>
             <span class="eyebrow">PROFILE · ORDNER · PLUGIN-AKTIONEN</span>
-            <h2>Touch-Deck Pro</h2>
-            <p>Links Aktionen suchen, in der Mitte das Deck gestalten und rechts die ausgewählte Taste konfigurieren.</p>
+            <h2>Touch-Deck</h2>
+            <p>Im Ausführen-Modus wird dieser Bildschirm zum berührbaren Stream Deck. Im Bearbeiten-Modus stehen Plugins, Raster und Mehrfachaktionen bereit.</p>
           </div>
           <div class="button-row">
+            <button id="tdp-mode" class="primary" type="button">✦ Ausführen</button>
+            <button id="tdp-fullscreen" type="button">⛶ Vollbild</button>
             <button id="tdp-import" type="button">Importieren</button>
             <button id="tdp-export" type="button">Exportieren</button>
           </div>
@@ -141,6 +146,7 @@
           <label>Ordner<select id="tdp-folder"></select></label>
           <button id="tdp-back-folder" type="button">← Zurück</button>
           <button id="tdp-add-folder" type="button">+ Ordner</button>
+          <button id="tdp-move-key" type="button" disabled>↔ Taste verschieben</button>
           <button id="tdp-grid-settings" class="tdp-icon-button" type="button" aria-pressed="true" title="Rastereinstellungen ein- oder ausblenden">⚙</button>
         </section>
 
@@ -174,7 +180,7 @@
             <div class="tdp-grid-viewport">
               <div id="tdp-grid" class="tdp-grid" aria-label="Touch-Deck-Tasten"></div>
             </div>
-            <p class="tdp-stage-help">Aktion links anklicken oder auf eine Taste ziehen. Tasten lassen sich untereinander verschieben.</p>
+            <p id="tdp-stage-help" class="tdp-stage-help">Taste antippen, um die hinterlegte Aktion auszuführen. Ordner öffnen sich mit einem Tipp.</p>
           </main>
 
           <aside class="tdp-inspector">
@@ -206,7 +212,7 @@
                 <button id="tdp-clear-key" type="button">Leeren</button>
               </div>
             </div>
-            <div id="tdp-no-selection" class="tdp-no-selection">Wähle eine Taste aus oder ziehe links eine Aktion auf das Deck.</div>
+            <div id="tdp-no-selection" class="tdp-no-selection">Wähle eine Taste aus oder tippe links auf eine Aktion.</div>
           </aside>
         </div>
       </div>`;
@@ -250,6 +256,9 @@
     });
     $("#tdp-import").addEventListener("click", async () => { await call("deck:import", { mode: "merge" }); await refresh(); });
     $("#tdp-export").addEventListener("click", () => call("deck:export"));
+    $("#tdp-mode").addEventListener("click", () => setMode(mode === "run" ? "edit" : "run"));
+    $("#tdp-fullscreen").addEventListener("click", () => call("window:toggle-fullscreen"));
+    $("#tdp-move-key").addEventListener("click", beginTouchMove);
     $("#tdp-add-action").addEventListener("click", addActionFromInspector);
     $("#tdp-save-key").addEventListener("click", saveKey);
     $("#tdp-discard-key").addEventListener("click", discardKey);
@@ -272,6 +281,18 @@
     $("#tdp-tab-actions").setAttribute("aria-selected", String(next === "actions"));
     $("#tdp-tab-plugins").setAttribute("aria-selected", String(next === "plugins"));
     renderLibrary();
+  }
+
+  function setMode(next) {
+    if (next === "run" && !discardDraftIfNeeded()) return;
+    mode = next === "edit" ? "edit" : "run";
+    moveSourceIndex = -1;
+    if (mode === "run") {
+      selectedIndex = -1;
+      draft = null;
+      draftDirty = false;
+    }
+    render();
   }
 
   function renderLibrary() {
@@ -359,6 +380,19 @@
 
   function render() {
     if (!view || !state) return;
+    const shell = $(".tdp-shell", view);
+    if (shell) shell.dataset.mode = mode;
+    const modeButton = $("#tdp-mode");
+    if (modeButton) {
+      modeButton.textContent = mode === "run" ? "✦ Ausführen" : "✎ Bearbeiten";
+      modeButton.setAttribute("aria-pressed", String(mode === "run"));
+    }
+    const help = $("#tdp-stage-help");
+    if (help) help.textContent = moveSourceIndex >= 0
+      ? `Taste ${moveSourceIndex + 1} gewählt – jetzt das Ziel antippen.`
+      : mode === "run"
+        ? "Taste antippen, um die hinterlegte Aktion auszuführen. Ordner öffnen sich mit einem Tipp."
+        : "Aktion links antippen oder ziehen. Für Touch-Monitore: Taste auswählen, „Taste verschieben“ und danach das Ziel antippen.";
     const deck = state.deck || { profiles: [] };
     const profileSelect = $("#tdp-profile");
     profileSelect.innerHTML = (deck.profiles || []).map((entry) => `<option value="${html(entry.id)}" ${entry.id === deck.activeProfileId ? "selected" : ""}>${html(entry.name)}</option>`).join("");
@@ -380,13 +414,15 @@
     renderInspector(currentProfile, currentFolder);
     renderLibrary();
     renderGridSettingsVisibility();
+    $("#tdp-move-key").disabled = mode !== "edit" || selectedIndex < 0;
+    $("#tdp-move-key").classList.toggle("active", moveSourceIndex >= 0);
   }
 
   function renderGridSettingsVisibility() {
     const panel = $("#tdp-grid-panel");
     const button = $("#tdp-grid-settings");
     if (!panel || !button) return;
-    panel.hidden = !gridSettingsOpen;
+    panel.hidden = mode === "run" || !gridSettingsOpen;
     button.setAttribute("aria-pressed", String(gridSettingsOpen));
     button.classList.toggle("active", gridSettingsOpen);
   }
@@ -417,9 +453,9 @@
     const used = isUsed(button);
     const element = document.createElement("button");
     element.type = "button";
-    element.className = `tdp-key${used ? " used" : " empty"}${index === selectedIndex ? " selected" : ""}${index === selectedIndex && draftDirty ? " preview" : ""}`;
+    element.className = `tdp-key${used ? " used" : " empty"}${index === selectedIndex ? " selected" : ""}${index === moveSourceIndex ? " move-source" : ""}${index === selectedIndex && draftDirty ? " preview" : ""}`;
     element.dataset.index = String(index);
-    element.draggable = true;
+    element.draggable = mode === "edit";
     element.style.setProperty("--tdp-key-color", button.color || "#152130");
     element.style.setProperty("--tdp-key-text", button.textColor || "#ffffff");
     element.setAttribute("aria-label", used ? (button.title || `Belegte Taste ${index + 1}`) : `Unbelegte Taste ${index + 1}`);
@@ -434,9 +470,13 @@
       element.innerHTML = `${image}<strong>${html(button.title || (button.folderId ? "Ordner" : ""))}</strong>${button.subtitle ? `<span>${html(button.subtitle)}</span>` : ""}<small>${button.actions?.length > 1 ? `${button.actions.length} Aktionen` : button.actions?.[0]?.title || ""}</small>`;
     }
 
-    element.addEventListener("click", () => selectKey(index, sourceButton));
+    element.addEventListener("click", async () => {
+      if (mode === "run") return executeKey(element, currentProfile, currentFolder, sourceButton, index);
+      if (moveSourceIndex >= 0) return finishTouchMove(currentProfile, currentFolder, index);
+      selectKey(index, sourceButton);
+    });
     element.addEventListener("dblclick", async () => {
-      if (button.folderId) {
+      if (mode === "edit" && button.folderId) {
         await call("deck:activate-folder", { profileId: currentProfile.id, folderId: button.folderId });
         selectedIndex = -1;
         draft = null;
@@ -445,6 +485,7 @@
       }
     });
     element.addEventListener("dragstart", (event) => {
+      if (mode !== "edit") return event.preventDefault();
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData(keyTransferType, String(index));
     });
@@ -476,6 +517,54 @@
       }
     });
     return element;
+  }
+
+  async function executeKey(element, currentProfile, currentFolder, button, index) {
+    if (button.folderId) {
+      await call("deck:activate-folder", { profileId: currentProfile.id, folderId: button.folderId });
+      await refresh();
+      return;
+    }
+    if (!button.actions?.length || button.enabled === false || element.disabled) {
+      toast("Diese Taste ist nicht belegt.", true);
+      return;
+    }
+    element.disabled = true;
+    element.classList.add("executing");
+    try {
+      const results = await call("deck:execute-button", { profileId: currentProfile.id, folderId: currentFolder.id, buttonIndex: index });
+      element.classList.add("success");
+      const pluginFeedback = results?.map((result) => result?.value?.feedback?.title).find(Boolean);
+      toast(pluginFeedback || `„${button.title || `Taste ${index + 1}`}“ ausgeführt.`);
+    } catch (error) {
+      element.classList.add("failed");
+    } finally {
+      window.setTimeout(() => {
+        element.disabled = false;
+        element.classList.remove("executing", "success", "failed");
+      }, 650);
+    }
+  }
+
+  function beginTouchMove() {
+    if (mode !== "edit" || selectedIndex < 0) return;
+    if (draftDirty && !window.confirm("Die Vorschau zuerst verwerfen und die gespeicherte Taste verschieben?")) return;
+    draftDirty = false;
+    moveSourceIndex = selectedIndex;
+    render();
+    toast(`Taste ${selectedIndex + 1} gewählt. Jetzt das Ziel antippen.`);
+  }
+
+  async function finishTouchMove(currentProfile, currentFolder, targetIndex) {
+    const fromIndex = moveSourceIndex;
+    moveSourceIndex = -1;
+    if (fromIndex === targetIndex) return render();
+    await call("deck:move-button", { profileId: currentProfile.id, folderId: currentFolder.id, fromIndex, toIndex: targetIndex });
+    selectedIndex = targetIndex;
+    draft = null;
+    draftDirty = false;
+    await refresh();
+    toast(`Taste ${fromIndex + 1} nach ${targetIndex + 1} verschoben.`);
   }
 
   function selectKey(index, button, force = false) {
@@ -743,7 +832,7 @@
   function mount(target) {
     if (view) return;
     view = target;
-    view.classList.add("touch-deck-pro-v2");
+    view.classList.add("touch-deck-v3");
     view.innerHTML = markup();
     bind();
     api.onStateChanged((next) => {
@@ -757,15 +846,15 @@
         render();
       }
     });
-    $("[data-view='deck-pro']")?.addEventListener("click", () => window.setTimeout(() => refresh(), 0));
-    refresh({ scanPlugins: true }).catch((error) => console.error("Touch-Deck Pro V2:", error));
+    $("[data-view='deck']")?.addEventListener("click", () => window.setTimeout(() => refresh(), 0));
+    refresh({ scanPlugins: true }).catch((error) => console.error("Touch-Deck V3:", error));
   }
 
   function waitForView() {
-    const existing = document.getElementById("view-deck-pro");
+    const existing = document.getElementById("view-deck");
     if (existing) return mount(existing);
     const observer = new MutationObserver(() => {
-      const target = document.getElementById("view-deck-pro");
+      const target = document.getElementById("view-deck");
       if (!target) return;
       observer.disconnect();
       mount(target);

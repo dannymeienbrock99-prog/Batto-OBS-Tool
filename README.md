@@ -10,6 +10,18 @@ Offizielles Windows-Projekt von **Crazy_Batto / Team Alpha**.
 - [Windows-Installer herunterladen](https://github.com/dannymeienbrock99-prog/Batto-OBS-Tool/releases/download/v1.9.1/Batto-OBS-Tool-Setup-1.9.1.exe)
 - [Release und Prüfsummen öffnen](https://github.com/dannymeienbrock99-prog/Batto-OBS-Tool/releases/tag/v1.9.1)
 
+## Entwicklungsstand 2.0.0
+
+Die 2.0-Quellen führen den bisherigen Editor und die erweiterten Funktionen in **einem Touch-Deck** zusammen:
+
+- Ausführen-/Bearbeiten-Modus, Vollbild und große Touch-Ziele für einen zweiten Touch-Monitor,
+- Profile, Ordner, variable Raster, Mehrfachaktionen, Import/Export und berührbares Verschieben,
+- automatische Suche in den originalen Elgato-Pluginordnern,
+- sicherer Import von `.streamDeckPlugin`-Paketen und `.sdPlugin`-Ordnern,
+- lokale Elgato-WebSocket-Laufzeit für ungeschützte Node-/Windows-Originalplugins,
+- klare Kennzeichnung fehlender oder geschützter Marketplace-Laufzeiten ohne DRM-Umgehung,
+- direkte lokale Anbindung an `CrazyBatto-SOTF-DeathCounter-Module-v0.3.0` samt OBS-Overlay.
+
 ## Aufbau
 
 Das Programm wird als **eine Electron-Anwendung und ein NSIS-Installer** ausgeliefert. Monitoring und Twitch-Hologramm sind lokale Module derselben Hauptanwendung; es entstehen keine zusätzlichen Programm-EXEs.
@@ -24,7 +36,7 @@ Enthalten:
 - bestätigungspflichtige CPU- und OBS-Aufnahmetests,
 - transparentes Hardware-/Encoder-Monitoring,
 - Twitch-Hologrammfarben für Namen und Nachrichten,
-- variables Touch-Deck.
+- variables Touch-Deck für Maus und Touch-Monitore.
 
 ## Branches
 

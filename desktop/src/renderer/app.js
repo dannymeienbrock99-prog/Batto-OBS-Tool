@@ -425,7 +425,7 @@
     if (frame.dataset.baseUrl === status.editorUrl) return;
     frame.dataset.baseUrl = status.editorUrl;
     const separator = status.editorUrl.includes("?") ? "&" : "?";
-    frame.src = status.editorUrl + separator + "embedded=1&version=" + encodeURIComponent(state?.product?.version || "1.9.1");
+    frame.src = status.editorUrl + separator + "embedded=1&version=" + encodeURIComponent(state?.product?.version || "2.0.0");
   }
 
   async function loadMonitoringFrame() {
@@ -486,6 +486,7 @@
   }
 
   function renderDeck() {
+    if (byId("view-deck")?.classList.contains("touch-deck-v3")) return;
     if (!state?.settings) return;
     const deck = deckState();
     const profile = activeDeckProfile();

@@ -9,7 +9,7 @@
     ["multi-chat", "◧", "Multi-Chat", "Twitch, YouTube und lokale TikTok-/TikFinity-/Tiktory-Ereignisse zusammenführen."],
     ["obs-guests", "♙", "OBS Gäste", "Vorhandene OBS-Quellen als Gastplätze in einer Szene ein- und ausblenden."],
     ["plugins", "◆", "Plugins", "Installierte Stream-Deck-Pakete und native Batto-Aktionen verwalten."],
-    ["deck-pro", "▦", "Touch-Deck Pro", "Profile, Ordner, variable Raster, Mehrfachaktionen und Verzögerungen verwalten."],
+    ["sotf", "☠", "SOTF Todeszähler", "CrazyBatto DeathCounter v0.3.0 lokal prüfen und als OBS-Overlay öffnen."],
     ["mobile", "▯", "Handy verbinden", "Lokale Kopplung über QR-Code, sechsstellige PIN und WebSocket."],
     ["integration", "⚒", "Übernahme & Diagnose", "Altdaten übernehmen und alle integrierten Module prüfen."]
   ];
@@ -17,8 +17,6 @@
   let state = null;
   let activeIntegratedPage = "";
   let pluginCategoryState = {};
-  let selectedDeckButtonIndex = -1;
-  let editingDeckButton = null;
   let guestItems = [];
   let guestSceneName = "";
   let pendingToast = null;
@@ -80,7 +78,7 @@
       "multi-chat": multiChatMarkup(),
       "obs-guests": guestsMarkup(),
       plugins: pluginsMarkup(),
-      "deck-pro": deckMarkup(),
+      sotf: sotfMarkup(),
       mobile: mobileMarkup(),
       integration: integrationMarkup()
     };
@@ -157,34 +155,18 @@
 
   function pluginsMarkup() {
     return `
-      <div class="section-heading"><div><span class="eyebrow">NATIVE AKTIONEN + INSTALLIERTE PAKETE</span><h2>Plugin-System</h2><p>Manifeste, Aktionen, Zustände und Icons installierter Pakete werden eingelesen. Nicht unterstützte Laufzeiten melden einen Fehler, statt Erfolg vorzutäuschen.</p></div><div class="button-row"><button id="plugins-import">Plugin-Ordner importieren</button><button id="plugins-scan" class="primary">Neu scannen</button></div></div>
+      <div class="section-heading"><div><span class="eyebrow">ELGATO SDK · NATIVE AKTIONEN · SICHERER IMPORT</span><h2>Plugin-System</h2><p>Originale, ungeschützte Elgato-Laufzeiten werden über die lokale WebSocket-API ausgeführt. Geschützte Marketplace-Pakete bleiben erkennbar und werden nicht umgangen.</p></div><div class="button-row"><button id="plugins-import">.streamDeckPlugin importieren</button><button id="plugins-import-folder">.sdPlugin-Ordner</button><button id="plugins-scan" class="primary">Neu scannen</button></div></div>
       <div id="plugin-summary" class="module-status-grid"></div>
       <div id="plugin-list" class="plugin-list"></div>`;
   }
 
-  function deckMarkup() {
+  function sotfMarkup() {
     return `
-      <div class="section-heading"><div><span class="eyebrow">PROFILE · ORDNER · MEHRFACHAKTIONEN</span><h2>Touch-Deck Pro</h2><p>Raster von 1 × 1 bis 10 × 10. Beim Verkleinern bleiben verdeckte Belegungen gespeichert.</p></div><div class="button-row"><button id="deck-pro-import">Importieren</button><button id="deck-pro-export">Exportieren</button></div></div>
-      <div class="deck-pro-toolbar panel"><label>Profil<select id="deck-pro-profile"></select></label><button id="deck-pro-add-profile">+ Profil</button><label>Ordner<select id="deck-pro-folder"></select></label><button id="deck-pro-back-folder">← Zurück</button><button id="deck-pro-add-folder">+ Ordner</button></div>
-      <div class="deck-pro-layout">
-        <section class="panel deck-pro-stage-panel">
-          <div class="deck-grid-controls"><label>Zeilen<input id="deck-pro-rows" type="number" min="1" max="10"></label><label>Spalten<input id="deck-pro-columns" type="number" min="1" max="10"></label><label>Tastengröße<input id="deck-pro-size" type="number" min="64" max="260"></label><label>Abstand<input id="deck-pro-gap" type="number" min="0" max="40"></label><label class="check-line"><input id="deck-pro-hide-unused" type="checkbox"> Unbenutzte Tasten ausblenden</label><button id="deck-pro-apply-grid">Raster übernehmen</button></div>
-          <p id="deck-pro-capacity" class="muted-line"></p>
-          <div id="deck-pro-grid" class="deck-pro-grid"></div>
-        </section>
-        <aside class="panel deck-pro-inspector">
-          <h3>Taste bearbeiten</h3><p id="deck-pro-selected" class="muted-line">Keine Taste ausgewählt.</p>
-          <label>Titel<input id="deck-pro-title" maxlength="120"></label>
-          <label>Untertitel<input id="deck-pro-subtitle" maxlength="160"></label>
-          <div class="two-column-fields"><label>Tastenfarbe<input id="deck-pro-color" type="color" value="#152130"></label><label>Schriftfarbe<input id="deck-pro-text-color" type="color" value="#ffffff"></label></div>
-          <label>Zielordner<select id="deck-pro-target-folder"><option value="">Kein Ordner</option></select></label>
-          <hr><h3>Mehrfachaktionen</h3>
-          <div id="deck-pro-actions" class="deck-action-list"></div>
-          <label>Aktion<select id="deck-pro-action-type"></select></label>
-          <label>Einstellungen als JSON<textarea id="deck-pro-action-settings" rows="5">{}</textarea></label>
-          <label>Verzögerung in ms<input id="deck-pro-action-delay" type="number" min="0" max="120000" value="0"></label>
-          <div class="button-row"><button id="deck-pro-add-action">Aktion hinzufügen</button><button id="deck-pro-save-key" class="primary">Taste speichern</button><button id="deck-pro-clear-key">Leeren</button></div>
-        </aside>
+      <div class="section-heading"><div><span class="eyebrow">CRAZYBATTO · REDLOADER · LOOPBACK-API</span><h2>Sons of the Forest Todeszähler</h2><p>Direkte Integration von CrazyBatto-SOTF-DeathCounter-Module-v0.3.0. Alle Daten bleiben auf 127.0.0.1.</p></div><div class="button-row"><button id="sotf-copy">OBS-Adresse kopieren</button><button id="sotf-refresh">Aktualisieren</button><button id="sotf-open" class="primary">Overlay öffnen</button></div></div>
+      <div id="sotf-status" class="module-status-grid"></div>
+      <div class="two-column-cards">
+        <article class="panel"><h3>Spieler</h3><div id="sotf-players" class="connection-list"></div></article>
+        <article class="panel"><h3>Letztes Ereignis</h3><div id="sotf-event" class="empty-state"><p>Noch kein Ereignis empfangen.</p></div><hr><p>Das RedLoader-Modul stellt Snapshot, Healthcheck und OBS-Overlay lokal auf Port 19447 bereit.</p></article>
       </div>`;
   }
 
@@ -226,18 +208,11 @@
 
     $("#plugins-scan")?.addEventListener("click", () => call("plugins:scan").then((plugins) => { state.plugins = plugins; renderPlugins(); }));
     $("#plugins-import")?.addEventListener("click", () => call("plugins:import").then(() => call("plugins:scan")).then((plugins) => { state.plugins = plugins; renderPlugins(); }));
+    $("#plugins-import-folder")?.addEventListener("click", () => call("plugins:import-folder").then(() => call("plugins:scan")).then((plugins) => { state.plugins = plugins; renderPlugins(); }));
 
-    $("#deck-pro-profile")?.addEventListener("change", () => call("deck:activate-profile", { profileId: $("#deck-pro-profile").value }).then(refreshState));
-    $("#deck-pro-folder")?.addEventListener("change", () => { selectedDeckButtonIndex = -1; editingDeckButton = null; renderDeckPro(); });
-    $("#deck-pro-add-profile")?.addEventListener("click", createDeckProfile);
-    $("#deck-pro-add-folder")?.addEventListener("click", createDeckFolder);
-    $("#deck-pro-back-folder")?.addEventListener("click", goBackFolder);
-    $("#deck-pro-apply-grid")?.addEventListener("click", applyDeckGrid);
-    $("#deck-pro-add-action")?.addEventListener("click", addDeckAction);
-    $("#deck-pro-save-key")?.addEventListener("click", saveDeckButton);
-    $("#deck-pro-clear-key")?.addEventListener("click", clearDeckButton);
-    $("#deck-pro-export")?.addEventListener("click", () => call("deck:export"));
-    $("#deck-pro-import")?.addEventListener("click", () => call("deck:import", { mode: "merge" }).then(refreshState));
+    $("#sotf-refresh")?.addEventListener("click", () => call("sotf:refresh").then((value) => { state.modules.sotfDeathCounter = value; renderSotf(); }));
+    $("#sotf-open")?.addEventListener("click", () => call("sotf:open-overlay"));
+    $("#sotf-copy")?.addEventListener("click", async () => showToast(`OBS-Adresse kopiert: ${await call("sotf:copy-overlay")}`));
 
     $("#mobile-new-pin")?.addEventListener("click", () => call("mobile:regenerate-pin").then((mobile) => { state.mobile = mobile; renderMobile(); }));
     $("#mobile-copy-address")?.addEventListener("click", async () => { const value = state?.mobile?.qr?.web || ""; await navigator.clipboard.writeText(value); showToast("Handy-Adresse kopiert."); });
@@ -258,7 +233,7 @@
     if (id === "multi-chat") renderMultiChat();
     if (id === "obs-guests") renderGuests();
     if (id === "plugins") renderPlugins();
-    if (id === "deck-pro") renderDeckPro();
+    if (id === "sotf") renderSotf();
     if (id === "mobile") renderMobile();
     if (id === "integration") renderIntegration();
   }
@@ -363,7 +338,7 @@
     const plugins = snapshot.plugins || [];
     const summary = $("#plugin-summary");
     if (!summary) return;
-    summary.innerHTML = `<article><span>Aktive Plugins</span><strong>${plugins.filter((plugin) => plugin.enabled).length}</strong></article><article><span>Erkannte Aktionen</span><strong>${plugins.reduce((sum, plugin) => sum + (plugin.actions?.length || 0), 0)}</strong></article><article><span>Icon-Pakete</span><strong>${snapshot.iconPacks?.length || 0}</strong></article><article><span>Scan</span><strong>${snapshot.scannedAt ? new Date(snapshot.scannedAt).toLocaleTimeString("de-DE") : "Noch nicht"}</strong></article>`;
+    summary.innerHTML = `<article><span>Aktive Plugins</span><strong>${plugins.filter((plugin) => plugin.enabled).length}</strong></article><article><span>Original-Laufzeiten</span><strong>${plugins.filter((plugin) => plugin.runtime?.status === "ready" && !plugin.native).length}</strong></article><article><span>Erkannte Aktionen</span><strong>${plugins.reduce((sum, plugin) => sum + (plugin.actions?.length || 0), 0)}</strong></article><article><span>Scanfehler</span><strong>${snapshot.errors?.length || 0}</strong></article>`;
     const groups = Map.groupBy ? Map.groupBy(plugins, (plugin) => plugin.category || "Plugin") : plugins.reduce((map, plugin) => { const key = plugin.category || "Plugin"; if (!map.has(key)) map.set(key, []); map.get(key).push(plugin); return map; }, new Map());
     const list = $("#plugin-list");
     list.replaceChildren(...[...groups.entries()].map(([category, items]) => {
@@ -381,7 +356,8 @@
   function pluginCard(plugin) {
     const card = document.createElement("article");
     card.className = `plugin-card${plugin.enabled ? "" : " disabled"}`;
-    card.innerHTML = `<header>${plugin.icon ? `<img src="${escapeHtml(plugin.icon)}" alt="">` : ""}<div><strong>${escapeHtml(plugin.name)}</strong><span>${escapeHtml(plugin.version || "")}${plugin.native ? " · Native Batto-Aktion" : ""}</span></div><label class="switch"><input type="checkbox" ${plugin.enabled ? "checked" : ""}><span></span></label></header><p>${escapeHtml(plugin.description || plugin.status || "")}</p><details><summary>${plugin.actions?.length || 0} Aktion(en)</summary><div class="plugin-actions">${(plugin.actions || []).map((action) => `<div><strong>${escapeHtml(action.name)}</strong><code>${escapeHtml(action.id)}</code></div>`).join("") || "<p>Keine Aktionen im Manifest.</p>"}</div></details><small class="plugin-status">${escapeHtml(plugin.status || "")}</small>`;
+    const runtimeLabel = plugin.native ? "Nativ" : plugin.runtime?.status === "ready" ? "Original-Laufzeit bereit" : plugin.runtime?.status === "protected" ? "Elgato-App erforderlich" : "Laufzeit nicht verfügbar";
+    card.innerHTML = `<header>${plugin.icon ? `<img src="${escapeHtml(plugin.icon)}" alt="">` : ""}<div><strong>${escapeHtml(plugin.name)}</strong><span>${escapeHtml(plugin.version || "")} · ${escapeHtml(runtimeLabel)}</span></div><label class="switch"><input type="checkbox" ${plugin.enabled ? "checked" : ""}><span></span></label></header><p>${escapeHtml(plugin.description || plugin.status || "")}</p><details><summary>${plugin.actions?.length || 0} Aktion(en)</summary><div class="plugin-actions">${(plugin.actions || []).filter((action) => action.visibleInActionsList !== false).map((action) => `<div><strong>${escapeHtml(action.name)}</strong><code>${escapeHtml(action.id)}</code></div>`).join("") || "<p>Keine Aktionen im Manifest.</p>"}</div></details><small class="plugin-status">${escapeHtml(plugin.status || "")}</small>`;
     $("input[type=checkbox]", card).addEventListener("change", async (event) => {
       state.plugins = await call("plugins:enable", { pluginId: plugin.id, enabled: event.target.checked });
       renderPlugins();
@@ -389,171 +365,23 @@
     return card;
   }
 
-  function deckProfile() {
-    const profiles = state?.deck?.profiles || [];
-    const id = $("#deck-pro-profile")?.value || state?.deck?.activeProfileId;
-    return profiles.find((profile) => profile.id === id) || profiles[0] || null;
-  }
-
-  function deckFolder(profile = deckProfile()) {
-    if (!profile) return null;
-    const id = $("#deck-pro-folder")?.value || profile.activeFolderId || "root";
-    return profile.folders?.find((folder) => folder.id === id) || profile.folders?.[0] || null;
-  }
-
-  function allActionOptions() {
-    const actions = [];
-    for (const plugin of state?.plugins?.plugins || []) {
-      if (!plugin.enabled) continue;
-      for (const action of plugin.actions || []) actions.push({ id: action.id, name: `${plugin.name} · ${action.name}` });
-    }
-    const unique = new Map(actions.map((action) => [action.id, action]));
-    return [...unique.values()].sort((a, b) => a.name.localeCompare(b.name, "de"));
-  }
-
-  function renderDeckPro() {
-    const profileSelect = $("#deck-pro-profile");
-    if (!profileSelect) return;
-    const deck = state?.deck;
-    if (!deck) return;
-    profileSelect.innerHTML = deck.profiles.map((profile) => `<option value="${escapeHtml(profile.id)}" ${profile.id === deck.activeProfileId ? "selected" : ""}>${escapeHtml(profile.name)}</option>`).join("");
-    const profile = deckProfile();
-    if (!profile) return;
-    const folderSelect = $("#deck-pro-folder");
-    folderSelect.innerHTML = profile.folders.map((folder) => `<option value="${escapeHtml(folder.id)}" ${folder.id === profile.activeFolderId ? "selected" : ""}>${escapeHtml(folder.name)}</option>`).join("");
-    const folder = deckFolder(profile);
-    if (!folder) return;
-    $("#deck-pro-rows").value = folder.rows;
-    $("#deck-pro-columns").value = folder.columns;
-    $("#deck-pro-size").value = folder.buttonSize;
-    $("#deck-pro-gap").value = folder.gap;
-    $("#deck-pro-hide-unused").checked = Boolean(folder.hideUnused);
-    $("#deck-pro-back-folder").disabled = !folder.parentId;
-    $("#deck-pro-capacity").textContent = `${folder.buttons.filter((button) => button.actions?.length || button.folderId).length} von ${folder.rows * folder.columns} sichtbaren Tasten belegt · verdeckte Tasten bleiben gespeichert.`;
-    const grid = $("#deck-pro-grid");
-    grid.style.setProperty("--columns", String(folder.columns));
-    grid.style.setProperty("--button-size", `${folder.buttonSize}px`);
-    grid.style.setProperty("--button-gap", `${folder.gap}px`);
-    const visible = folder.buttons.slice(0, folder.rows * folder.columns);
-    grid.replaceChildren(...visible.map((button, index) => {
-      const used = Boolean(button.actions?.length || button.folderId || button.title || button.icon);
-      const element = document.createElement("button");
-      element.type = "button";
-      element.className = `deck-pro-key${used ? " used" : ""}${index === selectedDeckButtonIndex ? " selected" : ""}`;
-      element.style.setProperty("--key-color", button.color || "#152130");
-      element.style.setProperty("--key-text", button.textColor || "#ffffff");
-      element.draggable = true;
-      element.dataset.index = index;
-      if (button.icon && /^data:image\//.test(button.icon)) element.innerHTML = `<img src="${escapeHtml(button.icon)}" alt="">`;
-      element.insertAdjacentHTML("beforeend", `<strong>${escapeHtml(button.title || (button.folderId ? "Ordner" : `Taste ${index + 1}`))}</strong><small>${button.actions?.length > 1 ? `${button.actions.length} Aktionen` : button.actions?.[0]?.type || ""}</small>`);
-      element.hidden = folder.hideUnused && !used;
-      element.addEventListener("click", () => selectDeckButton(index, button));
-      element.addEventListener("dragstart", (event) => event.dataTransfer.setData("text/plain", String(index)));
-      element.addEventListener("dragover", (event) => event.preventDefault());
-      element.addEventListener("drop", async (event) => { event.preventDefault(); const from = Number(event.dataTransfer.getData("text/plain")); await call("deck:move-button", { profileId: profile.id, folderId: folder.id, fromIndex: from, toIndex: index }); await refreshState(); });
-      return element;
-    }));
-    const targetFolder = $("#deck-pro-target-folder");
-    targetFolder.innerHTML = '<option value="">Kein Ordner</option>' + profile.folders.filter((item) => item.id !== folder.id).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
-    const actionSelect = $("#deck-pro-action-type");
-    actionSelect.innerHTML = allActionOptions().map((action) => `<option value="${escapeHtml(action.id)}">${escapeHtml(action.name)}</option>`).join("");
-    renderDeckInspector();
-  }
-
-  function selectDeckButton(index, button) {
-    selectedDeckButtonIndex = index;
-    editingDeckButton = structuredClone(button || {});
-    editingDeckButton.actions ||= [];
-    renderDeckPro();
-  }
-
-  function renderDeckInspector() {
-    const selected = editingDeckButton;
-    $("#deck-pro-selected").textContent = selectedDeckButtonIndex >= 0 ? `Taste ${selectedDeckButtonIndex + 1}` : "Keine Taste ausgewählt.";
-    $("#deck-pro-title").value = selected?.title || "";
-    $("#deck-pro-subtitle").value = selected?.subtitle || "";
-    $("#deck-pro-color").value = selected?.color || "#152130";
-    $("#deck-pro-text-color").value = selected?.textColor || "#ffffff";
-    $("#deck-pro-target-folder").value = selected?.folderId || "";
-    const list = $("#deck-pro-actions");
-    list.replaceChildren(...(selected?.actions || []).map((action, index) => {
-      const row = document.createElement("div");
-      row.className = "deck-action-row";
-      row.innerHTML = `<span><strong>${escapeHtml(action.title || action.type)}</strong><code>${escapeHtml(action.type)}</code><small>${Number(action.delayMs || 0)} ms</small></span><button type="button">Entfernen</button>`;
-      $("button", row).addEventListener("click", () => { editingDeckButton.actions.splice(index, 1); renderDeckInspector(); });
-      return row;
-    }));
-  }
-
-  async function createDeckProfile() {
-    const name = prompt("Name des neuen Profils:", "Neues Profil")?.trim();
-    if (!name) return;
-    await call("deck:create-profile", { name });
-    selectedDeckButtonIndex = -1;
-    editingDeckButton = null;
-    await refreshState();
-  }
-
-  async function createDeckFolder() {
-    const profile = deckProfile();
-    const folder = deckFolder(profile);
-    const name = prompt("Name des neuen Ordners:", "Neuer Ordner")?.trim();
-    if (!name) return;
-    await call("deck:create-folder", { profileId: profile.id, name, parentId: folder.id });
-    selectedDeckButtonIndex = -1;
-    editingDeckButton = null;
-    await refreshState();
-  }
-
-  async function goBackFolder() {
-    const profile = deckProfile();
-    const folder = deckFolder(profile);
-    if (!folder?.parentId) return;
-    await call("deck:activate-folder", { profileId: profile.id, folderId: folder.parentId });
-    await refreshState();
-  }
-
-  async function applyDeckGrid() {
-    const profile = deckProfile();
-    const folder = deckFolder(profile);
-    await call("deck:update-folder", { profileId: profile.id, folderId: folder.id, patch: { rows: Number($("#deck-pro-rows").value), columns: Number($("#deck-pro-columns").value), buttonSize: Number($("#deck-pro-size").value), gap: Number($("#deck-pro-gap").value), hideUnused: $("#deck-pro-hide-unused").checked } });
-    await refreshState();
-    showToast("Raster gespeichert. Verdeckte Tasten wurden nicht gelöscht.");
-  }
-
-  function addDeckAction() {
-    if (selectedDeckButtonIndex < 0) return showToast("Zuerst eine Taste auswählen.", true);
-    let settings;
-    try { settings = JSON.parse($("#deck-pro-action-settings").value || "{}"); }
-    catch { return showToast("Die Aktionseinstellungen enthalten kein gültiges JSON.", true); }
-    const type = $("#deck-pro-action-type").value;
-    const label = $("#deck-pro-action-type").selectedOptions[0]?.textContent || type;
-    editingDeckButton.actions.push({ id: `action-${Date.now()}`, type, title: label, settings, delayMs: Number($("#deck-pro-action-delay").value) || 0 });
-    renderDeckInspector();
-  }
-
-  async function saveDeckButton() {
-    if (selectedDeckButtonIndex < 0) return showToast("Zuerst eine Taste auswählen.", true);
-    const profile = deckProfile();
-    const folder = deckFolder(profile);
-    editingDeckButton.title = $("#deck-pro-title").value.trim();
-    editingDeckButton.subtitle = $("#deck-pro-subtitle").value.trim();
-    editingDeckButton.color = $("#deck-pro-color").value;
-    editingDeckButton.textColor = $("#deck-pro-text-color").value;
-    editingDeckButton.folderId = $("#deck-pro-target-folder").value;
-    await call("deck:update-button", { profileId: profile.id, folderId: folder.id, buttonIndex: selectedDeckButtonIndex, button: editingDeckButton });
-    await refreshState();
-    showToast("Taste gespeichert.");
-  }
-
-  async function clearDeckButton() {
-    if (selectedDeckButtonIndex < 0) return;
-    const profile = deckProfile();
-    const folder = deckFolder(profile);
-    await call("deck:clear-button", { profileId: profile.id, folderId: folder.id, buttonIndex: selectedDeckButtonIndex });
-    selectedDeckButtonIndex = -1;
-    editingDeckButton = null;
-    await refreshState();
+  function renderSotf() {
+    const module = state?.modules?.sotfDeathCounter || {};
+    const snapshot = module.snapshot || null;
+    const target = $("#sotf-status");
+    if (!target) return;
+    target.innerHTML = `
+      <article><span>Status</span><strong>${statusPill(Boolean(module.connected), "RedLoader verbunden", "Modul nicht erreichbar")}</strong></article>
+      <article><span>Online / bekannt</span><strong>${Number(snapshot?.onlinePlayers || 0)} / ${Number(snapshot?.knownPlayers || 0)}</strong></article>
+      <article><span>Session</span><code>${escapeHtml(snapshot?.sessionId || "Noch keine Daten")}</code></article>
+      <article><span>OBS-Browserquelle</span><code>${escapeHtml(module.overlayUrl || "http://127.0.0.1:19447/overlay")}</code></article>`;
+    const players = $("#sotf-players");
+    players.innerHTML = (snapshot?.players || []).map((player) => `<article><span><strong>${escapeHtml(player.name)}</strong><small>${player.online ? "online" : "offline"} · ${escapeHtml(player.state)}</small></span><code>${Number(player.sessionDeaths || 0)} Session · ${Number(player.lifetimeDeaths || 0)} gesamt</code></article>`).join("")
+      || `<div class="empty-state"><p>${escapeHtml(module.error || "RedLoader-Modul starten, dann aktualisieren.")}</p></div>`;
+    const event = snapshot?.lastEvent;
+    $("#sotf-event").innerHTML = event
+      ? `<article class="diagnostic-card ok"><span>☠</span><div><strong>${escapeHtml(event.playerName || event.playerId)}</strong><p>${Number(event.sessionDeaths || 0)} Session-Tode · ${escapeHtml(event.reason || event.type)}</p><small>${escapeHtml(event.atUtc || "")}</small></div></article>`
+      : '<div class="empty-state"><p>Noch kein Todesereignis empfangen.</p></div>';
   }
 
   function renderMobile() {
@@ -586,6 +414,8 @@
       ["Twitch-Hologramm", Boolean(modules.twitchHolo?.active), modules.twitchHolo?.overlayUrl || modules.twitchHolo?.error || "Nicht aktiv"],
       ["Handy-Brücke", Boolean(state.mobile?.active), state.mobile?.active ? `Port ${state.mobile.port}` : "Nicht aktiv"],
       ["Plugin-Registry", Boolean(state.plugins?.plugins?.length), `${state.plugins?.plugins?.length || 0} Plugins · ${state.plugins?.iconPacks?.length || 0} Icon-Pakete`],
+      ["Elgato Plugin-Host", Boolean(modules.streamDeckPlugins), `${modules.streamDeckPlugins?.sessions?.filter((session) => session.connected).length || 0} originale Laufzeit(en) verbunden`],
+      ["SOTF Todeszähler", Boolean(modules.sotfDeathCounter?.connected), modules.sotfDeathCounter?.connected ? `${modules.sotfDeathCounter.snapshot?.onlinePlayers || 0} Spieler online` : modules.sotfDeathCounter?.error || "RedLoader-Modul nicht aktiv"],
       ["Altdaten-Übernahme", !(migration.errors?.length), `${migration.profilesAdded || 0} Profile ergänzt · ${migration.copied?.length || 0} Dateien kopiert`]
     ];
     target.innerHTML = checks.map(([name, ok, detail]) => `<article class="diagnostic-card ${ok ? "ok" : "warning"}"><span>${ok ? "✓" : "!"}</span><div><strong>${escapeHtml(name)}</strong><p>${escapeHtml(detail)}</p></div></article>`).join("");
