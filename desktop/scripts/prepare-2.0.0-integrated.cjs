@@ -24,19 +24,27 @@ function copyTree(from, to) {
     else if (entry.isFile()) copyFile(input, output);
   }
 }
+function withFileLineEndings(fragment, text) {
+  const lineEnding = text.includes("\r\n") ? "\r\n" : "\n";
+  return String(fragment).replace(/\r?\n/g, lineEnding);
+}
 function replaceRequired(file, before, after, label) {
   let text = fs.readFileSync(file, "utf8");
-  if (text.includes(after)) return false;
-  if (!text.includes(before)) throw new Error(`${label} wurde in ${path.relative(root, file)} nicht gefunden.`);
-  text = text.replace(before, after);
+  const expected = withFileLineEndings(after, text);
+  const existing = withFileLineEndings(before, text);
+  if (text.includes(expected)) return false;
+  if (!text.includes(existing)) throw new Error(`${label} wurde in ${path.relative(root, file)} nicht gefunden.`);
+  text = text.replace(existing, expected);
   fs.writeFileSync(file, text, "utf8");
   return true;
 }
 function replaceAllRequired(file, before, after, minimum, label) {
   let text = fs.readFileSync(file, "utf8");
-  const count = text.split(before).length - 1;
-  if (count < minimum && !text.includes(after)) throw new Error(`${label}: erwartet mindestens ${minimum}, gefunden ${count}.`);
-  text = text.split(before).join(after);
+  const existing = withFileLineEndings(before, text);
+  const expected = withFileLineEndings(after, text);
+  const count = text.split(existing).length - 1;
+  if (count < minimum && !text.includes(expected)) throw new Error(`${label}: erwartet mindestens ${minimum}, gefunden ${count}.`);
+  text = text.split(existing).join(expected);
   fs.writeFileSync(file, text, "utf8");
 }
 

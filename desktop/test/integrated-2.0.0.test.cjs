@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const vm = require("node:vm");
 const { EventEmitter } = require("node:events");
 const { authentication, normalizeLocalObsHost, websocketUrl } = require("../src/services/obs-websocket.cjs");
 const { DeckStore } = require("../src/services/deck-store.cjs");
@@ -318,4 +319,17 @@ test("production UI contains integrated pages and no visible old product name", 
   assert.doesNotMatch(fs.readFileSync(path.join(root, "src", "renderer", "integrated.js"), "utf8"), /\[\s*["']plugins["']\s*,/);
   assert.doesNotMatch(visible, /Touch-Deck Pro/i);
   assert.match(fs.readFileSync(path.join(root, "modules", "encoder-monitoring-overlay", "web", "overlay.css"), "utf8"), /background:\s*transparent\s*!important/);
+});
+
+test("Produktionsvorbereitung erkennt bereits angewendete Patches auch mit Windows-Zeilenenden", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "scripts", "prepare-2.0.0-integrated.cjs"), "utf8");
+  assert.match(source, /function withFileLineEndings\(/);
+  assert.match(source, /text\.includes\("\\r\\n"\) \? "\\r\\n" : "\\n"/);
+  assert.match(source, /String\(fragment\)\.replace\(\/\\r\?\\n\/g, lineEnding\)/);
+  assert.match(source, /const expected = withFileLineEndings\(after, text\)/);
+  const helper = source.match(/function withFileLineEndings\([\s\S]*?\n\}/)?.[0];
+  assert.ok(helper);
+  const context = {};
+  vm.runInNewContext(`${helper}; result = withFileLineEndings("alpha\\nbeta", "alpha\\r\\nbeta");`, context);
+  assert.equal(context.result, "alpha\r\nbeta");
 });
