@@ -45,6 +45,7 @@ test("Touch-Deck shrink preserves hidden actions, folders and delays", () => {
     const store = new DeckStore(path.join(directory, "deck.json"));
     const profile = store.snapshot().profiles[0];
     const folder = profile.folders[0];
+    assert.equal(folder.layoutPreset, "standard");
     store.updateButton(profile.id, folder.id, 14, {
       title: "OBS und Overlay",
       actions: [
@@ -52,9 +53,24 @@ test("Touch-Deck shrink preserves hidden actions, folders and delays", () => {
         { type: "overlay.wheel", settings: {}, delayMs: 750 }
       ]
     });
-    store.updateFolder(profile.id, folder.id, { rows: 2, columns: 3 });
+    store.updateFolder(profile.id, folder.id, {
+      rows: 2,
+      columns: 3,
+      layoutPreset: "mini",
+      buttonSize: 168,
+      buttonRadius: 22,
+      gap: 18,
+      autoFit: false,
+      showLabels: false
+    });
     let current = store.snapshot().profiles[0].folders[0];
     assert.equal(current.rows * current.columns, 6);
+    assert.equal(current.layoutPreset, "mini");
+    assert.equal(current.buttonSize, 168);
+    assert.equal(current.buttonRadius, 22);
+    assert.equal(current.gap, 18);
+    assert.equal(current.autoFit, false);
+    assert.equal(current.showLabels, false);
     assert.equal(current.buttons[14].actions[1].delayMs, 750);
     store.updateFolder(profile.id, folder.id, { rows: 3, columns: 5 });
     current = store.snapshot().profiles[0].folders[0];

@@ -9,7 +9,7 @@
     "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && node scripts/patch-2.0.0-integrated.cjs && node scripts/prepare-touch-deck-v3.cjs",
     "pretest": "npm run prepare:integrated",
     "check": "node scripts/check-2.0.0.cjs && node scripts/check-icon.cjs",
-    "test": "npm run check && node --test test/integrated-2.0.0.test.cjs test/plugin-compatibility.test.cjs test/sotf-death-counter-client.test.cjs test/touch-deck-v3.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs",
+    "test": "npm run check && node --test test/cpu-efficiency.test.cjs test/integrated-2.0.0.test.cjs test/plugin-compatibility.test.cjs test/sotf-death-counter-client.test.cjs test/touch-deck-v3.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs",
     "predist:win": "npm run prepare:integrated && electron scripts/generate-icon.cjs",
     "dist:win": "electron-builder --win nsis --x64 --publish never"
   },

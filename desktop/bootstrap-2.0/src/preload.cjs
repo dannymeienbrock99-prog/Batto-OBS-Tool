@@ -202,18 +202,22 @@ const api = {
   onPairRequest(callback) { return on("mobile:pair-request", callback); },
   onTelemetry(callback) {
     const listener = (_event, value) => callback(telemetryForLegacy(value?.telemetry));
-    ipcRenderer.on("state:changed", listener);
-    return () => ipcRenderer.removeListener("state:changed", listener);
+    ipcRenderer.on("telemetry:changed", listener);
+    return () => ipcRenderer.removeListener("telemetry:changed", listener);
   },
   onTelemetryError(callback) {
     const listener = (_event, value) => { if (value?.errors?.telemetry) callback(value.errors.telemetry); };
-    ipcRenderer.on("state:changed", listener);
-    return () => ipcRenderer.removeListener("state:changed", listener);
+    ipcRenderer.on("telemetry:changed", listener);
+    return () => ipcRenderer.removeListener("telemetry:changed", listener);
   },
   onObsStatusChanged(callback) {
     const listener = (_event, value) => callback(value?.obs || { connected: false });
     ipcRenderer.on("state:changed", listener);
-    return () => ipcRenderer.removeListener("state:changed", listener);
+    ipcRenderer.on("telemetry:changed", listener);
+    return () => {
+      ipcRenderer.removeListener("state:changed", listener);
+      ipcRenderer.removeListener("telemetry:changed", listener);
+    };
   }
 };
 

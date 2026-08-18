@@ -60,6 +60,7 @@ if (packageJson.build?.nsis?.runAfterFinish !== false) fail("Installer darf die 
 if (packageJson.build?.nsis?.include !== "build/installer.nsh") fail("Installer-Erweiterung fehlt.");
 if (!packageJson.dependencies?.ws || !packageJson.dependencies?.qrcode || !packageJson.dependencies?.["adm-zip"]) fail("WebSocket-, ZIP- oder QR-Abhängigkeit fehlt.");
 if (!String(packageJson.scripts?.test || "").includes("integrated-2.0.0.test.cjs")) fail("2.0.0-Integrationstest ist nicht eingebunden.");
+if (!String(packageJson.scripts?.test || "").includes("cpu-efficiency.test.cjs")) fail("CPU-Effizienztest ist nicht eingebunden.");
 
 const main = read("src/main.cjs");
 const preload = read("src/preload.cjs");
@@ -94,6 +95,9 @@ requireText(main, /new StreamDeckPluginHost\(/, "Elgato Plugin-Host wird nicht g
 requireText(main, /new SotfDeathCounterClient\(/, "SOTF-Todeszähler wird nicht geladen.");
 requireText(main, 'sampler?.sample?.(hardware)', "Hardware wird nicht an die Telemetrie übergeben.");
 requireText(main, 'gpu: preferredGpu()', "Encoder-Empfehlung verwendet nicht die bevorzugte GPU.");
+requireText(main, 'webContents.send("telemetry:changed", payload)', "Kompakter Telemetrie-IPC fehlt.");
+requireText(main, "telemetryInFlight", "Schutz vor überlappenden Telemetrie-Abfragen fehlt.");
+requireText(main, "backgroundThrottling: true", "Electron-Hintergrunddrosselung ist nicht explizit aktiv.");
 requireText(main, 'handle("obs:forget-password"', "Gespeichertes OBS-Passwort kann nicht gelöscht werden.");
 forbidText(main, /mobileBridge\s*=\s*null\s*;\s*\/\/.*deaktiv/i, "Handy-Brücke ist im Produktionscode deaktiviert.");
 
@@ -104,6 +108,8 @@ requireText(obsClient, "authentication(password", "OBS-WebSocket-Authentifizieru
 requireText(hardware, "selectPreferredGpu", "Auswahl der dedizierten GPU fehlt.");
 requireText(hardware, /score \+= 500/, "NVIDIA-GPU wird nicht bevorzugt.");
 requireText(hardware, /score -= 1000/, "Integrierte GPU wird nicht abgewertet.");
+requireText(hardware, "networkIntervalMs = 10000", "Netzwerkabfragen werden nicht ausreichend gecacht.");
+requireText(hardware, "latencyIntervalMs = 30000", "Ping-Abfragen werden nicht ausreichend gedrosselt.");
 
 requireText(index, "Version 2.0.0", "Hauptfenster zeigt nicht Version 2.0.0.");
 requireText(index, "integrated.css", "Integrierte Styles werden nicht geladen.");
@@ -135,6 +141,9 @@ requireText(mobileHtml, "Batto OBS Tool", "Mobile Oberfläche ist nicht umbenann
 requireText(deckStore, "rows * columns", "Variables Touch-Deck-Raster fehlt.");
 requireText(deckStore, "moveButton", "Drag-and-drop-Datenoperation fehlt.");
 requireText(deckStore, "delayMs", "Mehrfachaktions-Verzögerung fehlt.");
+requireText(deckStore, "layoutPreset", "Stream-Deck-Gerätepresets fehlen.");
+requireText(deckStore, "buttonRadius", "Anpassbare Tastenecken fehlen.");
+requireText(deckStore, "autoFit", "Automatisches Einpassen des Touch-Rasters fehlt.");
 forbidText(deckStore, /buttons\s*=\s*buttons\.slice\(0,\s*capacity\)/, "Rasterverkleinerung würde Belegungen löschen.");
 requireText(migration, "copyDirectoryMissing", "Nicht überschreibende Altdatenmigration fehlt.");
 requireText(migration, "Creator Hub", "Legacy-Pfade werden nicht erkannt.");
@@ -153,9 +162,15 @@ requireText(pluginRegistry, "validateArchiveEntryName", "Sicherheitsprüfung fü
 requireText(streamDeckHost, 'event: "keyDown"', "Elgato keyDown-Ereignis fehlt.");
 requireText(streamDeckHost, 'event: "keyUp"', "Elgato keyUp-Ereignis fehlt.");
 requireText(streamDeckHost, 'event: "willAppear"', "Elgato willAppear-Ereignis fehlt.");
+requireText(streamDeckHost, "scheduleSessionIdle", "Original-Plugins werden bei Inaktivität nicht beendet.");
+requireText(streamDeckHost, "normalizedDeviceSize", "Original-Plugins erhalten kein dynamisches Touch-Raster.");
 requireText(sotfClient, "api/v1/snapshot", "SOTF-Snapshot-Anbindung fehlt.");
+requireText(sotfClient, "scheduleNextRefresh", "SOTF-Polling ist nicht adaptiv.");
 requireText(touchDeck, 'mode = "run"', "Touch-Deck-Ausführenmodus fehlt.");
 requireText(touchDeck, "finishTouchMove", "Berührbares Verschieben von Tasten fehlt.");
+requireText(touchDeck, "assignActionToKey", "Direkte Tastenbelegung aus der Plugin-Bibliothek fehlt.");
+requireText(touchDeck, "layoutPresets", "Touch-Deck-Gerätepresets fehlen in der Oberfläche.");
+requireText(touchDeck, "ResizeObserver", "Touch-Raster passt sich nicht an den Monitor an.");
 requireText(touchDeckCss, "pointer: coarse", "Touch-Ziele für Touch-Monitore fehlen.");
 
 requireText(multiChat, "persistSettings()", "Multi-Chat-Einstellungen werden nicht sicher getrennt gespeichert.");

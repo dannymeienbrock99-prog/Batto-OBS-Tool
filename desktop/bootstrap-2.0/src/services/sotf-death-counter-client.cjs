@@ -61,17 +61,30 @@ function normalizeSnapshot(value = {}) {
 }
 
 class SotfDeathCounterClient extends EventEmitter {
-  constructor({ baseUrl = "http://127.0.0.1:19447/", fetchImpl = globalThis.fetch, timeoutMs = 1500, intervalMs = 2000 } = {}) {
+  constructor({
+    baseUrl = "http://127.0.0.1:19447/",
+    fetchImpl = globalThis.fetch,
+    timeoutMs = 1500,
+    intervalMs = 5000,
+    offlineIntervalMs = 15000,
+    heartbeatMs = 60000
+  } = {}) {
     super();
     this.baseUrl = normalizeLoopbackBaseUrl(baseUrl);
     this.fetchImpl = fetchImpl;
     this.timeoutMs = Math.max(250, Math.min(10000, Number(timeoutMs) || 1500));
-    this.intervalMs = Math.max(500, Math.min(60000, Number(intervalMs) || 2000));
+    this.intervalMs = Math.max(2000, Math.min(60000, Number(intervalMs) || 5000));
+    this.offlineIntervalMs = Math.max(this.intervalMs, Math.min(120000, Number(offlineIntervalMs) || 15000));
+    this.heartbeatMs = Math.max(15000, Math.min(300000, Number(heartbeatMs) || 60000));
     this.timer = null;
+    this.running = false;
+    this.refreshPromise = null;
     this.latest = null;
     this.connected = false;
     this.lastError = "";
     this.lastCheckedAt = 0;
+    this.lastEmittedAt = 0;
+    this.lastChangeSignature = "";
   }
 
   urls() {
@@ -97,6 +110,47 @@ class SotfDeathCounterClient extends EventEmitter {
   }
 
   async refresh({ throwOnError = false } = {}) {
+    if (this.refreshPromise) return this.refreshPromise;
+    this.refreshPromise = this.performRefresh({ throwOnError });
+    try { return await this.refreshPromise; }
+    finally { this.refreshPromise = null; }
+  }
+
+  changeSignature() {
+    const snapshot = this.latest ? {
+      version: this.latest.version,
+      title: this.latest.title,
+      sessionId: this.latest.sessionId,
+      onlinePlayers: this.latest.onlinePlayers,
+      knownPlayers: this.latest.knownPlayers,
+      showOfflinePlayers: this.latest.showOfflinePlayers,
+      showLifetimeDeaths: this.latest.showLifetimeDeaths,
+      lastEvent: this.latest.lastEvent,
+      players: this.latest.players.map((player) => ({
+        rank: player.rank,
+        id: player.id,
+        name: player.name,
+        sessionDeaths: player.sessionDeaths,
+        lifetimeDeaths: player.lifetimeDeaths,
+        online: player.online,
+        state: player.state,
+        lastDeathUtc: player.lastDeathUtc,
+        lastSource: player.lastSource
+      }))
+    } : null;
+    return JSON.stringify({ connected: this.connected, error: this.lastError, snapshot });
+  }
+
+  emitChangeIfNeeded(force = false) {
+    const signature = this.changeSignature();
+    const heartbeatDue = Date.now() - this.lastEmittedAt >= this.heartbeatMs;
+    if (!force && signature === this.lastChangeSignature && !heartbeatDue) return;
+    this.lastChangeSignature = signature;
+    this.lastEmittedAt = Date.now();
+    this.emit("changed", this.status());
+  }
+
+  async performRefresh({ throwOnError = false } = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -122,21 +176,33 @@ class SotfDeathCounterClient extends EventEmitter {
     } finally {
       clearTimeout(timer);
       this.lastCheckedAt = Date.now();
-      this.emit("changed", this.status());
+      this.emitChangeIfNeeded();
     }
     return this.status();
   }
 
   async start() {
-    if (this.timer) return this.status();
+    if (this.running) return this.status();
+    this.running = true;
     await this.refresh();
-    this.timer = setInterval(() => void this.refresh(), this.intervalMs);
-    this.timer.unref?.();
+    this.scheduleNextRefresh();
     return this.status();
   }
 
+  scheduleNextRefresh() {
+    clearTimeout(this.timer);
+    if (!this.running) return;
+    const delay = this.connected ? this.intervalMs : this.offlineIntervalMs;
+    this.timer = setTimeout(async () => {
+      try { await this.refresh(); }
+      finally { this.scheduleNextRefresh(); }
+    }, delay);
+    this.timer.unref?.();
+  }
+
   stop() {
-    clearInterval(this.timer);
+    this.running = false;
+    clearTimeout(this.timer);
     this.timer = null;
   }
 }

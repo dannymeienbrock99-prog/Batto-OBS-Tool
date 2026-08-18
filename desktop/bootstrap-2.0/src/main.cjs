@@ -47,6 +47,10 @@ let recommendation = null;
 let latestObs = { available: false, connected: false };
 let latestTelemetry = null;
 let telemetryTimer = null;
+let telemetryEventTimer = null;
+let telemetryInFlight = null;
+let telemetryLoopActive = false;
+let lastMobileTelemetryAt = 0;
 let stateTimer = null;
 let monitoringServer = null;
 let streamOverlayServer = null;
@@ -193,6 +197,42 @@ function scheduleState() {
   stateTimer = setTimeout(sendState, 80);
 }
 
+function sendTelemetry() {
+  const payload = {
+    telemetry: latestTelemetry,
+    obs: latestObs || obs.status(),
+    errors: { telemetry: moduleErrors.telemetry || null },
+    sampledAt: Date.now()
+  };
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("telemetry:changed", payload);
+  if (mobileBridge && Date.now() - lastMobileTelemetryAt >= 5000) {
+    lastMobileTelemetryAt = Date.now();
+    mobileBridge.broadcastState();
+  }
+}
+
+function telemetryDelay() {
+  return !mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized() || !mainWindow.isVisible()
+    ? 8000
+    : 2000;
+}
+
+function scheduleTelemetryLoop() {
+  clearTimeout(telemetryTimer);
+  if (!telemetryLoopActive) return;
+  telemetryTimer = setTimeout(async () => {
+    try { await refreshTelemetry(); }
+    finally { scheduleTelemetryLoop(); }
+  }, telemetryDelay());
+  telemetryTimer.unref?.();
+}
+
+function queueTelemetryRefresh(delayMs = 250) {
+  clearTimeout(telemetryEventTimer);
+  telemetryEventTimer = setTimeout(() => void refreshTelemetry(), Math.max(0, Number(delayMs) || 0));
+  telemetryEventTimer.unref?.();
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1540,
@@ -208,7 +248,10 @@ function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      webSecurity: true
+      webSecurity: true,
+      backgroundThrottling: true,
+      spellcheck: false,
+      navigateOnDragDrop: false
     }
   });
   mainWindow.loadFile(rendererFile("index.html"));
@@ -225,7 +268,15 @@ function openLocalWindow(url, title, width = 1480, height = 900) {
   const child = new BrowserWindow({
     width, height, minWidth: 840, minHeight: 620, parent: mainWindow || undefined, title,
     autoHideMenuBar: true, backgroundColor: "#080e15",
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true }
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      backgroundThrottling: true,
+      spellcheck: false,
+      navigateOnDragDrop: false
+    }
   });
   childWindows.add(child);
   child.on("closed", () => childWindows.delete(child));
@@ -333,18 +384,26 @@ function publishMonitoring(telemetry) {
 }
 
 async function refreshTelemetry() {
-  try {
-    const [systemSample, obsSnapshot] = await Promise.all([
-      Promise.resolve(sampler?.sample?.() || sampler?.snapshot?.() || {}),
-      obs.status().connected ? obs.snapshot() : Promise.resolve({ available: false, ...obs.status() })
-    ]);
-    latestObs = obsSnapshot;
-    latestTelemetry = buildTelemetry(systemSample || {}, obsSnapshot || {});
-    publishMonitoring(latestTelemetry);
-  } catch (error) {
-    moduleErrors.telemetry = errorPayload(error);
-  }
-  scheduleState();
+  if (telemetryInFlight) return telemetryInFlight;
+  const task = (async () => {
+    try {
+      const [systemSample, obsSnapshot] = await Promise.all([
+        Promise.resolve(sampler?.sample?.() || sampler?.snapshot?.() || {}),
+        obs.status().connected ? obs.snapshot() : Promise.resolve({ available: false, ...obs.status() })
+      ]);
+      latestObs = obsSnapshot;
+      latestTelemetry = buildTelemetry(systemSample || {}, obsSnapshot || {});
+      delete moduleErrors.telemetry;
+      publishMonitoring(latestTelemetry);
+    } catch (error) {
+      moduleErrors.telemetry = errorPayload(error);
+    }
+    sendTelemetry();
+    return latestTelemetry;
+  })();
+  telemetryInFlight = task;
+  try { return await task; }
+  finally { if (telemetryInFlight === task) telemetryInFlight = null; }
 }
 
 async function startModules() {
@@ -396,6 +455,7 @@ async function startModules() {
   await sotfDeathCounter.start();
 
   deckStore = new DeckStore(userDataFile("deck-profiles.json"));
+  deckStore.on("changed", scheduleState);
   actionExecutor = new ActionExecutor({ obs, shell, clipboard, overlayServer: streamOverlayServer, multiChat, pluginHost, sotfClient: sotfDeathCounter, dataFile: userDataFile("action-data.json") });
 
   migration = new LegacyMigration({ userData: app.getPath("userData"), deckStore, pluginRegistry });
@@ -423,7 +483,7 @@ async function executeMobilePayload(payload = {}) {
     const folder = profile?.folders.find((item) => item.id === payload.folderId) || profile?.folders[0];
     const button = folder?.buttons?.[Number(payload.buttonIndex)];
     if (!button?.actions?.length) throw new Error("Diese Taste ist nicht belegt.");
-    return { ok: true, results: await actionExecutor.executeMany(button.actions, { profileId: profile.id, folderId: folder.id, buttonIndex: Number(payload.buttonIndex), columns: folder.columns, source: "mobile" }) };
+    return { ok: true, results: await actionExecutor.executeMany(button.actions, { profileId: profile.id, folderId: folder.id, buttonIndex: Number(payload.buttonIndex), columns: folder.columns, rows: folder.rows, source: "mobile" }) };
   }
   if (payload.kind === "action" && payload.action) return actionExecutor.execute(payload.action, { source: "mobile" });
   throw new Error("Unbekannte Handy-Aktion.");
@@ -489,7 +549,7 @@ function registerIpc() {
     const folder = profile?.folders.find((item) => item.id === payload.folderId) || profile?.folders[0];
     const button = folder?.buttons?.[Number(payload.buttonIndex)];
     if (!button?.actions?.length) throw new Error("Diese Taste ist nicht belegt.");
-    return actionExecutor.executeMany(button.actions, { profileId: profile.id, folderId: folder.id, buttonIndex: Number(payload.buttonIndex), columns: folder.columns, source: "touch-deck" });
+    return actionExecutor.executeMany(button.actions, { profileId: profile.id, folderId: folder.id, buttonIndex: Number(payload.buttonIndex), columns: folder.columns, rows: folder.rows, source: "touch-deck" });
   });
   handle("deck:export", async () => {
     const result = await dialog.showSaveDialog(mainWindow, { title: "Touch-Deck exportieren", defaultPath: "Batto-OBS-Tool-Deck.json", filters: [{ name: "JSON", extensions: ["json"] }] });
@@ -638,14 +698,14 @@ async function initialize() {
   if (process.argv.includes("--self-test")) return selfTest();
   await startModules();
   createMainWindow();
-  obs.on("event", () => void refreshTelemetry());
+  obs.on("event", () => queueTelemetryRefresh());
   obs.on("disconnected", () => { latestObs = { available: false, ...obs.status() }; scheduleState(); });
-  multiChat.on("changed", scheduleState);
   await ensureHardware().catch((error) => { moduleErrors.hardware = errorPayload(error); });
   await buildEncoderRecommendation({}).catch((error) => { moduleErrors.recommendation = errorPayload(error); });
   await autoConnectObs();
   await refreshTelemetry();
-  telemetryTimer = setInterval(() => void refreshTelemetry(), 1000);
+  telemetryLoopActive = true;
+  scheduleTelemetryLoop();
 }
 
 app.on("second-instance", () => {
@@ -663,7 +723,9 @@ app.whenReady().then(initialize).catch((error) => {
 
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
 app.on("before-quit", () => {
-  clearInterval(telemetryTimer);
+  telemetryLoopActive = false;
+  clearTimeout(telemetryTimer);
+  clearTimeout(telemetryEventTimer);
   clearTimeout(stateTimer);
   multiChat?.stop();
   void obs.disconnect();

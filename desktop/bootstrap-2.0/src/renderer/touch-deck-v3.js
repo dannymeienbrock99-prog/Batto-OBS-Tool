@@ -13,6 +13,14 @@
 
   const actionTransferType = "application/x-batto-touch-deck-action";
   const keyTransferType = "application/x-batto-touch-deck-key";
+  const layoutPresets = Object.freeze({
+    custom: { label: "Frei einstellen", rows: null, columns: null },
+    mini: { label: "Stream Deck Mini · 6", rows: 2, columns: 3 },
+    neo: { label: "Stream Deck Neo · 8", rows: 2, columns: 4 },
+    plus: { label: "Stream Deck + · 8", rows: 2, columns: 4 },
+    standard: { label: "Stream Deck · 15", rows: 3, columns: 5 },
+    xl: { label: "Stream Deck XL · 32", rows: 4, columns: 8 }
+  });
   const blankButton = (index) => ({
     id: `button-${index + 1}`,
     title: "",
@@ -36,6 +44,13 @@
   let gridSettingsOpen = true;
   let mode = "run";
   let moveSourceIndex = -1;
+  let pendingAction = null;
+  let assignmentMode = "replace";
+  let layoutPreview = null;
+  let lastLibrarySignature = "";
+  let fitFrame = 0;
+  let resizeObserver = null;
+  let lastViewSignature = "";
   const groupState = new Map();
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -130,10 +145,10 @@
           <div>
             <span class="eyebrow">PROFILE · ORDNER · PLUGIN-AKTIONEN</span>
             <h2>Touch-Deck</h2>
-            <p>Im Ausführen-Modus wird dieser Bildschirm zum berührbaren Stream Deck. Im Bearbeiten-Modus stehen Plugins, Raster und Mehrfachaktionen bereit.</p>
+            <p>Tasten frei belegen, Geräte-Raster wählen und Größe, Abstand sowie Beschriftung an deinen Touch-Monitor anpassen.</p>
           </div>
           <div class="button-row">
-            <button id="tdp-mode" class="primary" type="button">✦ Ausführen</button>
+            <button id="tdp-mode" class="primary" type="button">✎ Tasten belegen</button>
             <button id="tdp-fullscreen" type="button">⛶ Vollbild</button>
             <button id="tdp-import" type="button">Importieren</button>
             <button id="tdp-export" type="button">Exportieren</button>
@@ -166,12 +181,22 @@
 
           <main class="tdp-stage">
             <section id="tdp-grid-panel" class="tdp-grid-panel">
+              <label class="tdp-preset-field">Gerät / Raster<select id="tdp-preset">${Object.entries(layoutPresets).map(([value, preset]) => `<option value="${value}">${preset.label}</option>`).join("")}</select></label>
               <label>Zeilen<input id="tdp-rows" type="number" min="1" max="10"></label>
               <label>Spalten<input id="tdp-columns" type="number" min="1" max="10"></label>
-              <label>Tastengröße<input id="tdp-size" type="number" min="64" max="260"></label>
-              <label>Abstand<input id="tdp-gap" type="number" min="0" max="40"></label>
+              <label class="tdp-slider-field">Tastengröße <output id="tdp-size-value">116 px</output><input id="tdp-size" type="range" min="48" max="320" step="2"></label>
+              <label class="tdp-slider-field">Abstand <output id="tdp-gap-value">12 px</output><input id="tdp-gap" type="range" min="0" max="48"></label>
+              <label class="tdp-slider-field">Ecken <output id="tdp-radius-value">12 px</output><input id="tdp-radius" type="range" min="0" max="48"></label>
+              <label class="tdp-check"><input id="tdp-auto-fit" type="checkbox" checked> Automatisch einpassen</label>
+              <label class="tdp-check"><input id="tdp-show-labels" type="checkbox" checked> Beschriftungen zeigen</label>
               <label class="tdp-check"><input id="tdp-hide-unused" type="checkbox"> Unbenutzte Tasten ausblenden</label>
               <button id="tdp-apply-grid" type="button">Raster übernehmen</button>
+            </section>
+            <section id="tdp-assignment-bar" class="tdp-assignment-bar" hidden>
+              <span class="tdp-assignment-icon" id="tdp-assignment-icon"></span>
+              <span><strong id="tdp-assignment-title">Aktion gewählt</strong><small>Jetzt eine Zieltaste antippen – die Belegung wird sofort gespeichert.</small></span>
+              <label>Belegen<select id="tdp-assignment-mode"><option value="replace">Taste ersetzen</option><option value="append">Als Mehrfachaktion anhängen</option></select></label>
+              <button id="tdp-cancel-assignment" type="button">Abbrechen</button>
             </section>
             <div class="tdp-stage-meta">
               <span id="tdp-capacity">0 Tasten</span>
@@ -235,6 +260,8 @@
       if (!discardDraftIfNeeded()) { render(); return; }
       selectedIndex = -1;
       draft = null;
+      pendingAction = null;
+      layoutPreview = null;
       await call("deck:activate-profile", { profileId: event.currentTarget.value });
       await refresh();
     });
@@ -243,6 +270,8 @@
       const currentProfile = profile();
       selectedIndex = -1;
       draft = null;
+      pendingAction = null;
+      layoutPreview = null;
       await call("deck:activate-folder", { profileId: currentProfile.id, folderId: event.currentTarget.value });
       await refresh();
     });
@@ -250,6 +279,11 @@
     $("#tdp-add-folder").addEventListener("click", createFolder);
     $("#tdp-back-folder").addEventListener("click", goBackFolder);
     $("#tdp-apply-grid").addEventListener("click", applyGrid);
+    $("#tdp-preset").addEventListener("change", applyLayoutPreset);
+    for (const id of ["tdp-rows", "tdp-columns", "tdp-size", "tdp-gap", "tdp-radius", "tdp-auto-fit", "tdp-show-labels", "tdp-hide-unused"]) {
+      $("#" + id).addEventListener("input", previewLayout);
+      $("#" + id).addEventListener("change", previewLayout);
+    }
     $("#tdp-grid-settings").addEventListener("click", () => {
       gridSettingsOpen = !gridSettingsOpen;
       renderGridSettingsVisibility();
@@ -259,6 +293,8 @@
     $("#tdp-mode").addEventListener("click", () => setMode(mode === "run" ? "edit" : "run"));
     $("#tdp-fullscreen").addEventListener("click", () => call("window:toggle-fullscreen"));
     $("#tdp-move-key").addEventListener("click", beginTouchMove);
+    $("#tdp-assignment-mode").addEventListener("change", (event) => { assignmentMode = event.currentTarget.value === "append" ? "append" : "replace"; });
+    $("#tdp-cancel-assignment").addEventListener("click", cancelPendingAssignment);
     $("#tdp-add-action").addEventListener("click", addActionFromInspector);
     $("#tdp-save-key").addEventListener("click", saveKey);
     $("#tdp-discard-key").addEventListener("click", discardKey);
@@ -285,12 +321,15 @@
 
   function setMode(next) {
     if (next === "run" && !discardDraftIfNeeded()) return;
+    if (next === "run" && layoutPreview && !window.confirm("Die noch nicht gespeicherte Rastervorschau verwerfen?")) return;
     mode = next === "edit" ? "edit" : "run";
     moveSourceIndex = -1;
+    pendingAction = null;
     if (mode === "run") {
       selectedIndex = -1;
       draft = null;
       draftDirty = false;
+      layoutPreview = null;
     }
     render();
   }
@@ -298,6 +337,17 @@
   function renderLibrary() {
     const target = $("#tdp-library-content");
     if (!target) return;
+    const pluginState = state?.plugins || {};
+    const signature = JSON.stringify([
+      libraryTab,
+      searchText,
+      pendingAction?.actionId || "",
+      pluginState.scannedAt || 0,
+      [...groupState.entries()],
+      (pluginState.plugins || []).map((plugin) => [plugin.id, plugin.enabled, plugin.status, plugin.actions?.length || 0])
+    ]);
+    if (signature === lastLibrarySignature) return;
+    lastLibrarySignature = signature;
     target.replaceChildren();
     const plugins = filteredPlugins();
     if (libraryTab === "plugins") {
@@ -357,8 +407,9 @@
     for (const action of actions) {
       const item = document.createElement("button");
       item.type = "button";
-      item.className = "tdp-action-item";
+      item.className = `tdp-action-item${pendingAction?.actionId === action.id ? " pending" : ""}`;
       item.draggable = true;
+      item.title = "Antippen und danach die gewünschte Taste wählen";
       const transfer = {
         pluginId: plugin.id,
         pluginName: plugin.name,
@@ -372,7 +423,7 @@
         event.dataTransfer.setData(actionTransferType, JSON.stringify(transfer));
         event.dataTransfer.setData("text/plain", action.id);
       });
-      item.addEventListener("click", () => addLibraryAction(transfer));
+      item.addEventListener("click", () => selectLibraryAction(transfer));
       body.append(item);
     }
     return section;
@@ -384,15 +435,17 @@
     if (shell) shell.dataset.mode = mode;
     const modeButton = $("#tdp-mode");
     if (modeButton) {
-      modeButton.textContent = mode === "run" ? "✦ Ausführen" : "✎ Bearbeiten";
-      modeButton.setAttribute("aria-pressed", String(mode === "run"));
+      modeButton.textContent = mode === "run" ? "✎ Tasten belegen" : "▶ Deck benutzen";
+      modeButton.setAttribute("aria-pressed", String(mode === "edit"));
     }
     const help = $("#tdp-stage-help");
     if (help) help.textContent = moveSourceIndex >= 0
       ? `Taste ${moveSourceIndex + 1} gewählt – jetzt das Ziel antippen.`
+      : pendingAction
+        ? `„${pendingAction.actionName}“ gewählt – jetzt die gewünschte Taste antippen.`
       : mode === "run"
         ? "Taste antippen, um die hinterlegte Aktion auszuführen. Ordner öffnen sich mit einem Tipp."
-        : "Aktion links antippen oder ziehen. Für Touch-Monitore: Taste auswählen, „Taste verschieben“ und danach das Ziel antippen.";
+        : "Aktion links antippen und danach die Zieltaste wählen – oder direkt per Drag-and-drop belegen.";
     const deck = state.deck || { profiles: [] };
     const profileSelect = $("#tdp-profile");
     profileSelect.innerHTML = (deck.profiles || []).map((entry) => `<option value="${html(entry.id)}" ${entry.id === deck.activeProfileId ? "selected" : ""}>${html(entry.name)}</option>`).join("");
@@ -403,16 +456,15 @@
     const currentFolder = folder(currentProfile);
     if (!currentFolder) return;
 
-    $("#tdp-rows").value = currentFolder.rows;
-    $("#tdp-columns").value = currentFolder.columns;
-    $("#tdp-size").value = currentFolder.buttonSize;
-    $("#tdp-gap").value = currentFolder.gap;
-    $("#tdp-hide-unused").checked = Boolean(currentFolder.hideUnused);
+    const effectiveLayout = layoutPreview || currentFolder;
+    if (!layoutPreview) syncLayoutControls(currentFolder);
+    updateLayoutOutputs(effectiveLayout);
     $("#tdp-back-folder").disabled = !currentFolder.parentId;
 
-    renderGrid(currentProfile, currentFolder);
+    renderGrid(currentProfile, currentFolder, effectiveLayout);
     renderInspector(currentProfile, currentFolder);
     renderLibrary();
+    renderAssignmentBar();
     renderGridSettingsVisibility();
     $("#tdp-move-key").disabled = mode !== "edit" || selectedIndex < 0;
     $("#tdp-move-key").classList.toggle("active", moveSourceIndex >= 0);
@@ -427,28 +479,136 @@
     button.classList.toggle("active", gridSettingsOpen);
   }
 
-  function renderGrid(currentProfile, currentFolder) {
-    const capacity = currentFolder.rows * currentFolder.columns;
+  function syncLayoutControls(currentFolder) {
+    $("#tdp-preset").value = layoutPresets[currentFolder.layoutPreset] ? currentFolder.layoutPreset : "custom";
+    $("#tdp-rows").value = currentFolder.rows;
+    $("#tdp-columns").value = currentFolder.columns;
+    $("#tdp-size").value = currentFolder.buttonSize;
+    $("#tdp-gap").value = currentFolder.gap;
+    $("#tdp-radius").value = currentFolder.buttonRadius ?? 12;
+    $("#tdp-auto-fit").checked = currentFolder.autoFit !== false;
+    $("#tdp-show-labels").checked = currentFolder.showLabels !== false;
+    $("#tdp-hide-unused").checked = Boolean(currentFolder.hideUnused);
+  }
+
+  function layoutFromControls() {
+    const rows = Math.max(1, Math.min(10, Number($("#tdp-rows").value) || 3));
+    const columns = Math.max(1, Math.min(10, Number($("#tdp-columns").value) || 5));
+    return {
+      layoutPreset: layoutPresets[$("#tdp-preset").value] ? $("#tdp-preset").value : "custom",
+      rows,
+      columns,
+      buttonSize: Math.max(48, Math.min(320, Number($("#tdp-size").value) || 116)),
+      buttonRadius: Math.max(0, Math.min(48, Number($("#tdp-radius").value) || 0)),
+      gap: Math.max(0, Math.min(48, Number($("#tdp-gap").value) || 0)),
+      autoFit: $("#tdp-auto-fit").checked,
+      showLabels: $("#tdp-show-labels").checked,
+      hideUnused: $("#tdp-hide-unused").checked
+    };
+  }
+
+  function updateLayoutOutputs(layout = layoutFromControls()) {
+    $("#tdp-size-value").textContent = `${layout.buttonSize} px`;
+    $("#tdp-gap-value").textContent = `${layout.gap} px`;
+    $("#tdp-radius-value").textContent = `${layout.buttonRadius ?? 12} px`;
+  }
+
+  function applyLayoutPreset(event) {
+    const key = event.currentTarget.value;
+    const preset = layoutPresets[key];
+    if (preset?.rows && preset?.columns) {
+      $("#tdp-rows").value = preset.rows;
+      $("#tdp-columns").value = preset.columns;
+    }
+    previewLayout();
+  }
+
+  function previewLayout(event) {
+    if (event?.currentTarget && ["tdp-rows", "tdp-columns"].includes(event.currentTarget.id)) {
+      $("#tdp-preset").value = "custom";
+    }
+    layoutPreview = layoutFromControls();
+    updateLayoutOutputs(layoutPreview);
+    const currentProfile = profile();
+    const currentFolder = folder(currentProfile);
+    if (currentProfile && currentFolder) renderGrid(currentProfile, currentFolder, layoutPreview);
+    $("#tdp-draft-state").textContent = "Rastervorschau – noch nicht gespeichert";
+    $("#tdp-draft-state").classList.add("dirty");
+  }
+
+  function scheduleGridFit() {
+    window.cancelAnimationFrame(fitFrame);
+    fitFrame = window.requestAnimationFrame(fitGridToViewport);
+  }
+
+  function fitGridToViewport() {
+    const grid = $("#tdp-grid");
+    const viewport = grid?.parentElement;
+    if (!grid || !viewport) return;
+    const preferred = Number.parseFloat(grid.style.getPropertyValue("--tdp-preferred-button-size")) || 116;
+    if (grid.dataset.fit !== "auto" || !viewport.clientWidth || !viewport.clientHeight) {
+      grid.style.setProperty("--tdp-button-size", `${preferred}px`);
+      grid.dataset.compressed = "false";
+      grid.dataset.density = preferred < 72 ? "compact" : "comfortable";
+      return;
+    }
+    const columns = Math.max(1, Number(grid.style.getPropertyValue("--tdp-columns")) || 5);
+    const rows = Math.max(1, Number(grid.style.getPropertyValue("--tdp-rows")) || 3);
+    const gap = Math.max(0, Number.parseFloat(grid.style.getPropertyValue("--tdp-gap")) || 0);
+    const styles = window.getComputedStyle(grid);
+    const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0);
+    const verticalPadding = (Number.parseFloat(styles.paddingTop) || 0) + (Number.parseFloat(styles.paddingBottom) || 0);
+    const horizontal = (viewport.clientWidth - horizontalPadding - (columns - 1) * gap) / columns;
+    const vertical = (viewport.clientHeight - verticalPadding - (rows - 1) * gap) / rows;
+    const fitted = Math.max(32, Math.floor(Math.min(preferred, horizontal, vertical)));
+    grid.style.setProperty("--tdp-button-size", `${fitted}px`);
+    grid.dataset.compressed = String(fitted < preferred);
+    grid.dataset.density = fitted < 72 ? "compact" : "comfortable";
+  }
+
+  function renderAssignmentBar() {
+    const bar = $("#tdp-assignment-bar");
+    if (!bar) return;
+    bar.hidden = mode !== "edit" || !pendingAction;
+    if (!pendingAction) return;
+    $("#tdp-assignment-title").textContent = `${pendingAction.pluginName} · ${pendingAction.actionName}`;
+    $("#tdp-assignment-icon").innerHTML = iconMarkup(pendingAction.icon, "＋");
+    $("#tdp-assignment-mode").value = assignmentMode;
+  }
+
+  function renderGrid(currentProfile, currentFolder, layout = currentFolder) {
+    const capacity = layout.rows * layout.columns;
     const visible = Array.from({ length: capacity }, (_, index) => currentFolder.buttons?.[index] || blankButton(index));
     const usedCount = visible.filter(isUsed).length;
     const freeCount = capacity - usedCount;
     $("#tdp-capacity").textContent = `${freeCount} von ${capacity} Tasten frei · ${usedCount} belegt`;
-    $("#tdp-draft-state").textContent = draftDirty ? "Nicht gespeicherte Vorschau" : "Alle Änderungen gespeichert";
-    $("#tdp-draft-state").classList.toggle("dirty", draftDirty);
+    const layoutDirty = Boolean(layoutPreview);
+    $("#tdp-draft-state").textContent = layoutDirty
+      ? "Rastervorschau – noch nicht gespeichert"
+      : draftDirty
+        ? "Nicht gespeicherte Tastenvorschau"
+        : "Alle Änderungen gespeichert";
+    $("#tdp-draft-state").classList.toggle("dirty", draftDirty || layoutDirty);
 
     const grid = $("#tdp-grid");
-    grid.style.setProperty("--tdp-columns", String(currentFolder.columns));
-    grid.style.setProperty("--tdp-button-size", `${currentFolder.buttonSize}px`);
-    grid.style.setProperty("--tdp-gap", `${currentFolder.gap}px`);
+    grid.dataset.fit = layout.autoFit === false ? "fixed" : "auto";
+    grid.dataset.labels = layout.showLabels === false ? "hidden" : "visible";
+    grid.style.setProperty("--tdp-columns", String(layout.columns));
+    grid.style.setProperty("--tdp-rows", String(layout.rows));
+    grid.style.setProperty("--tdp-preferred-button-size", `${layout.buttonSize}px`);
+    grid.style.setProperty("--tdp-button-size", `${layout.buttonSize}px`);
+    grid.style.setProperty("--tdp-button-radius", `${layout.buttonRadius ?? 12}px`);
+    grid.style.setProperty("--tdp-gap", `${layout.gap}px`);
     grid.style.setProperty("--tdp-folder-background", currentFolder.background || "#090f18");
-    grid.replaceChildren(...visible.map((button, index) => keyElement(currentProfile, currentFolder, button, index)));
+    grid.replaceChildren(...visible.map((button, index) => keyElement(currentProfile, currentFolder, layout, button, index)));
+    scheduleGridFit();
   }
 
   function isUsed(button) {
     return Boolean(button?.actions?.length || button?.folderId || button?.title || button?.subtitle || button?.icon);
   }
 
-  function keyElement(currentProfile, currentFolder, sourceButton, index) {
+  function keyElement(currentProfile, currentFolder, layout, sourceButton, index) {
     const button = index === selectedIndex && draft ? draft : sourceButton;
     const used = isUsed(button);
     const element = document.createElement("button");
@@ -459,7 +619,7 @@
     element.style.setProperty("--tdp-key-color", button.color || "#152130");
     element.style.setProperty("--tdp-key-text", button.textColor || "#ffffff");
     element.setAttribute("aria-label", used ? (button.title || `Belegte Taste ${index + 1}`) : `Unbelegte Taste ${index + 1}`);
-    element.hidden = Boolean(currentFolder.hideUnused && !used);
+    element.hidden = Boolean(layout.hideUnused && !used);
 
     if (used) {
       const image = button.icon && /^data:image\//.test(button.icon)
@@ -473,6 +633,7 @@
     element.addEventListener("click", async () => {
       if (mode === "run") return executeKey(element, currentProfile, currentFolder, sourceButton, index);
       if (moveSourceIndex >= 0) return finishTouchMove(currentProfile, currentFolder, index);
+      if (pendingAction) return assignActionToKey(currentProfile, currentFolder, sourceButton, index, pendingAction);
       selectKey(index, sourceButton);
     });
     element.addEventListener("dblclick", async () => {
@@ -502,9 +663,7 @@
       element.classList.remove("drop-target");
       const actionJson = event.dataTransfer.getData(actionTransferType);
       if (actionJson) {
-        selectKey(index, sourceButton, true);
-        addLibraryAction(JSON.parse(actionJson));
-        return;
+        return assignActionToKey(currentProfile, currentFolder, sourceButton, index, JSON.parse(actionJson));
       }
       const from = Number(event.dataTransfer.getData(keyTransferType));
       if (Number.isInteger(from) && from !== index) {
@@ -643,24 +802,62 @@
     }));
   }
 
-  function addLibraryAction(transfer) {
-    if (selectedIndex < 0 || !draft) {
-      toast("Zuerst eine leere oder belegte Taste auswählen.", true);
-      return;
-    }
-    draft.actions ||= [];
-    draft.actions.push({
+  function actionFromTransfer(transfer) {
+    return {
       id: `action-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       type: transfer.actionId,
       title: `${transfer.pluginName} · ${transfer.actionName}`,
       settings: {},
       delayMs: 0
-    });
-    if (!draft.title) draft.title = transfer.actionName;
-    if (!draft.icon && transfer.icon) draft.icon = transfer.icon;
-    draftDirty = true;
+    };
+  }
+
+  function selectLibraryAction(transfer) {
+    pendingAction = structuredClone(transfer);
+    moveSourceIndex = -1;
+    lastLibrarySignature = "";
     render();
-    toast("Aktion zur Vorschau hinzugefügt. Rechts speichern.");
+    toast(`„${transfer.actionName}“ gewählt. Jetzt die Zieltaste antippen.`);
+  }
+
+  function cancelPendingAssignment() {
+    pendingAction = null;
+    lastLibrarySignature = "";
+    render();
+  }
+
+  async function assignActionToKey(currentProfile, currentFolder, sourceButton, index, transfer) {
+    if (draftDirty && !discardDraftIfNeeded()) return;
+    draftDirty = false;
+    const next = structuredClone(sourceButton || blankButton(index));
+    const action = actionFromTransfer(transfer);
+    if (assignmentMode === "append" && Array.isArray(next.actions) && next.actions.length) {
+      next.actions.push(action);
+      if (!next.title) next.title = transfer.actionName;
+      if (!next.icon && transfer.icon) next.icon = transfer.icon;
+    } else {
+      next.title = transfer.actionName;
+      next.subtitle = "";
+      next.icon = transfer.icon || "";
+      next.folderId = "";
+      next.actions = [action];
+      next.enabled = true;
+    }
+    const deck = await call("deck:update-button", {
+      profileId: currentProfile.id,
+      folderId: currentFolder.id,
+      buttonIndex: index,
+      button: next
+    });
+    state.deck = deck;
+    lastViewSignature = viewStateSignature(state);
+    selectedIndex = index;
+    draft = structuredClone(next);
+    draftDirty = false;
+    pendingAction = null;
+    lastLibrarySignature = "";
+    render();
+    toast(`Taste ${index + 1} wurde mit „${transfer.actionName}“ belegt und gespeichert.`);
   }
 
   function addActionFromInspector() {
@@ -746,6 +943,8 @@
     selectedIndex = -1;
     draft = null;
     draftDirty = false;
+    pendingAction = null;
+    layoutPreview = null;
     await refresh();
   }
 
@@ -758,6 +957,8 @@
     selectedIndex = -1;
     draft = null;
     draftDirty = false;
+    pendingAction = null;
+    layoutPreview = null;
     await refresh();
   }
 
@@ -770,15 +971,16 @@
     selectedIndex = -1;
     draft = null;
     draftDirty = false;
+    pendingAction = null;
+    layoutPreview = null;
     await refresh();
   }
 
   async function applyGrid() {
     const currentProfile = profile();
     const currentFolder = folder(currentProfile);
-    const rows = Math.max(1, Math.min(10, Number($("#tdp-rows").value) || 3));
-    const columns = Math.max(1, Math.min(10, Number($("#tdp-columns").value) || 5));
-    const newCapacity = rows * columns;
+    const layout = layoutFromControls();
+    const newCapacity = layout.rows * layout.columns;
     const hiddenUsed = (currentFolder.buttons || []).slice(newCapacity).filter(isUsed).length;
     if (hiddenUsed > 0) {
       const proceed = window.confirm(`${hiddenUsed} belegte Taste(n) werden nur ausgeblendet, aber nicht gelöscht. Raster trotzdem übernehmen?`);
@@ -787,16 +989,11 @@
     await call("deck:update-folder", {
       profileId: currentProfile.id,
       folderId: currentFolder.id,
-      patch: {
-        rows,
-        columns,
-        buttonSize: Math.max(64, Math.min(260, Number($("#tdp-size").value) || 116)),
-        gap: Math.max(0, Math.min(40, Number($("#tdp-gap").value) || 12)),
-        hideUnused: $("#tdp-hide-unused").checked
-      }
+      patch: layout
     });
+    layoutPreview = null;
     await refresh();
-    toast("Raster gespeichert. Verdeckte Belegungen bleiben erhalten.");
+    toast("Raster, Tastengröße und Darstellung gespeichert.");
   }
 
   function handleKeyboardShortcut(event) {
@@ -825,8 +1022,23 @@
       draft = structuredClone(currentFolder?.buttons?.[selectedIndex] || blankButton(selectedIndex));
       draft.actions ||= [];
     }
+    lastViewSignature = viewStateSignature(state);
     render();
     return state;
+  }
+
+  function viewStateSignature(next) {
+    const plugins = next?.plugins || {};
+    return JSON.stringify([
+      next?.deck || null,
+      plugins.scannedAt || 0,
+      (plugins.plugins || []).map((plugin) => [
+        plugin.id,
+        plugin.enabled,
+        plugin.status,
+        plugin.actions?.map((action) => [action.id, action.name, action.visibleInActionsList]) || []
+      ])
+    ]);
   }
 
   function mount(target) {
@@ -837,7 +1049,9 @@
     bind();
     api.onStateChanged((next) => {
       state = next;
-      if (view.classList.contains("active")) {
+      const signature = viewStateSignature(next);
+      if (view.classList.contains("active") && signature !== lastViewSignature) {
+        lastViewSignature = signature;
         if (selectedIndex >= 0 && !draftDirty) {
           const currentFolder = folder(profile());
           draft = structuredClone(currentFolder?.buttons?.[selectedIndex] || blankButton(selectedIndex));
@@ -846,6 +1060,13 @@
         render();
       }
     });
+    const viewport = $(".tdp-grid-viewport", view);
+    if (typeof ResizeObserver === "function" && viewport) {
+      resizeObserver = new ResizeObserver(scheduleGridFit);
+      resizeObserver.observe(viewport);
+    } else {
+      window.addEventListener("resize", scheduleGridFit, { passive: true });
+    }
     $("[data-view='deck']")?.addEventListener("click", () => window.setTimeout(() => refresh(), 0));
     refresh({ scanPlugins: true }).catch((error) => console.error("Touch-Deck V3:", error));
   }

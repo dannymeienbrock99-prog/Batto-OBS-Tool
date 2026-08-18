@@ -26,9 +26,23 @@ test("Touch-Deck kombiniert Pluginleiste, Deck und Inspector", () => {
 
 test("Pluginaktionen können angeklickt und per Drag-and-drop zugewiesen werden", () => {
   assert.match(script, /application\/x-batto-touch-deck-action/);
-  assert.match(script, /addLibraryAction/);
+  assert.match(script, /selectLibraryAction/);
+  assert.match(script, /assignActionToKey/);
+  assert.match(script, /deck:update-button/);
+  assert.match(script, /belegt und gespeichert/);
   assert.match(script, /dataTransfer\.setData\(actionTransferType/);
   assert.match(script, /dataTransfer\.getData\(actionTransferType/);
+});
+
+test("Raster, Gerätegröße und Tastendarstellung sind frei anpassbar", () => {
+  for (const marker of [
+    "Stream Deck Mini · 6", "Stream Deck Neo · 8", "Stream Deck + · 8",
+    "Stream Deck · 15", "Stream Deck XL · 32", "tdp-auto-fit", "tdp-show-labels",
+    "tdp-radius", "layoutFromControls", "ResizeObserver"
+  ]) assert.match(script, new RegExp(marker.replace(/[+]/g, "\\+")));
+  assert.match(script, /buttonSize:\s*Math\.max\(48, Math\.min\(320/);
+  assert.match(css, /--tdp-button-radius/);
+  assert.match(css, /data-labels="hidden"/);
 });
 
 test("Leere Tasten bleiben ohne sichtbare Standardbeschriftung", () => {

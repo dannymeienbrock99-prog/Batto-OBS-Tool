@@ -2,7 +2,17 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { EventEmitter } = require("node:events");
 const { clampNumber, deepClone, randomId, readJson, safeText, writeJsonAtomic } = require("./common.cjs");
+
+const LAYOUT_PRESETS = new Set(["custom", "mini", "neo", "plus", "standard", "xl"]);
+
+function inferLayoutPreset(rows, columns) {
+  if (rows === 2 && columns === 3) return "mini";
+  if (rows === 3 && columns === 5) return "standard";
+  if (rows === 4 && columns === 8) return "xl";
+  return "custom";
+}
 
 function normalizeAction(action = {}) {
   return {
@@ -45,9 +55,15 @@ function normalizeFolder(folder = {}, index = 0, defaults = {}) {
     parentId: safeText(folder.parentId || "", 120),
     rows,
     columns,
+    layoutPreset: LAYOUT_PRESETS.has(String(folder.layoutPreset || "").toLowerCase())
+      ? String(folder.layoutPreset).toLowerCase()
+      : inferLayoutPreset(rows, columns),
     hideUnused: Boolean(folder.hideUnused),
-    buttonSize: Math.round(clampNumber(folder.buttonSize, 64, 260, 116)),
-    gap: Math.round(clampNumber(folder.gap, 0, 40, 12)),
+    autoFit: folder.autoFit !== false,
+    showLabels: folder.showLabels !== false,
+    buttonSize: Math.round(clampNumber(folder.buttonSize, 48, 320, 116)),
+    buttonRadius: Math.round(clampNumber(folder.buttonRadius, 0, 48, 12)),
+    gap: Math.round(clampNumber(folder.gap, 0, 48, 12)),
     opacity: clampNumber(folder.opacity, 0.2, 1, 1),
     background: /^#[0-9a-f]{6}$/i.test(String(folder.background || "")) ? String(folder.background).toLowerCase() : "#090f18",
     buttons
@@ -89,8 +105,9 @@ function normalizeState(value) {
   return { version: 2, activeProfileId, profiles, updatedAt: Number(value.updatedAt) || Date.now() };
 }
 
-class DeckStore {
+class DeckStore extends EventEmitter {
   constructor(file) {
+    super();
     this.file = file;
     this.state = normalizeState(readJson(file, null));
     this.save();
@@ -99,7 +116,9 @@ class DeckStore {
   save() {
     this.state.updatedAt = Date.now();
     writeJsonAtomic(this.file, this.state);
-    return this.snapshot();
+    const snapshot = this.snapshot();
+    this.emit("changed", snapshot);
+    return snapshot;
   }
 
   snapshot() { return deepClone(this.state); }
@@ -149,7 +168,10 @@ class DeckStore {
     const parent = profile.folders.find((folder) => folder.id === parentId) || profile.folders[0];
     const folder = normalizeFolder({
       id: randomId("folder"), name: safeText(name || "Neuer Ordner", 120), parentId: parent.id,
-      rows: parent.rows, columns: parent.columns, buttonSize: parent.buttonSize, gap: parent.gap
+      rows: parent.rows, columns: parent.columns, layoutPreset: parent.layoutPreset,
+      autoFit: parent.autoFit, showLabels: parent.showLabels, hideUnused: parent.hideUnused,
+      buttonSize: parent.buttonSize, buttonRadius: parent.buttonRadius, gap: parent.gap,
+      opacity: parent.opacity, background: parent.background
     }, profile.folders.length);
     profile.folders.push(folder);
     profile.activeFolderId = folder.id;
@@ -250,4 +272,4 @@ class DeckStore {
   }
 }
 
-module.exports = { DeckStore, defaultState, normalizeAction, normalizeButton, normalizeFolder, normalizeProfile, normalizeState };
+module.exports = { LAYOUT_PRESETS, DeckStore, defaultState, inferLayoutPreset, normalizeAction, normalizeButton, normalizeFolder, normalizeProfile, normalizeState };

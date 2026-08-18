@@ -12,6 +12,17 @@ const DEVICE_ID = "batto-touch-monitor";
 const REGISTER_EVENT = "registerPlugin";
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+function normalizedDeviceSize(value = {}) {
+  return {
+    columns: Math.max(1, Math.min(10, Math.round(Number(value.columns) || 5))),
+    rows: Math.max(1, Math.min(10, Math.round(Number(value.rows) || 3)))
+  };
+}
+
+function deviceInfo(size) {
+  return { name: "Batto Touch Monitor", size: normalizedDeviceSize(size), type: 0 };
+}
+
 function contextId(pluginId, actionId, context = {}) {
   const key = [pluginId, actionId, context.profileId || "default", context.folderId || "root", Number(context.buttonIndex) || 0].join(":");
   return `batto-${crypto.createHash("sha256").update(key).digest("hex").slice(0, 32)}`;
@@ -23,7 +34,7 @@ function coordinates(context = {}) {
   return { column: index % columns, row: Math.floor(index / columns) };
 }
 
-function pluginInfo(plugin) {
+function pluginInfo(plugin, size = { columns: 5, rows: 3 }) {
   return {
     application: {
       font: "Arial",
@@ -39,18 +50,19 @@ function pluginInfo(plugin) {
       highlightColor: "#34d6ff"
     },
     devicePixelRatio: 1,
-    devices: [{ id: DEVICE_ID, name: "Batto Touch Monitor", size: { columns: 8, rows: 4 }, type: 0 }],
+    devices: [{ id: DEVICE_ID, ...deviceInfo(size) }],
     plugin: { uuid: plugin.id, version: plugin.version || "0.0.0" }
   };
 }
 
 class StreamDeckPluginHost extends EventEmitter {
-  constructor({ registry, stateFile, shell, registrationTimeoutMs = 8000 } = {}) {
+  constructor({ registry, stateFile, shell, registrationTimeoutMs = 8000, idleTimeoutMs = 120000 } = {}) {
     super();
     this.registry = registry;
     this.stateFile = stateFile || path.join(process.cwd(), "stream-deck-plugin-host.json");
     this.shell = shell;
     this.registrationTimeoutMs = registrationTimeoutMs;
+    this.idleTimeoutMs = Math.max(15000, Math.min(30 * 60 * 1000, Number(idleTimeoutMs) || 120000));
     this.state = readJson(this.stateFile, { contexts: {}, global: {}, feedback: {} }) || { contexts: {}, global: {}, feedback: {} };
     this.state.contexts ||= {};
     this.state.global ||= {};
@@ -60,6 +72,8 @@ class StreamDeckPluginHost extends EventEmitter {
     this.socketSessions = new WeakMap();
     this.pendingByUuid = new Map();
     this.visibleContexts = new Map();
+    this.deviceSize = normalizedDeviceSize();
+    this.persistTimer = null;
   }
 
   async start() {
@@ -84,6 +98,7 @@ class StreamDeckPluginHost extends EventEmitter {
     return {
       active: Boolean(this.server),
       port: this.port(),
+      device: { id: DEVICE_ID, ...deviceInfo(this.deviceSize) },
       sessions: [...this.sessions.values()].map((session) => ({
         pluginId: session.plugin.id,
         connected: session.socket?.readyState === WebSocket.OPEN,
@@ -126,7 +141,7 @@ class StreamDeckPluginHost extends EventEmitter {
       this.send(session, {
         event: "deviceDidConnect",
         device: DEVICE_ID,
-        deviceInfo: { name: "Batto Touch Monitor", size: { columns: 8, rows: 4 }, type: 0 }
+        deviceInfo: deviceInfo(this.deviceSize)
       });
       session.resolveReady?.(session);
       this.emit("changed", this.status());
@@ -150,16 +165,44 @@ class StreamDeckPluginHost extends EventEmitter {
     writeJsonAtomic(this.stateFile, this.state);
   }
 
+  schedulePersist() {
+    clearTimeout(this.persistTimer);
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      this.persist();
+    }, 250);
+    this.persistTimer.unref?.();
+  }
+
+  updateDeviceSize(context = {}) {
+    const next = normalizedDeviceSize({
+      columns: context.columns || this.deviceSize.columns,
+      rows: context.rows || this.deviceSize.rows
+    });
+    if (next.columns === this.deviceSize.columns && next.rows === this.deviceSize.rows) return;
+    this.deviceSize = next;
+    for (const session of this.sessions.values()) {
+      if (session.socket?.readyState !== WebSocket.OPEN) continue;
+      try {
+        this.send(session, { event: "deviceDidDisconnect", device: DEVICE_ID });
+        this.send(session, { event: "deviceDidConnect", device: DEVICE_ID, deviceInfo: deviceInfo(this.deviceSize) });
+      } catch {}
+    }
+    this.emit("changed", this.status());
+  }
+
   updateFeedback(context, patch) {
     if (!context) return;
+    const previous = this.state.feedback[context] || {};
+    const unchanged = Object.entries(patch).every(([key, value]) => JSON.stringify(previous[key]) === JSON.stringify(value));
+    if (unchanged) return;
     this.state.feedback[context] = {
-      ...(this.state.feedback[context] || {}),
+      ...previous,
       ...patch,
       updatedAt: Date.now()
     };
-    this.persist();
+    this.schedulePersist();
     this.emit("feedback", { context, ...this.state.feedback[context] });
-    this.emit("changed", this.status());
   }
 
   async handlePluginCommand(session, message = {}) {
@@ -222,10 +265,47 @@ class StreamDeckPluginHost extends EventEmitter {
     }
   }
 
-  async ensureSession(plugin) {
+  clearSessionIdle(session) {
+    clearTimeout(session?.idleTimer);
+    if (session) session.idleTimer = null;
+  }
+
+  scheduleSessionIdle(session) {
+    this.clearSessionIdle(session);
+    session.lastUsedAt = Date.now();
+    session.idleTimer = setTimeout(() => {
+      const key = session.plugin.id.toLowerCase();
+      if (this.sessions.get(key) === session) this.stopSession(key, "Plugin wegen Inaktivität beendet");
+    }, this.idleTimeoutMs);
+    session.idleTimer.unref?.();
+  }
+
+  stopSession(key, reason = "Plugin-Sitzung beendet", emitChange = true) {
+    const normalizedKey = String(key || "").toLowerCase();
+    const session = this.sessions.get(normalizedKey);
+    if (!session) return;
+    this.clearSessionIdle(session);
+    for (const [context, meta] of this.visibleContexts) {
+      if (meta.pluginId.toLowerCase() !== normalizedKey) continue;
+      try { this.send(session, { event: "willDisappear", action: meta.actionId, context, device: DEVICE_ID, payload: { settings: this.state.contexts[context] || {}, controller: "Keypad", isInMultiAction: false } }); } catch {}
+      this.visibleContexts.delete(context);
+    }
+    try { this.send(session, { event: "deviceDidDisconnect", device: DEVICE_ID }); } catch {}
+    try { session.socket?.close(1001, reason); session.socket?.terminate?.(); } catch {}
+    try { session.child?.kill(); } catch {}
+    this.sessions.delete(normalizedKey);
+    this.pendingByUuid.delete(normalizedKey);
+    if (emitChange) this.emit("changed", this.status());
+  }
+
+  async ensureSession(plugin, context = {}) {
+    this.updateDeviceSize(context);
     const key = plugin.id.toLowerCase();
     const existing = this.sessions.get(key);
-    if (existing?.socket?.readyState === WebSocket.OPEN) return existing;
+    if (existing?.socket?.readyState === WebSocket.OPEN) {
+      this.clearSessionIdle(existing);
+      return existing;
+    }
     if (existing?.readyPromise) return existing.readyPromise;
     if (plugin.runtime?.status !== "ready" || !plugin.executableExists) {
       throw new Error(`Die Laufzeit von „${plugin.name}“ fehlt, ist inkompatibel oder durch die Elgato-Marketplace-Installation geschützt.`);
@@ -233,7 +313,7 @@ class StreamDeckPluginHost extends EventEmitter {
     if (!plugin.enabled) throw new Error(`Plugin „${plugin.name}“ ist deaktiviert.`);
     await this.start();
 
-    const session = { plugin, child: null, socket: null, error: "", resolveReady: null, rejectReady: null, readyPromise: null };
+    const session = { plugin, child: null, socket: null, error: "", resolveReady: null, rejectReady: null, readyPromise: null, idleTimer: null, lastUsedAt: Date.now() };
     session.readyPromise = new Promise((resolve, reject) => {
       session.resolveReady = resolve;
       session.rejectReady = reject;
@@ -245,7 +325,7 @@ class StreamDeckPluginHost extends EventEmitter {
       "-port", String(this.port()),
       "-pluginUUID", plugin.id,
       "-registerEvent", REGISTER_EVENT,
-      "-info", JSON.stringify(pluginInfo(plugin))
+      "-info", JSON.stringify(pluginInfo(plugin, this.deviceSize))
     ];
     let executable = plugin.executablePath;
     let args = registrationArgs;
@@ -281,10 +361,12 @@ class StreamDeckPluginHost extends EventEmitter {
     session.child.once("error", (error) => session.rejectReady?.(new Error(`Plugin „${plugin.name}“ konnte nicht gestartet werden: ${error.message}`)));
     session.child.once("exit", (code, signal) => {
       if (!session.socket) session.rejectReady?.(new Error(`Plugin „${plugin.name}“ wurde vor der WebSocket-Anmeldung beendet (${code ?? signal ?? "unbekannt"}).`));
+      this.clearSessionIdle(session);
       session.child = null;
       session.socket = null;
       session.readyPromise = null;
       this.pendingByUuid.delete(key);
+      if (this.sessions.get(key) === session) this.sessions.delete(key);
       this.emit("changed", this.status());
     });
 
@@ -311,7 +393,7 @@ class StreamDeckPluginHost extends EventEmitter {
     if (!plugin) throw new Error(`Für die originale Stream-Deck-Aktion „${actionId}“ wurde kein ausführbares Plugin gefunden.`);
     const declaredAction = plugin.actions?.find((entry) => entry.id.toLowerCase() === actionId.toLowerCase());
     if (declaredAction?.raw?.supportedInTouchDeck === false) throw new Error(`Aktion „${declaredAction.name}“ unterstützt keine Keypad-/Touch-Taste.`);
-    const session = await this.ensureSession(plugin);
+    const session = await this.ensureSession(plugin, context);
     const id = contextId(plugin.id, actionId, context);
     const configured = action.settings && typeof action.settings === "object" ? action.settings : {};
     const settings = { ...(this.state.contexts[id] || {}), ...configured };
@@ -323,30 +405,26 @@ class StreamDeckPluginHost extends EventEmitter {
       controller: "Keypad",
       isInMultiAction: Boolean(context.multiAction)
     };
-    if (!this.visibleContexts.has(id)) {
-      this.send(session, { event: "willAppear", action: actionId, context: id, device: DEVICE_ID, payload });
-      this.visibleContexts.set(id, { pluginId: plugin.id, actionId });
+    try {
+      if (!this.visibleContexts.has(id)) {
+        this.send(session, { event: "willAppear", action: actionId, context: id, device: DEVICE_ID, payload });
+        this.visibleContexts.set(id, { pluginId: plugin.id, actionId });
+      }
+      this.send(session, { event: "keyDown", action: actionId, context: id, device: DEVICE_ID, payload: { ...payload, userDesiredState: undefined } });
+      await wait(45);
+      this.send(session, { event: "keyUp", action: actionId, context: id, device: DEVICE_ID, payload: { ...payload, userDesiredState: undefined } });
+      await wait(80);
+      return { dispatched: true, pluginId: plugin.id, context: id, feedback: this.state.feedback[id] || null };
+    } finally {
+      this.scheduleSessionIdle(session);
     }
-    this.send(session, { event: "keyDown", action: actionId, context: id, device: DEVICE_ID, payload: { ...payload, userDesiredState: undefined } });
-    await wait(45);
-    this.send(session, { event: "keyUp", action: actionId, context: id, device: DEVICE_ID, payload: { ...payload, userDesiredState: undefined } });
-    await wait(80);
-    return { dispatched: true, pluginId: plugin.id, context: id, feedback: this.state.feedback[id] || null };
   }
 
   async stop() {
-    for (const [context, meta] of this.visibleContexts) {
-      const session = this.sessions.get(meta.pluginId.toLowerCase());
-      try { this.send(session, { event: "willDisappear", action: meta.actionId, context, device: DEVICE_ID, payload: { settings: this.state.contexts[context] || {}, controller: "Keypad", isInMultiAction: false } }); } catch {}
-    }
-    this.visibleContexts.clear();
-    for (const session of this.sessions.values()) {
-      try { this.send(session, { event: "deviceDidDisconnect", device: DEVICE_ID }); } catch {}
-      try { session.socket?.close(1001, "Batto OBS Tool wird beendet"); session.socket?.terminate?.(); } catch {}
-      try { session.child?.kill(); } catch {}
-    }
-    this.sessions.clear();
-    this.pendingByUuid.clear();
+    for (const key of [...this.sessions.keys()]) this.stopSession(key, "Batto OBS Tool wird beendet", false);
+    clearTimeout(this.persistTimer);
+    this.persistTimer = null;
+    this.persist();
     const server = this.server;
     this.server = null;
     if (server) await new Promise((resolve) => server.close(() => resolve()));
@@ -359,5 +437,7 @@ module.exports = {
   StreamDeckPluginHost,
   contextId,
   coordinates,
+  deviceInfo,
+  normalizedDeviceSize,
   pluginInfo
 };

@@ -7,7 +7,7 @@ const path = require("node:path");
 const test = require("node:test");
 const AdmZip = require("adm-zip");
 const { PluginRegistry } = require("../src/services/plugin-registry.cjs");
-const { StreamDeckPluginHost } = require("../src/services/stream-deck-plugin-host.cjs");
+const { StreamDeckPluginHost, pluginInfo } = require("../src/services/stream-deck-plugin-host.cjs");
 
 const temporary = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
 
@@ -24,6 +24,12 @@ function createPluginArchive(file, { uuid = "com.crazybatto.test", actionId = "c
   zip.addFile(`${uuid}.sdPlugin/plugin.cjs`, Buffer.from(script || "setInterval(() => {}, 1000);"));
   zip.writeZip(file);
 }
+
+test("virtuelles Touch-Gerät meldet das gewählte Raster an originale Plugins", () => {
+  const info = pluginInfo({ id: "com.crazybatto.layout", version: "1.0.0" }, { columns: 8, rows: 4 });
+  assert.deepEqual(info.devices[0].size, { columns: 8, rows: 4 });
+  assert.equal(info.devices[0].name, "Batto Touch Monitor");
+});
 
 test(".streamDeckPlugin ZIP wird sicher importiert und als ausführbare Original-Laufzeit erkannt", () => {
   const root = temporary("batto-streamdeck-import");
@@ -87,10 +93,11 @@ test("originale Node-Plugin-Laufzeit empfängt willAppear, keyDown und keyUp üb
   registry.importPath(source, plugins);
   const host = new StreamDeckPluginHost({ registry, stateFile: path.join(root, "host.json"), shell: { openExternal: async () => {} }, registrationTimeoutMs: 5000 });
   try {
-    const result = await host.execute({ type: "com.crazybatto.runtime.press", settings: { value: 7 } }, { profileId: "p", folderId: "root", buttonIndex: 3, columns: 5 });
+    const result = await host.execute({ type: "com.crazybatto.runtime.press", settings: { value: 7 } }, { profileId: "p", folderId: "root", buttonIndex: 3, columns: 5, rows: 3 });
     const events = JSON.parse(fs.readFileSync(eventFile, "utf8"));
     assert.deepEqual(events.slice(0, 4), ["deviceDidConnect", "willAppear", "keyDown", "keyUp"]);
     assert.equal(result.dispatched, true);
+    assert.deepEqual(host.status().device.size, { columns: 5, rows: 3 });
     assert.equal(host.status().feedback[result.context].title, "Original OK");
     assert.equal(host.status().feedback[result.context].result, "ok");
   } finally {

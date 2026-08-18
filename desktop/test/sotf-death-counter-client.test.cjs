@@ -26,6 +26,8 @@ test("SOTF DeathCounter v0.3.0 Snapshot wird lokal und ohne erfundene Werte norm
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   const client = new SotfDeathCounterClient({ baseUrl: `http://127.0.0.1:${port}/`, timeoutMs: 1000 });
+  let changes = 0;
+  client.on("changed", () => { changes += 1; });
   try {
     const status = await client.refresh({ throwOnError: true });
     assert.equal(status.connected, true);
@@ -33,6 +35,8 @@ test("SOTF DeathCounter v0.3.0 Snapshot wird lokal und ohne erfundene Werte norm
     assert.equal(status.snapshot.players[0].sessionDeaths, 2);
     assert.equal(status.snapshot.lastEvent.reason, "Mutant");
     assert.match(status.overlayUrl, new RegExp(`127\\.0\\.0\\.1:${port}/overlay`));
+    await client.refresh({ throwOnError: true });
+    assert.equal(changes, 1, "identische Polling-Antworten dürfen keinen Vollzustand auslösen");
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
