@@ -130,10 +130,11 @@ class ActionExecutor extends EventEmitter {
 
   async execute(action = {}, context = {}) {
     const type = safeText(action.type || action.action || "none", 160);
+    const pluginId = safeText(action.pluginId || "", 200);
     const settings = action.settings && typeof action.settings === "object" ? action.settings : {};
     const startedAt = Date.now();
     try {
-      const value = await this._execute(type, settings, context);
+      const value = await this._execute(type, settings, context, pluginId);
       const result = { ok: true, type, value, startedAt, finishedAt: Date.now() };
       this.emit("executed", result);
       return result;
@@ -144,7 +145,7 @@ class ActionExecutor extends EventEmitter {
     }
   }
 
-  async _execute(type, settings, context) {
+  async _execute(type, settings, context, pluginId = "") {
     if (!type || type === "none") return { skipped: true };
     if (MEDIA_KEYS[type]) {
       await pressVirtualKey(MEDIA_KEYS[type]);
@@ -376,7 +377,7 @@ class ActionExecutor extends EventEmitter {
       }
       default:
         if (this.pluginHost?.registry?.findPluginForAction?.(type)) {
-          return this.pluginHost.execute({ type, settings }, context);
+          return this.pluginHost.execute({ type, pluginId, settings }, context);
         }
         throw new Error(`Aktion „${type}“ wird ohne passende Laufzeit nicht ausgeführt.`);
     }

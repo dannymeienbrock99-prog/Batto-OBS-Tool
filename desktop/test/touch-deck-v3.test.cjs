@@ -16,12 +16,17 @@ test("Touch-Deck V3 JavaScript ist syntaktisch gültig", () => {
   assert.doesNotThrow(() => new vm.Script(script));
 });
 
-test("Touch-Deck kombiniert Pluginleiste, Deck und Inspector", () => {
+test("Touch-Deck entspricht dem neuen Zwei-Spalten-Editor", () => {
   for (const marker of [
-    "tdp-library", "tdp-search", "tdp-tab-actions", "tdp-tab-plugins",
+    "tdp-workspace", "tdp-library", "tdp-search", "tdp-tab-actions", "tdp-tab-plugins",
     "tdp-grid", "tdp-inspector", "tdp-action-type", "tdp-action-properties", "tdp-save-key"
   ]) assert.match(script, new RegExp(marker));
-  assert.match(css, /grid-template-columns:\s*minmax\(260px, 315px\)\s+minmax\(430px, 1fr\)\s+minmax\(300px, 340px\)/);
+  assert.match(css, /grid-template-columns:\s*minmax\(520px, 1fr\)\s+clamp\(296px, 30vw, 360px\)/);
+  assert.match(css, /grid-template-rows:\s*94px 344px minmax\(0, 1fr\)/);
+  assert.ok(script.indexOf("tdp-workspace") < script.indexOf("tdp-library\" aria-label"));
+  assert.match(css, /\.tdp-library[\s\S]*?border-left:/);
+  assert.match(css, /body:has\(#view-deck\.active \.tdp-shell\)[\s\S]*?\.sidebar/);
+  assert.doesNotMatch(script, /PROFILE · ORDNER · PLUGIN-AKTIONEN/);
   assert.doesNotMatch(script, /Touch-Deck Pro/i);
 });
 
@@ -116,7 +121,7 @@ test("Rasteränderungen bewahren verdeckte Belegungen", () => {
 });
 
 test("Ausführenmodus, Vollbild und berührbares Verschieben sind integriert", () => {
-  assert.match(script, /let mode = "run"/);
+  assert.match(script, /let mode = "edit"/);
   assert.match(script, /deck:execute-button/);
   assert.match(script, /window:toggle-fullscreen/);
   assert.match(script, /beginTouchMove/);
@@ -124,6 +129,15 @@ test("Ausführenmodus, Vollbild und berührbares Verschieben sind integriert", (
   assert.match(script, /document\.getElementById\("view-deck"\)/);
   assert.match(css, /pointer:\s*coarse/);
   assert.match(css, /data-mode="run"/);
+});
+
+test("Referenzgröße nutzt kompaktes 5×3-Deck und eine echte Ordner-Seitenanzeige", () => {
+  assert.match(css, /width:\s*min\(432px, calc\(100% - 32px\)\)/);
+  assert.match(css, /height:\s*270px/);
+  assert.match(css, /border:\s*3px solid #494949/);
+  assert.match(script, /id="tdp-page-indicator"/);
+  assert.match(script, /pageIndicator\.textContent = `Seite \$\{pageIndex \+ 1\}`/);
+  assert.match(script, /id="tdp-close"/);
 });
 
 test("Produktionsvorbereitung kopiert und lädt beide V3-Dateien", () => {

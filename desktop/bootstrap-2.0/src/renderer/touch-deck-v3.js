@@ -167,8 +167,8 @@
   let buttonClipboard = null;
   let libraryTab = "actions";
   let searchText = "";
-  let gridSettingsOpen = true;
-  let mode = "run";
+  let gridSettingsOpen = false;
+  let mode = "edit";
   let moveSourceIndex = -1;
   let pendingAction = null;
   let assignmentMode = "replace";
@@ -275,105 +275,110 @@
 
   function markup() {
     return `
-      <div class="tdp-shell" data-mode="run">
-        <header class="tdp-heading">
-          <div>
-            <span class="eyebrow">PROFILE · ORDNER · PLUGIN-AKTIONEN</span>
-            <h2>Touch-Deck</h2>
-            <p>Tasten frei belegen, Geräte-Raster wählen und Größe, Abstand sowie Beschriftung an deinen Touch-Monitor anpassen.</p>
-          </div>
-          <div class="button-row">
-            <button id="tdp-mode" class="primary" type="button">✎ Tasten belegen</button>
-            <button id="tdp-fullscreen" type="button">⛶ Vollbild</button>
-            <button id="tdp-import" type="button">Importieren</button>
-            <button id="tdp-export" type="button">Exportieren</button>
-          </div>
-        </header>
-
-        <section class="tdp-profilebar">
-          <label>Profil<select id="tdp-profile"></select></label>
-          <button id="tdp-add-profile" type="button">+ Profil</button>
-          <label>Ordner<select id="tdp-folder"></select></label>
-          <button id="tdp-back-folder" type="button">← Zurück</button>
-          <button id="tdp-add-folder" type="button">+ Ordner</button>
-          <button id="tdp-move-key" type="button" disabled>↔ Taste verschieben</button>
-          <button id="tdp-grid-settings" class="tdp-icon-button" type="button" aria-pressed="true" title="Rastereinstellungen ein- oder ausblenden">⚙</button>
-        </section>
-
+      <div class="tdp-shell" data-mode="edit">
         <div class="tdp-editor-layout">
+          <section class="tdp-workspace" aria-label="Touch-Deck-Arbeitsfläche">
+            <header class="tdp-heading">
+              <div class="tdp-deck-identity">
+                <h2>Touch-Deck</h2>
+                <div class="tdp-context-row">
+                  <label><span>Profil</span><select id="tdp-profile"></select></label>
+                  <label><span>Ordner</span><select id="tdp-folder"></select></label>
+                </div>
+              </div>
+              <div class="tdp-header-actions">
+                <button id="tdp-mode" class="tdp-quiet-button" type="button">Deck benutzen</button>
+                <button id="tdp-fullscreen" class="tdp-quiet-button" type="button">Vollbild</button>
+                <button id="tdp-grid-settings" class="tdp-quiet-button" type="button" aria-pressed="false">Raster</button>
+                <details class="tdp-management-menu">
+                  <summary>Verwalten</summary>
+                  <section class="tdp-profilebar">
+                    <button id="tdp-close" type="button">Zur Übersicht</button>
+                    <button id="tdp-add-profile" type="button">Neues Profil</button>
+                    <button id="tdp-back-folder" type="button">Ordner zurück</button>
+                    <button id="tdp-add-folder" type="button">Neuer Ordner</button>
+                    <button id="tdp-move-key" type="button" disabled>Taste verschieben</button>
+                    <button id="tdp-import" type="button">Deck importieren</button>
+                    <button id="tdp-export" type="button">Deck exportieren</button>
+                  </section>
+                </details>
+              </div>
+            </header>
+
+            <main class="tdp-stage">
+              <section id="tdp-grid-panel" class="tdp-grid-panel" hidden>
+                <label class="tdp-preset-field">Gerät / Raster<select id="tdp-preset">${Object.entries(layoutPresets).map(([value, preset]) => `<option value="${value}">${preset.label}</option>`).join("")}</select></label>
+                <label>Zeilen<input id="tdp-rows" type="number" min="1" max="10"></label>
+                <label>Spalten<input id="tdp-columns" type="number" min="1" max="10"></label>
+                <label class="tdp-slider-field">Tastengröße <output id="tdp-size-value">116 px</output><input id="tdp-size" type="range" min="48" max="320" step="2"></label>
+                <label class="tdp-slider-field">Abstand <output id="tdp-gap-value">12 px</output><input id="tdp-gap" type="range" min="0" max="48"></label>
+                <label class="tdp-slider-field">Ecken <output id="tdp-radius-value">12 px</output><input id="tdp-radius" type="range" min="0" max="48"></label>
+                <label class="tdp-check"><input id="tdp-auto-fit" type="checkbox" checked> Automatisch einpassen</label>
+                <label class="tdp-check"><input id="tdp-show-labels" type="checkbox" checked> Beschriftungen zeigen</label>
+                <label class="tdp-check"><input id="tdp-hide-unused" type="checkbox"> Unbenutzte Tasten ausblenden</label>
+                <button id="tdp-apply-grid" type="button">Raster übernehmen</button>
+              </section>
+              <section id="tdp-assignment-bar" class="tdp-assignment-bar" hidden>
+                <span class="tdp-assignment-icon" id="tdp-assignment-icon"></span>
+                <span><strong id="tdp-assignment-title">Aktion gewählt</strong><small>Jetzt eine Zieltaste antippen – die Belegung wird sofort gespeichert.</small></span>
+                <label>Belegen<select id="tdp-assignment-mode"><option value="replace">Taste ersetzen</option><option value="append">Als Mehrfachaktion anhängen</option></select></label>
+                <button id="tdp-cancel-assignment" type="button">Abbrechen</button>
+              </section>
+              <div class="tdp-grid-viewport">
+                <div id="tdp-grid" class="tdp-grid" aria-label="Touch-Deck-Tasten"></div>
+              </div>
+              <div class="tdp-deck-footer">
+                <span id="tdp-capacity">0 Tasten</span>
+                <span id="tdp-page-indicator" class="tdp-page-indicator">Seite 1</span>
+                <span id="tdp-draft-state">Alle Änderungen gespeichert</span>
+              </div>
+              <p id="tdp-stage-help" class="tdp-stage-help">Aktion rechts auswählen und anschließend eine Taste belegen.</p>
+            </main>
+
+            <aside class="tdp-inspector">
+              <header>
+                <div><h3>Taste konfigurieren</h3><p id="tdp-selected">Keine Taste ausgewählt.</p></div>
+                <div class="tdp-mini-actions">
+                  <button id="tdp-copy-key" type="button" title="Taste kopieren">Kopieren</button>
+                  <button id="tdp-paste-key" type="button" title="Taste einfügen">Einfügen</button>
+                </div>
+              </header>
+              <div id="tdp-inspector-body" class="tdp-inspector-body">
+                <label>Titel<input id="tdp-title" maxlength="120"></label>
+                <label>Untertitel<input id="tdp-subtitle" maxlength="160"></label>
+                <div class="tdp-two-fields">
+                  <label>Tastenfarbe<input id="tdp-color" type="color" value="#152130"></label>
+                  <label>Schriftfarbe<input id="tdp-text-color" type="color" value="#ffffff"></label>
+                </div>
+                <label>Zielordner<select id="tdp-target-folder"><option value="">Kein Ordner</option></select></label>
+                <hr>
+                <div class="tdp-subheading"><h3>Mehrfachaktionen</h3><span id="tdp-action-count">0</span></div>
+                <div id="tdp-actions" class="tdp-action-list"></div>
+                <label>Aktion<select id="tdp-action-type"></select></label>
+                <div id="tdp-action-properties" class="tdp-action-properties" aria-live="polite"></div>
+                <button id="tdp-open-property-inspector" class="tdp-property-inspector-button" type="button" hidden>Original-Plugin konfigurieren</button>
+                <label>Verzögerung in ms<input id="tdp-action-delay" type="number" min="0" max="120000" value="0"></label>
+                <button id="tdp-add-action" type="button">Aktion hinzufügen</button>
+                <div class="tdp-save-row">
+                  <button id="tdp-save-key" class="primary" type="button">Taste speichern</button>
+                  <button id="tdp-discard-key" type="button">Abbrechen</button>
+                  <button id="tdp-clear-key" type="button">Leeren</button>
+                </div>
+              </div>
+              <div id="tdp-no-selection" class="tdp-no-selection">Wähle eine Taste aus, um ihre Aktion zu konfigurieren.</div>
+            </aside>
+          </section>
+
           <aside class="tdp-library" aria-label="Plugin- und Aktionsbibliothek">
             <div class="tdp-search-row">
-              <span aria-hidden="true">⌕</span>
-              <input id="tdp-search" type="search" placeholder="Suchen" autocomplete="off">
-              <button id="tdp-rescan" type="button" title="Plugins neu scannen">☷</button>
+              <input id="tdp-search" type="search" placeholder="Suchen" aria-label="Aktionen und Plugins durchsuchen" autocomplete="off">
+              <button id="tdp-rescan" type="button" title="Plugins neu scannen">Neu laden</button>
             </div>
             <div class="tdp-library-tabs" role="tablist" aria-label="Bibliotheksansicht">
-              <button id="tdp-tab-actions" class="active" type="button" role="tab" aria-selected="true"><span>▣</span>Tasten</button>
+              <button id="tdp-tab-actions" class="active" type="button" role="tab" aria-selected="true">Tasten</button>
               <button id="tdp-tab-plugins" type="button" role="tab" aria-selected="false">Plugins</button>
             </div>
             <div id="tdp-library-content" class="tdp-library-content"></div>
-          </aside>
-
-          <main class="tdp-stage">
-            <section id="tdp-grid-panel" class="tdp-grid-panel">
-              <label class="tdp-preset-field">Gerät / Raster<select id="tdp-preset">${Object.entries(layoutPresets).map(([value, preset]) => `<option value="${value}">${preset.label}</option>`).join("")}</select></label>
-              <label>Zeilen<input id="tdp-rows" type="number" min="1" max="10"></label>
-              <label>Spalten<input id="tdp-columns" type="number" min="1" max="10"></label>
-              <label class="tdp-slider-field">Tastengröße <output id="tdp-size-value">116 px</output><input id="tdp-size" type="range" min="48" max="320" step="2"></label>
-              <label class="tdp-slider-field">Abstand <output id="tdp-gap-value">12 px</output><input id="tdp-gap" type="range" min="0" max="48"></label>
-              <label class="tdp-slider-field">Ecken <output id="tdp-radius-value">12 px</output><input id="tdp-radius" type="range" min="0" max="48"></label>
-              <label class="tdp-check"><input id="tdp-auto-fit" type="checkbox" checked> Automatisch einpassen</label>
-              <label class="tdp-check"><input id="tdp-show-labels" type="checkbox" checked> Beschriftungen zeigen</label>
-              <label class="tdp-check"><input id="tdp-hide-unused" type="checkbox"> Unbenutzte Tasten ausblenden</label>
-              <button id="tdp-apply-grid" type="button">Raster übernehmen</button>
-            </section>
-            <section id="tdp-assignment-bar" class="tdp-assignment-bar" hidden>
-              <span class="tdp-assignment-icon" id="tdp-assignment-icon"></span>
-              <span><strong id="tdp-assignment-title">Aktion gewählt</strong><small>Jetzt eine Zieltaste antippen – die Belegung wird sofort gespeichert.</small></span>
-              <label>Belegen<select id="tdp-assignment-mode"><option value="replace">Taste ersetzen</option><option value="append">Als Mehrfachaktion anhängen</option></select></label>
-              <button id="tdp-cancel-assignment" type="button">Abbrechen</button>
-            </section>
-            <div class="tdp-stage-meta">
-              <span id="tdp-capacity">0 Tasten</span>
-              <span id="tdp-draft-state">Alle Änderungen gespeichert</span>
-            </div>
-            <div class="tdp-grid-viewport">
-              <div id="tdp-grid" class="tdp-grid" aria-label="Touch-Deck-Tasten"></div>
-            </div>
-            <p id="tdp-stage-help" class="tdp-stage-help">Taste antippen, um die hinterlegte Aktion auszuführen. Ordner öffnen sich mit einem Tipp.</p>
-          </main>
-
-          <aside class="tdp-inspector">
-            <header>
-              <div><h3>Taste bearbeiten</h3><p id="tdp-selected">Keine Taste ausgewählt.</p></div>
-              <div class="tdp-mini-actions">
-                <button id="tdp-copy-key" type="button" title="Taste kopieren">⧉</button>
-                <button id="tdp-paste-key" type="button" title="Taste einfügen">▣</button>
-              </div>
-            </header>
-            <div id="tdp-inspector-body" class="tdp-inspector-body">
-              <label>Titel<input id="tdp-title" maxlength="120"></label>
-              <label>Untertitel<input id="tdp-subtitle" maxlength="160"></label>
-              <div class="tdp-two-fields">
-                <label>Tastenfarbe<input id="tdp-color" type="color" value="#152130"></label>
-                <label>Schriftfarbe<input id="tdp-text-color" type="color" value="#ffffff"></label>
-              </div>
-              <label>Zielordner<select id="tdp-target-folder"><option value="">Kein Ordner</option></select></label>
-              <hr>
-              <div class="tdp-subheading"><h3>Mehrfachaktionen</h3><span id="tdp-action-count">0</span></div>
-              <div id="tdp-actions" class="tdp-action-list"></div>
-              <label>Aktion<select id="tdp-action-type"></select></label>
-              <div id="tdp-action-properties" class="tdp-action-properties" aria-live="polite"></div>
-              <button id="tdp-open-property-inspector" class="tdp-property-inspector-button" type="button" hidden>⚙ Original-Plugin konfigurieren</button>
-              <label>Verzögerung in ms<input id="tdp-action-delay" type="number" min="0" max="120000" value="0"></label>
-              <button id="tdp-add-action" type="button">Aktion hinzufügen</button>
-              <div class="tdp-save-row">
-                <button id="tdp-save-key" class="primary" type="button">Taste speichern</button>
-                <button id="tdp-discard-key" type="button">Abbrechen</button>
-                <button id="tdp-clear-key" type="button">Leeren</button>
-              </div>
-            </div>
-            <div id="tdp-no-selection" class="tdp-no-selection">Wähle eine Taste aus oder tippe links auf eine Aktion.</div>
           </aside>
         </div>
       </div>`;
@@ -423,6 +428,7 @@
     $("#tdp-export").addEventListener("click", () => call("deck:export"));
     $("#tdp-mode").addEventListener("click", () => setMode(mode === "run" ? "edit" : "run"));
     $("#tdp-fullscreen").addEventListener("click", () => call("window:toggle-fullscreen"));
+    $("#tdp-close").addEventListener("click", () => $("[data-view='overview']")?.click());
     $("#tdp-move-key").addEventListener("click", beginTouchMove);
     $("#tdp-assignment-mode").addEventListener("change", (event) => { assignmentMode = event.currentTarget.value === "append" ? "append" : "replace"; });
     $("#tdp-cancel-assignment").addEventListener("click", cancelPendingAssignment);
@@ -602,7 +608,7 @@
     for (const action of actions) {
       const item = document.createElement("button");
       item.type = "button";
-      item.className = `tdp-action-item${pendingAction?.actionId === action.id ? " pending" : ""}`;
+      item.className = `tdp-action-item${pendingAction?.catalogKey === `${plugin.id}::${action.id}` ? " pending" : ""}`;
       item.draggable = true;
       item.title = "Antippen und danach die gewünschte Taste wählen";
       const transfer = {
@@ -633,7 +639,7 @@
     if (shell) shell.dataset.mode = mode;
     const modeButton = $("#tdp-mode");
     if (modeButton) {
-      modeButton.textContent = mode === "run" ? "✎ Tasten belegen" : "▶ Deck benutzen";
+      modeButton.textContent = mode === "run" ? "Tasten belegen" : "Deck benutzen";
       modeButton.setAttribute("aria-pressed", String(mode === "edit"));
     }
     const help = $("#tdp-stage-help");
@@ -643,7 +649,7 @@
         ? `„${pendingAction.actionName}“ gewählt – jetzt die gewünschte Taste antippen.`
       : mode === "run"
         ? "Taste antippen, um die hinterlegte Aktion auszuführen. Ordner öffnen sich mit einem Tipp."
-        : "Aktion links antippen und danach die Zieltaste wählen – oder direkt per Drag-and-drop belegen.";
+        : "Aktion rechts auswählen und danach die Zieltaste wählen – oder direkt per Drag-and-drop belegen.";
     const deck = state.deck || { profiles: [] };
     const profileSelect = $("#tdp-profile");
     profileSelect.innerHTML = (deck.profiles || []).map((entry) => `<option value="${html(entry.id)}" ${entry.id === deck.activeProfileId ? "selected" : ""}>${html(entry.name)}</option>`).join("");
@@ -653,6 +659,12 @@
     folderSelect.innerHTML = (currentProfile.folders || []).map((entry) => `<option value="${html(entry.id)}" ${entry.id === currentProfile.activeFolderId ? "selected" : ""}>${html(entry.name)}</option>`).join("");
     const currentFolder = folder(currentProfile);
     if (!currentFolder) return;
+    const pageIndex = Math.max(0, (currentProfile.folders || []).findIndex((entry) => entry.id === currentFolder.id));
+    const pageIndicator = $("#tdp-page-indicator");
+    if (pageIndicator) {
+      pageIndicator.textContent = `Seite ${pageIndex + 1}`;
+      pageIndicator.title = currentFolder.name || `Seite ${pageIndex + 1}`;
+    }
 
     const effectiveLayout = layoutPreview || currentFolder;
     if (!layoutPreview) syncLayoutControls(currentFolder);

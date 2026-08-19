@@ -19,6 +19,7 @@ function normalizeAction(action = {}) {
     id: safeText(action.id || randomId("action"), 120),
     type: safeText(action.type || action.action || "none", 160),
     title: safeText(action.title || action.name || "", 200),
+    pluginId: safeText(action.pluginId || "", 200),
     settings: action.settings && typeof action.settings === "object" ? deepClone(action.settings) : {},
     delayMs: Math.round(clampNumber(action.delayMs, 0, 120_000, 0))
   };

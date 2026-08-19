@@ -209,7 +209,8 @@ requireText(streamDeckHost, "createPropertyInspector", "Originale Elgato Propert
 requireText(streamDeckHost, "registerPropertyInspector", "Elgato Property Inspector Registrierung fehlt.");
 requireText(sotfClient, "api/v1/snapshot", "SOTF-Snapshot-Anbindung fehlt.");
 requireText(sotfClient, "scheduleNextRefresh", "SOTF-Polling ist nicht adaptiv.");
-requireText(touchDeck, 'mode = "run"', "Touch-Deck-Ausführenmodus fehlt.");
+requireText(touchDeck, 'mode = "edit"', "Touch-Deck startet nicht im Belegungseditor.");
+requireText(touchDeck, 'mode === "run"', "Touch-Deck-Ausführenmodus fehlt.");
 requireText(touchDeck, "finishTouchMove", "Berührbares Verschieben von Tasten fehlt.");
 requireText(touchDeck, "assignActionToKey", "Direkte Tastenbelegung aus der Plugin-Bibliothek fehlt.");
 requireText(touchDeck, "layoutPresets", "Touch-Deck-Gerätepresets fehlen in der Oberfläche.");

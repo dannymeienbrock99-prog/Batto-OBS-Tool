@@ -81,6 +81,30 @@ test("Touch-Deck shrink preserves hidden actions, folders and delays", () => {
   } finally { remove(directory); }
 });
 
+test("Touch-Deck keeps the originating plugin ID through storage and execution", async () => {
+  const directory = temp("batto-plugin-action");
+  try {
+    const store = new DeckStore(path.join(directory, "deck.json"));
+    const profile = store.snapshot().profiles[0];
+    const folder = profile.folders[0];
+    store.updateButton(profile.id, folder.id, 0, {
+      title: "Plugin zwei",
+      actions: [{ type: "shared.action.uuid", pluginId: "vendor.plugin.two", settings: { value: 2 } }]
+    });
+    const stored = store.snapshot().profiles[0].folders[0].buttons[0].actions[0];
+    assert.equal(stored.pluginId, "vendor.plugin.two");
+
+    let dispatched = null;
+    const pluginHost = {
+      registry: { findPluginForAction: () => ({ id: "vendor.plugin.one" }) },
+      execute: async (action) => { dispatched = action; return { dispatched: true }; }
+    };
+    const executor = new ActionExecutor({ pluginHost });
+    await executor.execute(stored);
+    assert.equal(dispatched.pluginId, "vendor.plugin.two");
+  } finally { remove(directory); }
+});
+
 test("native replacements cover the legacy plugin catalog", () => {
   const directory = temp("batto-plugins");
   try {
