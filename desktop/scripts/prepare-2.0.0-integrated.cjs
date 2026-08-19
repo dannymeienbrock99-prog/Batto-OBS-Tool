@@ -24,19 +24,27 @@ function copyTree(from, to) {
     else if (entry.isFile()) copyFile(input, output);
   }
 }
+function withFileLineEndings(fragment, text) {
+  const lineEnding = text.includes("\r\n") ? "\r\n" : "\n";
+  return String(fragment).replace(/\r?\n/g, lineEnding);
+}
 function replaceRequired(file, before, after, label) {
   let text = fs.readFileSync(file, "utf8");
-  if (text.includes(after)) return false;
-  if (!text.includes(before)) throw new Error(`${label} wurde in ${path.relative(root, file)} nicht gefunden.`);
-  text = text.replace(before, after);
+  const expected = withFileLineEndings(after, text);
+  const existing = withFileLineEndings(before, text);
+  if (text.includes(expected)) return false;
+  if (!text.includes(existing)) throw new Error(`${label} wurde in ${path.relative(root, file)} nicht gefunden.`);
+  text = text.replace(existing, expected);
   fs.writeFileSync(file, text, "utf8");
   return true;
 }
 function replaceAllRequired(file, before, after, minimum, label) {
   let text = fs.readFileSync(file, "utf8");
-  const count = text.split(before).length - 1;
-  if (count < minimum && !text.includes(after)) throw new Error(`${label}: erwartet mindestens ${minimum}, gefunden ${count}.`);
-  text = text.split(before).join(after);
+  const existing = withFileLineEndings(before, text);
+  const expected = withFileLineEndings(after, text);
+  const count = text.split(existing).length - 1;
+  if (count < minimum && !text.includes(expected)) throw new Error(`${label}: erwartet mindestens ${minimum}, gefunden ${count}.`);
+  text = text.split(existing).join(expected);
   fs.writeFileSync(file, text, "utf8");
 }
 
@@ -44,7 +52,7 @@ ensureDir(source);
 for (const file of [
   "common.cjs", "obs-websocket.cjs", "plugin-registry.cjs", "deck-store.cjs", "migration.cjs",
   "action-executor.cjs", "mobile-bridge.cjs", "stream-overlay-server.cjs", "multi-chat.cjs",
-  "twitch-holo-server.cjs"
+  "twitch-holo-server.cjs", "stream-deck-plugin-host.cjs", "sotf-death-counter-client.cjs", "heart-rate-manager.cjs"
 ]) copyFile(path.join(bootstrap, "services", file), path.join(source, "services", file));
 copyTree(path.join(bootstrap, "stream-overlay"), path.join(source, "stream-overlay"));
 copyTree(path.join(bootstrap, "mobile"), path.join(source, "mobile"));
@@ -150,10 +158,14 @@ if (packageJson.main !== "src/main.cjs") throw new Error(`Falscher Programmeinst
 const required = [
   "src/main.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/app.js",
   "src/renderer/integrated.js", "src/renderer/integrated.css", "src/renderer/assets/team-alpha-logo.svg",
+  "src/renderer/assets/team-alpha-logo.png", "src/renderer/assets/overview-dragon-pc.png",
   "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs",
   "src/services/mobile-bridge.cjs", "src/services/stream-overlay-server.cjs", "src/services/plugin-registry.cjs",
-  "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/mobile/index.html",
-  "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "resources/team-logo.svg",
+  "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/services/stream-deck-plugin-host.cjs",
+  "src/services/sotf-death-counter-client.cjs", "src/services/heart-rate-manager.cjs", "src/mobile/index.html",
+  "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "src/stream-overlay/team-logo.png",
+  "resources/team-logo.svg", "resources/team-logo.png",
+  "resources/sotf-death-counter/CrazyBatto.SotfDeathCounter.dll", "resources/sotf-death-counter/manifest.json",
   "modules/encoder-monitoring-overlay/src/server.cjs", "modules/twitch-holo-chat/web/overlay.html"
 ];
 for (const relative of required) {

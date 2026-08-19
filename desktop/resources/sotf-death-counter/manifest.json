@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ToniMacaroni/RedLoader/main/MetadataSchema.json",
+  "id": "CrazyBatto_SotfDeathCounter",
+  "name": "CrazyBatto SOTF Death Counter – Safe Mode",
+  "author": "Crazy_Batto",
+  "version": "0.3.3",
+  "description": "Crash-resistant multiplayer death counter with conservative field-based discovery and a local OBS browser overlay. Harmony lifecycle patches and full-world MonoBehaviour scans are disabled by default.",
+  "platform": "Universal",
+  "dependencies": [],
+  "logColor": "#F04444",
+  "type": "Mod",
+  "url": "https://github.com/dannymeienbrock99-prog/RedManager-main"
+}

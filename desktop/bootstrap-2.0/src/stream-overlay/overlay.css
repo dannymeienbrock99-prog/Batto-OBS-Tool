@@ -15,9 +15,18 @@ body { color: #fff; font-family: Inter, "Segoe UI", Arial, sans-serif; }
 .feed-row { padding: 6px 8px; border-left: 3px solid var(--accent); border-radius: 5px; opacity: 0; background: rgb(0 0 0 / 25%); animation: feed-in .26s ease forwards; font-size: .72em; }
 .feed-row strong { color: var(--accent); }
 .alarm { animation: alarm-in .55s cubic-bezier(.18,.86,.22,1.15) both; }
-.heart { display: grid; place-items: center; gap: 2px; }
+.heart { display: grid; width: 100%; place-items: center; gap: 2px; }
 .heart .bpm { font-size: 1.35em; }
-.heart .pulse { color: #ff526e; animation: pulse 1s ease-in-out infinite; }
+.heart .pulse { color: var(--heart-color, #ff526e); }
+.heart.is-beating .pulse { animation: pulse var(--beat-duration, .34s) ease-out 1; }
+.heart.no-pulse .pulse { animation: none; }
+.heart.outside-range .bpm { color: #ff7282; text-shadow: 0 0 16px rgb(255 82 110 / 65%); }
+.heart[data-layout="minimal"] { grid-template-columns: auto auto; justify-content: center; gap: .28em; }
+.heart[data-layout="minimal"] .pulse { font-size: 1.1em; }
+.heart[data-layout="bar"] { grid-template-columns: auto 1fr; justify-items: start; gap: .35em; }
+.heart[data-layout="bar"] .bpm { width: 100%; padding: .14em .3em; border-left: .12em solid var(--heart-color, #ff526e); background: linear-gradient(90deg, color-mix(in srgb, var(--heart-color) 22%, transparent), transparent); }
+.heart[data-layout="hologram"] .bpm { color: transparent; background: linear-gradient(100deg, var(--heart-color, #ff526e), #59e7ff, #a873ff, #fff); background-size: 260% 260%; background-position: 48% 50%; background-clip: text; -webkit-background-clip: text; filter: drop-shadow(0 0 .24em var(--heart-color, #ff526e)); }
+.heart.is-beating[data-layout="hologram"] .bpm { animation: heart-hologram .55s ease-out 1; }
 .wheel { position: relative; width: min(100%, 92vh); aspect-ratio: 1; border: 8px solid rgb(255 255 255 / 75%); border-radius: 50%; background: conic-gradient(#58dcff 0 12.5%, #925fff 12.5% 25%, #ff4f8a 25% 37.5%, #ffb74f 37.5% 50%, #56e09d 50% 62.5%, #39a8ff 62.5% 75%, #f76fff 75% 87.5%, #ffe66d 87.5%); box-shadow: 0 0 30px rgb(70 190 255 / 45%); }
 .wheel.spinning { animation: spin 3.4s cubic-bezier(.15,.72,.15,1) forwards; }
 .word-cloud { display: flex; width: 100%; height: 100%; flex-wrap: wrap; align-content: center; justify-content: center; gap: 8px; }
@@ -29,5 +38,6 @@ body { color: #fff; font-family: Inter, "Segoe UI", Arial, sans-serif; }
 @keyframes feed-in { to { opacity: 1; transform: none; } from { opacity: 0; transform: translateX(-15px); } }
 @keyframes alarm-in { from { opacity: 0; transform: scale(.65) rotate(-4deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
 @keyframes pulse { 50% { transform: scale(1.25); filter: drop-shadow(0 0 14px #ff526e); } }
+@keyframes heart-hologram { from { background-position: 0 50%; } to { background-position: 100% 50%; } }
 @keyframes spin { to { transform: rotate(1760deg); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; } }

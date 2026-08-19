@@ -355,14 +355,23 @@ async function queryLatency() {
 }
 
 class SystemTelemetrySampler {
-  constructor() {
+  constructor({ gpuIntervalMs = 5000, networkIntervalMs = 10000, latencyIntervalMs = 30000 } = {}) {
     this.previousCpu = cpuTimes();
     this.previousNetwork = null;
+    this.lastNvidia = null;
+    this.lastNvidiaAt = 0;
+    this.lastNetworkTotals = null;
+    this.lastNetworkAt = 0;
+    this.lastUpload = 0;
+    this.lastDownload = 0;
     this.uploadSamples = [];
     this.lastLatency = null;
     this.lastLatencyAt = 0;
     this.reconnects = 0;
     this.wasConnected = null;
+    this.gpuIntervalMs = Math.max(2000, Number(gpuIntervalMs) || 5000);
+    this.networkIntervalMs = Math.max(3000, Number(networkIntervalMs) || 10000);
+    this.latencyIntervalMs = Math.max(10000, Number(latencyIntervalMs) || 30000);
   }
 
   async sample(hardware = null) {
@@ -372,24 +381,40 @@ class SystemTelemetrySampler {
     this.previousCpu = currentCpu;
     const totalRam = os.totalmem();
     const usedRam = totalRam - os.freemem();
-    const [nvidia, network] = await Promise.all([
-      queryNvidia(),
-      queryNetworkTotals()
+    const queryGpu = timestamp - this.lastNvidiaAt >= this.gpuIntervalMs;
+    const queryNetwork = timestamp - this.lastNetworkAt >= this.networkIntervalMs;
+    const [nvidiaResult, networkResult] = await Promise.all([
+      queryGpu ? queryNvidia() : Promise.resolve(this.lastNvidia),
+      queryNetwork ? queryNetworkTotals() : Promise.resolve(this.lastNetworkTotals)
     ]);
-    if (timestamp - this.lastLatencyAt > 5000) {
+    if (queryGpu) {
+      this.lastNvidia = nvidiaResult;
+      this.lastNvidiaAt = timestamp;
+    }
+    if (queryNetwork) {
+      this.lastNetworkTotals = networkResult;
+      this.lastNetworkAt = timestamp;
+    }
+    const nvidia = this.lastNvidia;
+    const network = this.lastNetworkTotals;
+    if (timestamp - this.lastLatencyAt >= this.latencyIntervalMs) {
       this.lastLatency = await queryLatency();
       this.lastLatencyAt = timestamp;
     }
-    let upload = 0;
-    let download = 0;
-    if (network && this.previousNetwork && timestamp > this.previousNetwork.timestamp) {
+    let upload = this.lastUpload;
+    let download = this.lastDownload;
+    if (queryNetwork && network && this.previousNetwork && timestamp > this.previousNetwork.timestamp) {
       const seconds = (timestamp - this.previousNetwork.timestamp) / 1000;
       upload = Math.max(0, network.sent - this.previousNetwork.sent) / seconds;
       download = Math.max(0, network.received - this.previousNetwork.received) / seconds;
     }
-    if (network) this.previousNetwork = { ...network, timestamp };
-    this.uploadSamples.push(upload);
-    if (this.uploadSamples.length > 300) this.uploadSamples.shift();
+    if (queryNetwork && network) {
+      this.previousNetwork = { ...network, timestamp };
+      this.lastUpload = upload;
+      this.lastDownload = download;
+      this.uploadSamples.push(upload);
+      if (this.uploadSamples.length > 120) this.uploadSamples.shift();
+    }
     const connected = this.lastLatency !== null || Object.values(os.networkInterfaces()).flat().some((entry) => entry && !entry.internal);
     if (this.wasConnected === false && connected) this.reconnects += 1;
     this.wasConnected = connected;

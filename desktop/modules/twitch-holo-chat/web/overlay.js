@@ -60,10 +60,13 @@
   };
 
   const timers = new Map();
+  const messageStore = new Map();
+  const seenMessageIds = new Set();
   let config = normalizeConfig(DEFAULT_CONFIG);
   let socket = null;
   let reconnectTimer = null;
   let reconnectDelay = 1000;
+  let stopped = false;
 
   function boundedNumber(value, minimum, maximum, fallback) {
     const number = Number(value);
@@ -99,7 +102,8 @@
   }
 
   function normalizeUserKey(value) {
-    return String(value || "").trim().replace(/^@/, "").toLowerCase().slice(0, 80);
+    const key = String(value || "").replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/^@/, "").toLowerCase().slice(0, 80);
+    return ["__proto__", "constructor", "prototype"].includes(key) ? "" : key;
   }
 
   function normalizeConfig(value = {}) {
@@ -111,7 +115,7 @@
         { ...defaultStyle, ...(DEFAULT_CONFIG.roleStyles[role] || {}) }
       );
     }
-    const userStyles = {};
+    const userStyles = Object.create(null);
     for (const [rawKey, rawStyle] of Object.entries(value.userStyles || {}).slice(0, 1000)) {
       const key = normalizeUserKey(rawKey);
       if (key) userStyles[key] = normalizeStyle(rawStyle, defaultStyle);
@@ -189,9 +193,9 @@
   function removeMessage(messageId, immediate = false) {
     const id = String(messageId || "");
     if (!id) return false;
-    const selector = `[data-message-id="${CSS.escape(id)}"]`;
-    const row = chat.querySelector(selector);
+    const row = [...chat.children].find((entry) => entry.dataset.messageId === id) || null;
     clearTimer(id);
+    messageStore.delete(id);
     if (!row) return false;
     if (immediate) {
       row.remove();
@@ -225,51 +229,89 @@
     return element;
   }
 
-  function addMessage(input = {}) {
-    const id = String(input.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    removeMessage(id, true);
+  function normalizeMessage(input = {}) {
+    const id = String(input.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 180);
+    const text = String(input.text || "").replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 5000).trim();
+    if (!id || !text) return null;
+    const timestamp = Number(input.timestamp);
+    return {
+      id,
+      displayName: String(input.displayName || input.user || input.username || "Twitch-Zuschauer").replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 120),
+      username: String(input.username || input.login || input.user || "").slice(0, 120),
+      login: String(input.login || input.username || "").slice(0, 120),
+      userId: String(input.userId || "").slice(0, 160),
+      color: normalizedHexColor(input.color, "#ffffff"),
+      roles: input.roles && typeof input.roles === "object" && !Array.isArray(input.roles) ? input.roles : {},
+      text,
+      timestamp: Number.isFinite(timestamp) && timestamp > 0 ? timestamp : Date.now()
+    };
+  }
 
-    const displayName = String(input.displayName || input.user || input.username || "Twitch-Zuschauer");
-    const text = String(input.text || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").slice(0, 5000);
-    if (!text) return null;
+  function markSeen(id) {
+    seenMessageIds.delete(id);
+    seenMessageIds.add(id);
+    while (seenMessageIds.size > 500) seenMessageIds.delete(seenMessageIds.values().next().value);
+  }
 
+  function applyPresentation(row, input) {
     const { role, style } = resolveStyle(input);
-    const row = document.createElement("article");
-    row.className = "batto-holo-row";
-    row.dataset.messageId = id;
-    row.dataset.userId = String(input.userId || "");
-    row.dataset.userLogin = normalizeUserKey(input.login || input.username || input.user || displayName);
+    const name = row.querySelector(".batto-holo-name");
+    const roleBadge = row.querySelector(".batto-holo-role");
+    const time = row.querySelector(".batto-holo-time");
+    const message = row.querySelector(".batto-holo-message");
+    row.dataset.userId = input.userId;
+    row.dataset.userLogin = normalizeUserKey(input.login || input.username || input.displayName);
     row.dataset.role = role;
     row.dataset.showRole = String(config.showRole);
-
-    const meta = document.createElement("div");
-    meta.className = "batto-holo-meta";
-    const name = textNodeElement("batto-holo-name", displayName);
-    const roleBadge = textNodeElement("batto-holo-role", role);
-    const time = textNodeElement(
-      "batto-holo-time",
-      new Date(input.timestamp || Date.now()).toLocaleTimeString("de-DE", {
-        hour: "2-digit",
-        minute: "2-digit"
-      })
-    );
+    name.textContent = input.displayName;
+    roleBadge.textContent = role;
+    const date = new Date(input.timestamp);
+    time.textContent = Number.isFinite(date.getTime()) ? date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
     time.hidden = !config.showTime;
-    meta.append(name, roleBadge, time);
-
-    const message = textNodeElement("batto-holo-message", text);
+    message.textContent = input.text;
+    for (const element of [name, message]) {
+      element.classList.remove("batto-holo-text");
+      element.removeAttribute("style");
+    }
     const holoEnabled = config.enabled && style.enabled;
     if (holoEnabled && config.applyToName) {
       name.classList.add("batto-holo-text");
       applyStyleVariables(name, style);
-    } else if (config.useOriginalTwitchColorWhenDisabled) {
-      name.style.color = normalizedHexColor(input.color, "#ffffff");
-    }
+    } else if (config.useOriginalTwitchColorWhenDisabled) name.style.color = input.color;
     if (holoEnabled && config.applyToMessage) {
       message.classList.add("batto-holo-text");
       applyStyleVariables(message, style);
     }
+  }
 
+  function addMessage(rawInput = {}, options = {}) {
+    const input = normalizeMessage(rawInput);
+    if (!input) return null;
+    const { id } = input;
+    const existing = [...chat.children].find((entry) => entry.dataset.messageId === id) || null;
+    if (existing) {
+      messageStore.set(id, input);
+      applyPresentation(existing, input);
+      if (!options.fromHistory) scheduleRemoval(id);
+      return id;
+    }
+    if (options.fromHistory && seenMessageIds.has(id)) return id;
+
+    const row = document.createElement("article");
+    row.className = "batto-holo-row";
+    row.dataset.messageId = id;
+
+    const meta = document.createElement("div");
+    meta.className = "batto-holo-meta";
+    const name = textNodeElement("batto-holo-name", "");
+    const roleBadge = textNodeElement("batto-holo-role", "");
+    const time = textNodeElement("batto-holo-time", "");
+    meta.append(name, roleBadge, time);
+    const message = textNodeElement("batto-holo-message", "");
     row.append(meta, message);
+    messageStore.set(id, input);
+    markSeen(id);
+    applyPresentation(row, input);
     if (config.newest === "top") chat.prepend(row);
     else chat.append(row);
     trimMessages();
@@ -292,6 +334,8 @@
   function clearChat() {
     for (const timer of timers.values()) clearTimeout(timer);
     timers.clear();
+    messageStore.clear();
+    seenMessageIds.clear();
     chat.replaceChildren();
   }
 
@@ -304,14 +348,19 @@
       userStyles: { ...config.userStyles, ...(nextConfig.userStyles || {}) }
     });
     setRootClasses();
-    return structuredClone(config);
+    for (const row of [...chat.children]) {
+      const message = messageStore.get(row.dataset.messageId);
+      if (message) applyPresentation(row, message);
+    }
+    trimMessages();
+    return JSON.parse(JSON.stringify(config));
   }
 
   function setUserStyle(user, style) {
     const key = normalizeUserKey(user);
     if (!key) throw new Error("Twitch-Benutzername oder Benutzer-ID fehlt.");
     config.userStyles[key] = normalizeStyle(style, config.defaultStyle);
-    return structuredClone(config.userStyles[key]);
+    return JSON.parse(JSON.stringify(config.userStyles[key]));
   }
 
   function removeUserStyle(user) {
@@ -326,12 +375,16 @@
       throw new Error("Unbekannte Twitch-Rolle.");
     }
     config.roleStyles[key] = normalizeStyle(style, config.defaultStyle);
-    return structuredClone(config.roleStyles[key]);
+    return JSON.parse(JSON.stringify(config.roleStyles[key]));
   }
 
   function handleEnvelope(envelope) {
     const type = String(envelope?.type || "message");
     if (type === "message" || type === "chat") return addMessage(envelope.message || envelope);
+    if (type === "history") {
+      for (const message of (Array.isArray(envelope.messages) ? envelope.messages : []).slice(-200)) addMessage(message, { fromHistory: true });
+      return true;
+    }
     if (type === "delete") return removeMessage(envelope.messageId || envelope.id);
     if (type === "clear-user") return clearUser(envelope.userId || envelope.user);
     if (type === "clear") return clearChat();
@@ -344,13 +397,17 @@
 
   function connectWebSocket(url) {
     const target = String(url || "").trim();
-    if (!/^wss?:\/\//i.test(target)) return false;
+    let parsed;
+    try { parsed = new URL(target); } catch { return false; }
+    if (!["ws:", "wss:"].includes(parsed.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname)) return false;
+    if (stopped) return false;
     clearTimeout(reconnectTimer);
     try { socket?.close(); } catch {}
     const current = new WebSocket(target);
     socket = current;
     current.addEventListener("open", () => {
       reconnectDelay = 1000;
+      document.documentElement.dataset.connection = "online";
       current.send(JSON.stringify({ type: "hello", client: "batto-twitch-holo-overlay" }));
     });
     current.addEventListener("message", (event) => {
@@ -363,6 +420,8 @@
     current.addEventListener("close", () => {
       if (socket !== current) return;
       socket = null;
+      document.documentElement.dataset.connection = "offline";
+      if (stopped) return;
       reconnectTimer = setTimeout(() => connectWebSocket(target), reconnectDelay);
       reconnectDelay = Math.min(30000, reconnectDelay * 2);
     });
@@ -376,7 +435,7 @@
     clearUser,
     configure,
     connectWebSocket,
-    getConfig: () => structuredClone(config),
+    getConfig: () => JSON.parse(JSON.stringify(config)),
     handleEnvelope,
     removeMessage,
     removeUserStyle,
@@ -395,23 +454,16 @@
 
   setRootClasses();
   const query = new URLSearchParams(location.search);
-  const socketUrl = query.get("ws");
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  const socketUrl = query.get("ws") || (location.host ? `${protocol}//${location.host}/ws` : "");
   if (socketUrl) connectWebSocket(socketUrl);
-  if (query.get("demo") === "1") {
-    addMessage({
-      displayName: "Crazy_Batto",
-      text: "Streamer-Name im kostenlosen Hologramm-Stil.",
-      roles: { broadcaster: true }
-    });
-    addMessage({
-      displayName: "Moderator",
-      text: "Name und Nachricht können getrennt holografisch angezeigt werden.",
-      roles: { moderator: true }
-    });
-    addMessage({
-      displayName: "VIP_User",
-      text: "Keine Server-Boosts und keine Discord-Abhängigkeit.",
-      roles: { vip: true }
-    });
-  }
+  window.addEventListener("pagehide", () => {
+    stopped = true;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    for (const timer of timers.values()) clearTimeout(timer);
+    timers.clear();
+    try { socket?.close(1000, "Overlay geschlossen"); } catch {}
+    socket = null;
+  }, { once: true });
 })();

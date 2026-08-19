@@ -8,12 +8,17 @@ const CHANNELS = new Set([
   "deck:create-profile", "deck:update-profile", "deck:delete-profile", "deck:activate-profile",
   "deck:create-folder", "deck:update-folder", "deck:delete-folder", "deck:activate-folder",
   "deck:update-button", "deck:move-button", "deck:clear-button", "deck:execute-button", "deck:export", "deck:import",
-  "action:execute", "plugins:scan", "plugins:enable", "plugins:settings", "plugins:import",
+  "action:execute", "plugins:scan", "plugins:enable", "plugins:settings", "plugins:import", "plugins:import-folder", "plugins:property-inspector",
+  "sotf:refresh", "sotf:open-overlay", "sotf:copy-overlay", "sotf:install-module", "window:toggle-fullscreen",
   "mobile:status", "mobile:approve", "mobile:reject", "mobile:revoke", "mobile:regenerate-pin", "mobile:approval",
   "stream-overlay:status", "stream-overlay:open", "stream-overlay:copy-url", "stream-overlay:event", "stream-overlay:clear",
   "monitoring:open", "monitoring:copy-url", "holo:open", "holo:copy-url", "holo:message", "holo:clear",
   "chat:update-settings", "chat:twitch-connect", "chat:twitch-disconnect", "chat:twitch-send",
-  "chat:youtube-connect", "chat:youtube-disconnect", "chat:clear", "chat:test", "chat:tts-skip", "chat:tts-clear",
+  "chat:youtube-connect", "chat:youtube-disconnect", "chat:tikfinity-connect", "chat:tikfinity-disconnect",
+  "chat:clear", "chat:test", "chat:tts-voices", "chat:tts-skip", "chat:tts-clear",
+  "heart-rate:update", "heart-rate:pulsoid-connect", "heart-rate:pulsoid-disconnect", "heart-rate:pulsoid-forget",
+  "heart-rate:ble-select", "heart-rate:ble-connected", "heart-rate:ble-value", "heart-rate:ble-disconnect",
+  "heart-rate:copy-overlay", "heart-rate:preview",
   "guests:list", "guests:apply", "settings:update", "migration:run",
   "app:open-path", "app:open-url", "app:copy", "app:close"
 ]);
@@ -199,20 +204,25 @@ const api = {
     return () => ipcRenderer.removeListener("state:changed", listener);
   },
   onPairRequest(callback) { return on("mobile:pair-request", callback); },
+  onBluetoothDevices(callback) { return on("heart-rate:ble-devices", callback); },
   onTelemetry(callback) {
     const listener = (_event, value) => callback(telemetryForLegacy(value?.telemetry));
-    ipcRenderer.on("state:changed", listener);
-    return () => ipcRenderer.removeListener("state:changed", listener);
+    ipcRenderer.on("telemetry:changed", listener);
+    return () => ipcRenderer.removeListener("telemetry:changed", listener);
   },
   onTelemetryError(callback) {
     const listener = (_event, value) => { if (value?.errors?.telemetry) callback(value.errors.telemetry); };
-    ipcRenderer.on("state:changed", listener);
-    return () => ipcRenderer.removeListener("state:changed", listener);
+    ipcRenderer.on("telemetry:changed", listener);
+    return () => ipcRenderer.removeListener("telemetry:changed", listener);
   },
   onObsStatusChanged(callback) {
     const listener = (_event, value) => callback(value?.obs || { connected: false });
     ipcRenderer.on("state:changed", listener);
-    return () => ipcRenderer.removeListener("state:changed", listener);
+    ipcRenderer.on("telemetry:changed", listener);
+    return () => {
+      ipcRenderer.removeListener("state:changed", listener);
+      ipcRenderer.removeListener("telemetry:changed", listener);
+    };
   }
 };
 

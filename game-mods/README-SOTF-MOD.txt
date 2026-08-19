@@ -8,7 +8,7 @@ In diesem Ordner befinden sich:
    Sons-of-the-Forest-Spielordner ab, baut die Mod gegen die dort vorhandenen
    RedLoader-/Spiel-Assemblies und installiert die erzeugten DLLs in "Mods".
 
-2. CrazyBatto-SOTF-Universal-IntegrationModule-v0.3.0-source.zip
+2. CrazyBatto-SOTF-DeathCounter-Module-v0.3.0-source.zip
    Das vollständige MIT-lizenzierte Quellmodul.
 
 Warum wird nicht einfach eine beliebige vorgebaute DLL mitgeliefert?

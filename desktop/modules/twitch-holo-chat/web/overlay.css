@@ -39,7 +39,6 @@ body {
   border-radius: 14px;
   background: rgb(7 10 17 / 66%);
   box-shadow: 0 10px 34px rgb(0 0 0 / 32%);
-  backdrop-filter: blur(8px);
   animation: batto-row-in 280ms cubic-bezier(.18, .75, .26, 1) both;
   transform-origin: left bottom;
 }
@@ -81,7 +80,7 @@ body {
     saturate(var(--batto-holo-saturation))
     drop-shadow(0 0 calc(var(--batto-holo-glow) * .35) rgb(255 255 255 / 60%))
     drop-shadow(0 0 var(--batto-holo-glow) currentColor);
-  animation: batto-holo-shift var(--batto-holo-speed) linear infinite;
+  animation: batto-holo-shift var(--batto-holo-speed) ease-out 1 both;
 }
 
 .batto-holo-text::selection {
@@ -136,8 +135,7 @@ body {
 
 @keyframes batto-holo-shift {
   0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
 }
 
 @keyframes batto-row-in {

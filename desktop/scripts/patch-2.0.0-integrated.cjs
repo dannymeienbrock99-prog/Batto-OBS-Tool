@@ -28,23 +28,6 @@ function requireReplace(text, search, replacement, label) {
 
 copyFile(path.join(bootstrap, "services", "native-plugin-additions.cjs"), path.join(source, "services", "native-plugin-additions.cjs"));
 
-const registry = path.join(source, "services", "plugin-registry.cjs");
-edit(registry, (text) => {
-  text = requireReplace(
-    text,
-    'const { ensureDirectory, readJson, safeText, writeJsonAtomic } = require("./common.cjs");',
-    'const { ensureDirectory, readJson, safeText, writeJsonAtomic } = require("./common.cjs");\nconst { EXTRA_BUILT_IN_PLUGINS } = require("./native-plugin-additions.cjs");',
-    "Native Plugin-Erweiterungen"
-  );
-  text = requireReplace(
-    text,
-    'const plugins = [...BUILT_IN_PLUGINS.map((plugin) => ({ ...plugin, actions: plugin.actions.map((action) => ({ ...action })) }))];',
-    'const plugins = [...BUILT_IN_PLUGINS, ...EXTRA_BUILT_IN_PLUGINS].map((plugin) => ({ ...plugin, actions: plugin.actions.map((action) => ({ ...action })) }));',
-    "Zusammenführung der nativen Plugin-Liste"
-  );
-  return text;
-});
-
 const executor = path.join(source, "services", "action-executor.cjs");
 edit(executor, (text) => {
   if (!text.includes('youtubeMusic: [path.join(local, "Programs", "YouTube Music Desktop App"')) {

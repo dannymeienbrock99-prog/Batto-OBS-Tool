@@ -102,12 +102,15 @@ function validateHttpUrl(value, allowedHosts = []) {
 }
 
 class ActionExecutor extends EventEmitter {
-  constructor({ obs, shell, overlayServer, multiChat, dataFile } = {}) {
+  constructor({ obs, shell, clipboard, overlayServer, multiChat, pluginHost, sotfClient, dataFile } = {}) {
     super();
     this.obs = obs;
     this.shell = shell;
     this.overlayServer = overlayServer;
     this.multiChat = multiChat;
+    this.clipboard = clipboard;
+    this.pluginHost = pluginHost;
+    this.sotfClient = sotfClient;
     this.dataFile = dataFile;
     this.data = readJson(dataFile, { giveaway: [], lastWinner: null }) || { giveaway: [], lastWinner: null };
   }
@@ -127,10 +130,11 @@ class ActionExecutor extends EventEmitter {
 
   async execute(action = {}, context = {}) {
     const type = safeText(action.type || action.action || "none", 160);
+    const pluginId = safeText(action.pluginId || "", 200);
     const settings = action.settings && typeof action.settings === "object" ? action.settings : {};
     const startedAt = Date.now();
     try {
-      const value = await this._execute(type, settings, context);
+      const value = await this._execute(type, settings, context, pluginId);
       const result = { ok: true, type, value, startedAt, finishedAt: Date.now() };
       this.emit("executed", result);
       return result;
@@ -141,7 +145,7 @@ class ActionExecutor extends EventEmitter {
     }
   }
 
-  async _execute(type, settings, context) {
+  async _execute(type, settings, context, pluginId = "") {
     if (!type || type === "none") return { skipped: true };
     if (MEDIA_KEYS[type]) {
       await pressVirtualKey(MEDIA_KEYS[type]);
@@ -268,10 +272,23 @@ class ActionExecutor extends EventEmitter {
           value: Number(settings.value) || 0,
           timestamp: Date.now()
         });
-      case "overlay.poll":
-      case "overlay.wordcloud":
+      case "overlay.poll": {
+        const option = safeText(settings.text || settings.option || settings.question, 160).trim();
+        if (!option) throw new Error("Antwort oder Option für die Umfrage fehlt.");
+        return this.publishOverlayEvent({
+          type: "poll",
+          text: option,
+          value: Math.max(1, Number(settings.value) || 1),
+          timestamp: Date.now()
+        });
+      }
+      case "overlay.wordcloud": {
+        const text = safeText(settings.text || settings.words, 500).trim();
+        if (!text) throw new Error("Text für die Wortwolke fehlt.");
+        return this.publishOverlayEvent({ type: "chat", platform: "touch-deck-wordcloud", name: "Wortwolke", text, timestamp: Date.now() });
+      }
       case "overlay.wheel":
-        return this.publishOverlayEvent({ type: type.split(".")[1], ...settings, timestamp: Date.now() });
+        return this.publishOverlayEvent({ type: "wheel", timestamp: Date.now() });
 
       case "youtube.dashboard":
         await this.shell.openExternal("https://studio.youtube.com/");
@@ -343,7 +360,25 @@ class ActionExecutor extends EventEmitter {
         this.overlayServer?.publishEvent({ type: "giveaway", name: winner, text: "Gewinner", timestamp: Date.now() });
         return this.data.lastWinner;
       }
+      case "sotf.counter.refresh":
+        if (!this.sotfClient) throw new Error("Die SOTF-Todeszähler-Anbindung ist nicht geladen.");
+        return this.sotfClient.refresh({ throwOnError: true });
+      case "sotf.overlay.open": {
+        if (!this.sotfClient) throw new Error("Die SOTF-Todeszähler-Anbindung ist nicht geladen.");
+        const url = this.sotfClient.urls().overlayUrl;
+        await this.shell.openExternal(url);
+        return { url };
+      }
+      case "sotf.overlay.copy-url": {
+        if (!this.sotfClient) throw new Error("Die SOTF-Todeszähler-Anbindung ist nicht geladen.");
+        const url = this.sotfClient.urls().overlayUrl;
+        this.clipboard?.writeText?.(url);
+        return { url, copied: Boolean(this.clipboard?.writeText) };
+      }
       default:
+        if (this.pluginHost?.registry?.findPluginForAction?.(type)) {
+          return this.pluginHost.execute({ type, pluginId, settings }, context);
+        }
         throw new Error(`Aktion „${type}“ wird ohne passende Laufzeit nicht ausgeführt.`);
     }
   }
