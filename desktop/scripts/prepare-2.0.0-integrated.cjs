@@ -149,7 +149,9 @@ if (!["src/main.cjs", "src/chat-bootstrap.cjs"].includes(packageJson.main)) thro
 
 const required = [
   "src/main.cjs", "src/chat-bootstrap.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/app.js",
-  "src/renderer/multi-chat.html", "src/renderer/multi-chat.js", "src/renderer/multi-chat.css",
+  "src/renderer/multi-chat.html", "src/renderer/multi-chat.js", "src/renderer/multi-chat.css", "src/renderer/chat-overlay-controls.js",
+  "src/stream-overlay/chat-overlay.html", "src/stream-overlay/chat-overlay.css", "src/stream-overlay/chat-overlay.js",
+  "src/services/obs-chat-overlay.cjs",
   "src/renderer/integrated.js", "src/renderer/integrated.css", "src/renderer/assets/team-alpha-logo.svg",
   "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs",
   "src/services/mobile-bridge.cjs", "src/services/stream-overlay-server.cjs", "src/services/plugin-registry.cjs",

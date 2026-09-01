@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { ChatStore } = require("../src/services/chat-store.cjs");
 const { ChatCore } = require("../src/services/chat-core.cjs");
 const { normalizeTtsConfig } = require("../src/services/tts-config.cjs");
+const { ensureObsChatOverlay, toOverlayChatEvent } = require("../src/services/obs-chat-overlay.cjs");
 const { normalizeCngConfig, withoutCngSecrets } = require("../src/services/cng-config.cjs");
 
 test("chat store remains bounded", () => { const store = new ChatStore({ maxMessages: 50 }); for(let i=0;i<80;i++) store.add({platform:"twitch",username:`u${i}`,message:"x"}); assert.equal(store.size(),50); assert.equal(store.list({limit:2})[0].username,"u78"); });
@@ -15,3 +16,7 @@ test("tts config clamps unsafe ranges", () => { const cfg=normalizeTtsConfig({en
 test("tts config preserves valid zero values", () => { const cfg=normalizeTtsConfig({pitch:0,volume:0,cooldownMs:0}); assert.equal(cfg.pitch,0); assert.equal(cfg.volume,0); assert.equal(cfg.cooldownMs,0); });
 
 test("cng renderer config never exposes the OBS token", () => { const config=normalizeCngConfig({chat:{url:"https://cng-plattform.com/chat-popout/42?mode=obs&obsChatToken=very-secret"}}); const safe=withoutCngSecrets(config); assert.equal(safe.chat.obsChatToken,""); assert.equal(safe.chat.hasToken,true); assert.equal(new URL(safe.chat.url).searchParams.has("obsChatToken"),false); });
+
+test("chat messages are converted to safe OBS overlay events", () => { const event=toOverlayChatEvent({id:"m1",platform:"twitch",username:"Batto",message:"Hallo",color:"#9146ff",role:"moderator",badges:["mod"]}); assert.deepEqual(event,{id:"m1",type:"chat",platform:"twitch",name:"Batto",text:"Hallo",userId:"",avatarUrl:"",timestamp:event.timestamp,data:{color:"#9146ff",role:"moderator",badges:["mod"]}}); });
+
+test("OBS chat overlay creates and updates a browser source", async () => { const calls=[]; const obs={status:()=>({connected:true}),call:async(type,data)=>{calls.push([type,data]); if(type==="GetCurrentProgramScene") return {currentProgramSceneName:"Live"}; if(type==="GetInputList") return {inputs:[]}; return {};},safeCall:async()=>null}; const result=await ensureObsChatOverlay(obs,{url:"http://127.0.0.1:48621/chat-overlay",sourceName:"Batto Chat",width:1920,height:1080}); assert.equal(result.created,true); assert.equal(calls[1][0],"GetInputList"); assert.equal(calls[2][0],"CreateInput"); assert.equal(calls[2][1].inputKind,"browser_source"); });

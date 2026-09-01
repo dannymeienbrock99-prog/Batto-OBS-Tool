@@ -201,6 +201,11 @@ const api = {
   saveCngConfig: (config) => ipcRenderer.invoke("cng:save-config", config),
   getTtsConfig: () => ipcRenderer.invoke("tts:get-config"),
   saveTtsConfig: (config) => ipcRenderer.invoke("tts:save-config", config),
+  chatOverlayStatus: () => ipcRenderer.invoke("chat:overlay-status"),
+  chatOverlayCopyUrl: () => ipcRenderer.invoke("chat:overlay-copy-url"),
+  chatOverlayOpen: () => ipcRenderer.invoke("chat:overlay-open"),
+  chatOverlayInstall: (config) => ipcRenderer.invoke("chat:overlay-install", config),
+  chatOverlayRemove: () => ipcRenderer.invoke("chat:overlay-remove"),
   saveReport: async () => {
     const filePath = await invoke("hardware:save-report");
     return { saved: Boolean(filePath), filePath };

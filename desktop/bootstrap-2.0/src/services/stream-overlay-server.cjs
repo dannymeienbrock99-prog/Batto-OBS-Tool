@@ -187,6 +187,7 @@ class StreamOverlayServer extends EventEmitter {
       port: this.port,
       baseUrl: this.port ? `http://127.0.0.1:${this.port}` : "",
       overlayUrl: this.port ? `http://127.0.0.1:${this.port}/overlay` : "",
+      chatOverlayUrl: this.port ? `http://127.0.0.1:${this.port}/chat-overlay` : "",
       editorUrl: this.port ? `http://127.0.0.1:${this.port}/editor` : "",
       eventUrl: this.port ? `http://127.0.0.1:${this.port}/api/event` : "",
       chatUrl: this.port ? `http://127.0.0.1:${this.port}/api/chat` : "",
@@ -247,6 +248,12 @@ class StreamOverlayServer extends EventEmitter {
     this.broadcast({ type: "clear" });
   }
 
+  clearChat(platform = "all") {
+    const selected = String(platform || "all").toLowerCase();
+    this.history = this.history.filter((event) => event.type !== "chat" || (selected !== "all" && event.platform !== selected));
+    this.broadcast({ type: "chat-clear", platform: selected });
+  }
+
   send(socket, value) {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value));
   }
@@ -276,6 +283,7 @@ class StreamOverlayServer extends EventEmitter {
       if (request.method === "OPTIONS") { response.writeHead(204, cors); return response.end(); }
       if (request.method === "GET" && url.pathname === "/") { response.writeHead(302, { Location: "/editor" }); return response.end(); }
       if (request.method === "GET" && url.pathname === "/overlay") return this.serveFile(path.join(this.webRoot, "overlay.html"), response, cors);
+      if (request.method === "GET" && url.pathname === "/chat-overlay") return this.serveFile(path.join(this.webRoot, "chat-overlay.html"), response, cors);
       if (request.method === "GET" && url.pathname === "/editor") return this.serveFile(path.join(this.webRoot, "editor.html"), response, cors);
       if (request.method === "GET" && url.pathname === "/api/status") return sendJson(response, 200, this.status(), cors);
       if (request.method === "GET" && url.pathname === "/api/config") return sendJson(response, 200, this.config, cors);

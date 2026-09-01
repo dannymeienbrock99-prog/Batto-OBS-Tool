@@ -644,3 +644,8 @@ app.on("before-quit", () => {
   try { monitoringServer?.stop?.(); } catch {}
   for (const window of childWindows) try { window.destroy(); } catch {}
 });
+
+module.exports = {
+  getObsClient: () => obs,
+  getStreamOverlayServer: () => streamOverlayServer
+};
