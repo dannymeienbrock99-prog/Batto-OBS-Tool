@@ -3,14 +3,14 @@
 require("./main.cjs");
 const path = require("node:path");
 const fs = require("node:fs/promises");
-const { app, BrowserWindow, globalShortcut, ipcMain } = require("electron");
+const { app, BrowserWindow, globalShortcut, ipcMain, safeStorage } = require("electron");
 const { ChatCore } = require("./services/chat-core.cjs");
 const { ChatWindowManager } = require("./services/chat-window-manager.cjs");
 const { TwitchAdapter } = require("./services/platforms/twitch-adapter.cjs");
 const { CngUnifiedAdapter } = require("./services/platforms/cng-adapter.cjs");
 const { TikTokAdapter } = require("./services/platforms/tiktok-adapter.cjs");
 const { YouTubeAdapter } = require("./services/platforms/youtube-adapter.cjs");
-const { normalizeCngConfig, parseCngChatUrl, parseCngAlertUrl } = require("./services/cng-config.cjs");
+const { normalizeCngConfig } = require("./services/cng-config.cjs");
 const { normalizeTtsConfig } = require("./services/tts-config.cjs");
 const { SecretStore } = require("./services/secret-store.cjs");
 
@@ -34,9 +34,7 @@ async function loadCngConfig() {
 }
 
 function broadcast(channel, payload) {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(channel, payload);
-  }
+  for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(channel, payload);
 }
 
 function registerChatIpc() {
@@ -63,7 +61,7 @@ function registerChatIpc() {
 }
 
 app.whenReady().then(async () => {
-  cngSecretStore = new SecretStore(path.join(app.getPath("userData"), "cng-secrets.json"), require("electron").safeStorage);
+  cngSecretStore = new SecretStore(path.join(app.getPath("userData"), "cng-secrets.json"), safeStorage);
   cngConfig = await loadCngConfig();
   ttsConfig = normalizeTtsConfig(await readJson(ttsConfigFile(), {}));
   core = new ChatCore({ maxMessages: 500, flushMs: 60 });
@@ -77,8 +75,9 @@ app.whenReady().then(async () => {
   const main = BrowserWindow.getAllWindows().find((win) => win.getTitle() === "Batto OBS Tool") || BrowserWindow.getAllWindows()[0] || null;
   windows = new ChatWindowManager({ mainWindow: main, userDataFile: path.join(app.getPath("userData"), "multi-chat-window.json"), broadcast: (state) => broadcast("chat:window", state) });
   await windows.loadSettings();
-  globalShortcut.register("CommandOrControl+Shift+C", () => windows.toggle());
   registerChatIpc();
+  globalShortcut.register("CommandOrControl+Shift+C", () => windows.toggle());
+  setTimeout(() => windows.create(), 1200).unref?.();
 }).catch((error) => console.error("Multi-Chat-Bootstrap konnte nicht starten:", error));
 
 app.on("before-quit", () => { globalShortcut.unregister("CommandOrControl+Shift+C"); void core?.stop(); });
