@@ -4,7 +4,7 @@
   "private": true,
   "description": "Batto OBS Tool – OBS-Steuerung, Hardwarediagnose, Overlays, Touch-Deck, Multi-Chat, Plugins und lokale Handy-Steuerung",
   "author": "Crazy_Batto / Team Alpha",
-  "main": "src/main.cjs",
+  "main": "src/chat-bootstrap.cjs",
   "scripts": {
     "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && node scripts/patch-2.0.0-integrated.cjs && node scripts/prepare-touch-deck-pro-v2.cjs",
     "pretest": "npm run prepare:integrated",
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "qrcode": "^1.5.4",
+    "tiktok-live-connector": "^2.4.4",
     "ws": "^8.18.3"
   },
   "devDependencies": {
@@ -26,52 +27,10 @@
     "productName": "Batto OBS Tool",
     "artifactName": "Batto-OBS-Tool-Setup-${version}.${ext}",
     "asar": true,
-    "files": [
-      "src/**/*",
-      "modules/**/*",
-      "resources/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "build/license.txt",
-        "to": "Nutzungs-und-Lizenzbedingungen.txt"
-      },
-      {
-        "from": "resources/team-logo.png",
-        "to": "resources/team-logo.png"
-      },
-      {
-        "from": "resources/team-logo.svg",
-        "to": "resources/team-logo.svg"
-      }
-    ],
-    "directories": {
-      "output": "dist",
-      "buildResources": "build"
-    },
-    "win": {
-      "icon": "build/icon.png",
-      "requestedExecutionLevel": "asInvoker",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "allowElevation": true,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": false,
-      "runAfterFinish": false,
-      "shortcutName": "Batto OBS Tool",
-      "license": "build/license.txt",
-      "include": "build/installer.nsh"
-    }
+    "files": ["src/**/*", "modules/**/*", "resources/**/*", "package.json"],
+    "extraResources": [{"from":"build/license.txt","to":"Nutzungs-und-Lizenzbedingungen.txt"},{"from":"resources/team-logo.png","to":"resources/team-logo.png"},{"from":"resources/team-logo.svg","to":"resources/team-logo.svg"}],
+    "directories": {"output":"dist","buildResources":"build"},
+    "win": {"icon":"build/icon.png","requestedExecutionLevel":"asInvoker","target":[{"target":"nsis","arch":["x64"]}]},
+    "nsis": {"oneClick":false,"perMachine":true,"allowElevation":true,"allowToChangeInstallationDirectory":true,"createDesktopShortcut":true,"createStartMenuShortcut":true,"deleteAppDataOnUninstall":false,"runAfterFinish":false,"shortcutName":"Batto OBS Tool","license":"build/license.txt","include":"build/installer.nsh"}
   }
 }
