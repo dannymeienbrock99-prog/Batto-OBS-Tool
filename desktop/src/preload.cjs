@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   chatStatuses: () => ipcRenderer.invoke("chat:statuses"),
   chatConnect: (platform, config) => ipcRenderer.invoke("chat:connect", platform, config),
   chatDisconnect: (platform) => ipcRenderer.invoke("chat:disconnect", platform),
-  chatClear: (platform) => ipcRenderer.invoke("chat:clear", platform),
+  chatClear: (platform) => ipcRenderer.invoke("unified-chat:clear", platform),
   chatToggleWindow: () => ipcRenderer.invoke("chat:toggle-window"),
   chatWindowStatus: () => ipcRenderer.invoke("chat:window-status"),
   setChatAlwaysOnTop: (value) => ipcRenderer.invoke("chat:window-always-on-top", value),

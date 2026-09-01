@@ -23,7 +23,8 @@ function forbidText(content, pattern, message) {
 }
 
 const required = [
-  "src/main.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/styles.css", "src/renderer/app.js",
+  "src/main.cjs", "src/chat-bootstrap.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/styles.css", "src/renderer/app.js",
+  "src/renderer/multi-chat.html", "src/renderer/multi-chat.js", "src/renderer/multi-chat.css",
   "src/renderer/integrated.js", "src/renderer/integrated.css", "src/renderer/assets/team-alpha-logo.svg",
   "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs",
   "src/services/common.cjs", "src/services/deck-store.cjs", "src/services/plugin-registry.cjs",
@@ -50,7 +51,7 @@ try { packageJson = JSON.parse(read("package.json") || "{}"); }
 catch (error) { fail(`package.json ist ungültig: ${error.message}`); }
 if (packageJson.name !== "batto-obs-tool") fail("package.json: Name muss batto-obs-tool sein.");
 if (packageJson.version !== "2.0.0") fail("package.json: Version muss 2.0.0 sein.");
-if (packageJson.main !== "src/main.cjs") fail("package.json: Haupteinstieg muss src/main.cjs sein.");
+if (!["src/main.cjs", "src/chat-bootstrap.cjs"].includes(packageJson.main)) fail("package.json: Haupteinstieg muss src/main.cjs oder src/chat-bootstrap.cjs sein.");
 if (packageJson.build?.productName !== "Batto OBS Tool") fail("package.json: Produktname ist falsch.");
 if (packageJson.build?.nsis?.oneClick !== false) fail("Installer muss den Assistent-Modus verwenden.");
 if (packageJson.build?.nsis?.allowToChangeInstallationDirectory !== true) fail("Installationsordner muss auswählbar sein.");

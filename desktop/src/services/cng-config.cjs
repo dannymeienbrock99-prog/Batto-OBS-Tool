@@ -115,11 +115,25 @@ function normalizeCngConfig(input = {}) {
   };
 }
 
+function withoutCngSecrets(input = {}) {
+  const safe = JSON.parse(JSON.stringify(input && typeof input === "object" ? input : {}));
+  if (!safe.chat) return safe;
+  safe.chat.hasToken = Boolean(safe.chat.obsChatToken);
+  safe.chat.obsChatToken = "";
+  if (safe.chat.url) {
+    const url = new URL(safe.chat.url);
+    url.searchParams.delete("obsChatToken");
+    safe.chat.url = url.toString();
+  }
+  return safe;
+}
+
 module.exports = {
   CNG_HOST,
   parseCngChatUrl,
   parseCngAlertUrl,
   normalizeCngConfig,
+  withoutCngSecrets,
   sanitizeForLog,
   maskSecret
 };

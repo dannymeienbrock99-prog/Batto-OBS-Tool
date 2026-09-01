@@ -29,9 +29,13 @@ class TikTokAdapter extends EventEmitter {
     this.client.on?.("member", (data) => this.emitEvent("member", data, `${data?.nickname || data?.uniqueId || "User"} ist beigetreten`));
     this.client.on?.("social", (data) => this.emitEvent("social", data, `${data?.nickname || data?.uniqueId || "User"} hat eine soziale Aktion ausgelöst`));
     this.client.on?.("subscribe", (data) => this.emitEvent("subscribe", data, `${data?.nickname || data?.uniqueId || "User"} hat abonniert`));
+    this.client.on?.("subNotify", (data) => this.emitEvent("subscribe", data, `${data?.nickname || data?.uniqueId || "User"} hat abonniert`));
     this.client.on?.("connected", () => { this.connected=true; this.emitStatus(); });
     this.client.on?.("disconnected", () => { this.connected=false; this.emitStatus(); });
-    await this.client.connect(); this.emitStatus(); return this.status();
+    this.client.on?.("error", (error) => { this.connected=false; this.emitStatus({ error:String(error?.message || error) }); });
+    try { await this.client.connect(); }
+    catch (error) { this.client=null; this.connected=false; this.emitStatus({ error:String(error?.message || error) }); throw error; }
+    this.emitStatus(); return this.status();
   }
   async disconnect() { try { await this.client?.disconnect?.(); } catch {} this.client=null; this.connected=false; this.emitStatus(); return this.status(); }
 }

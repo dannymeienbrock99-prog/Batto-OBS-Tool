@@ -9,6 +9,7 @@ class ChatWindowManager {
     this.userDataFile = userDataFile;
     this.broadcast = broadcast || (() => {});
     this.window = null;
+    this.quitting = false;
     this.settings = { undocked: false, x: null, y: null, width: 560, height: 760, alwaysOnTop: false };
   }
 
@@ -47,6 +48,7 @@ class ChatWindowManager {
       minWidth: 420,
       minHeight: 520,
       x, y,
+      alwaysOnTop: this.settings.alwaysOnTop,
       backgroundColor: "#070b12",
       autoHideMenuBar: true,
       webPreferences: {
@@ -61,8 +63,8 @@ class ChatWindowManager {
     this.window.on("move", () => this.captureBounds());
     this.window.on("resize", () => this.captureBounds());
     this.window.on("closed", async () => {
-      this.captureBounds();
       this.window = null;
+      if (this.quitting) return;
       this.settings.undocked = false;
       await this.saveSettings();
       this.broadcast({ type: "window", undocked: false });
@@ -98,6 +100,12 @@ class ChatWindowManager {
     this.window?.setAlwaysOnTop(this.settings.alwaysOnTop);
     void this.saveSettings();
     return { alwaysOnTop: this.settings.alwaysOnTop };
+  }
+
+  prepareToQuit() {
+    this.quitting = true;
+    this.captureBounds();
+    return this.saveSettings();
   }
 
   status() { return { ...this.settings, undocked: this.isUndocked(), windowId: this.window?.id || null }; }

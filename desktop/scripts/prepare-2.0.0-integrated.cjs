@@ -145,10 +145,11 @@ replaceRequired(oldApp,
 const packagePath = path.join(root, "package.json");
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 if (packageJson.version !== "2.0.0") throw new Error(`Falsche Paketversion: ${packageJson.version}`);
-if (packageJson.main !== "src/main.cjs") throw new Error(`Falscher Programmeinstieg: ${packageJson.main}`);
+if (!["src/main.cjs", "src/chat-bootstrap.cjs"].includes(packageJson.main)) throw new Error(`Falscher Programmeinstieg: ${packageJson.main}`);
 
 const required = [
-  "src/main.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/app.js",
+  "src/main.cjs", "src/chat-bootstrap.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/app.js",
+  "src/renderer/multi-chat.html", "src/renderer/multi-chat.js", "src/renderer/multi-chat.css",
   "src/renderer/integrated.js", "src/renderer/integrated.css", "src/renderer/assets/team-alpha-logo.svg",
   "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs",
   "src/services/mobile-bridge.cjs", "src/services/stream-overlay-server.cjs", "src/services/plugin-registry.cjs",

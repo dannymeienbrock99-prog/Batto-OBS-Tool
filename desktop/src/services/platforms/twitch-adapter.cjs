@@ -14,13 +14,23 @@ class TwitchAdapter extends EventEmitter {
     await this.disconnect();
     const channel = String(config.channel || "").trim().replace(/^#/, "").toLowerCase();
     const token = String(config.token || "").trim().replace(/^oauth:/i, "");
-    const username = String(config.username || "batto_reader").trim().toLowerCase();
+    const username = String(config.username || channel).trim().toLowerCase();
     if (!channel || !token) throw new Error("Twitch benötigt Kanalname und OAuth-Token für den Chat-Reader.");
     this.config = { channel, token, username };
     this.ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
     return new Promise((resolve, reject) => {
       let settled = false;
-      const fail = (error) => { if (!settled) { settled = true; reject(error); } this.emitStatus({ error: String(error?.message || error) }); };
+      const timeout = setTimeout(() => fail(new Error("Twitch-Chat hat die Anmeldung nicht innerhalb von 10 Sekunden bestätigt.")), 10000);
+      const ready = () => { if (settled) return; settled = true; clearTimeout(timeout); this.connected = true; this.emitStatus(); resolve(this.status()); };
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        this.connected = false;
+        try { this.ws?.close(); } catch {}
+        reject(error);
+        this.emitStatus({ error: String(error?.message || error) });
+      };
       this.ws.on("open", () => {
         this.ws.send(`PASS oauth:${token}`);
         this.ws.send(`NICK ${username}`);
@@ -28,11 +38,14 @@ class TwitchAdapter extends EventEmitter {
         this.ws.send(`JOIN #${channel}`);
       });
       this.ws.on("message", (data) => {
-        for (const line of String(data).split(/\r?\n/).filter(Boolean)) this.handleLine(line);
-        if (!settled && this.connected) { settled = true; resolve(this.status()); }
+        for (const line of String(data).split(/\r?\n/).filter(Boolean)) {
+          if (line.includes(" 001 ") || line.includes(` JOIN #${channel}`)) ready();
+          if (/ (?:NOTICE|464) /.test(line) && /authentication|login unsuccessful|improperly formatted auth/i.test(line)) fail(new Error("Twitch hat den OAuth-Token abgelehnt."));
+          this.handleLine(line);
+        }
       });
-      this.ws.on("error", fail);
-      this.ws.on("close", () => { this.connected = false; this.emitStatus(); });
+      this.ws.on("error", (error) => settled ? this.emitStatus({ error: String(error?.message || error) }) : fail(error));
+      this.ws.on("close", () => { if (!settled) fail(new Error("Twitch hat die Verbindung vor Abschluss der Anmeldung geschlossen.")); this.connected = false; this.emitStatus(); });
       this.emitStatus({ connecting: true });
     });
   }

@@ -189,6 +189,18 @@ const api = {
   openHoloEditor: () => invoke("holo:open"),
   copyHoloUrl: () => invoke("holo:copy-url"),
   executeDeckAction: (assignment) => invoke("action:execute", { action: actionForLegacyAssignment(assignment), context: { source: "legacy-deck" } }),
+  chatHistory: (options) => ipcRenderer.invoke("chat:history", options),
+  chatStatuses: () => ipcRenderer.invoke("chat:statuses"),
+  chatConnect: (platform, config) => ipcRenderer.invoke("chat:connect", platform, config),
+  chatDisconnect: (platform) => ipcRenderer.invoke("chat:disconnect", platform),
+  chatClear: (platform) => ipcRenderer.invoke("unified-chat:clear", platform),
+  chatToggleWindow: () => ipcRenderer.invoke("chat:toggle-window"),
+  chatWindowStatus: () => ipcRenderer.invoke("chat:window-status"),
+  setChatAlwaysOnTop: (value) => ipcRenderer.invoke("chat:window-always-on-top", value),
+  getCngConfig: () => ipcRenderer.invoke("cng:get-config"),
+  saveCngConfig: (config) => ipcRenderer.invoke("cng:save-config", config),
+  getTtsConfig: () => ipcRenderer.invoke("tts:get-config"),
+  saveTtsConfig: (config) => ipcRenderer.invoke("tts:save-config", config),
   saveReport: async () => {
     const filePath = await invoke("hardware:save-report");
     return { saved: Boolean(filePath), filePath };
@@ -199,6 +211,10 @@ const api = {
     return () => ipcRenderer.removeListener("state:changed", listener);
   },
   onPairRequest(callback) { return on("mobile:pair-request", callback); },
+  onChatMessages(callback) { return on("chat:messages", callback); },
+  onChatStatus(callback) { return on("chat:status", callback); },
+  onChatCleared(callback) { return on("chat:cleared", callback); },
+  onChatWindow(callback) { return on("chat:window", callback); },
   onTelemetry(callback) {
     const listener = (_event, value) => callback(telemetryForLegacy(value?.telemetry));
     ipcRenderer.on("state:changed", listener);
