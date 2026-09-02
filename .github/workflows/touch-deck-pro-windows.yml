@@ -3,6 +3,7 @@ name: Batto OBS Tool Touch-Deck Pro Windows Package
 on:
   push:
     branches:
+      - main
       - feat/touch-deck-pro-plugin-sidebar
     paths:
       - "desktop/**"
