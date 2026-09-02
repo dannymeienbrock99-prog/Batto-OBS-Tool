@@ -73,6 +73,10 @@
       || null;
   }
 
+  function pageFolders(currentProfile = profile()) {
+    return (currentProfile?.folders || []).filter((entry) => !entry.parentId);
+  }
+
   function actionCatalog() {
     const result = [];
     for (const plugin of state?.plugins?.plugins || []) {
@@ -125,9 +129,9 @@
       <div class="tdp-shell">
         <header class="tdp-heading">
           <div>
-            <span class="eyebrow">PROFILE · ORDNER · PLUGIN-AKTIONEN</span>
+            <span class="eyebrow">PROFILE · SEITEN · ORDNER · PLUGIN-AKTIONEN</span>
             <h2>Touch-Deck Pro</h2>
-            <p>Links Aktionen suchen, in der Mitte das Deck gestalten und rechts die ausgewählte Taste konfigurieren.</p>
+            <p>Deck links, Aktionen rechts und Eigenschaften unten – mit Profilen, Seiten, Ordnern und Mehrfachaktionen.</p>
           </div>
           <div class="button-row">
             <button id="tdp-import" type="button">Importieren</button>
@@ -162,9 +166,6 @@
             <section id="tdp-grid-panel" class="tdp-grid-panel">
               <label>Zeilen<input id="tdp-rows" type="number" min="1" max="10"></label>
               <label>Spalten<input id="tdp-columns" type="number" min="1" max="10"></label>
-              <label>Tastengröße<input id="tdp-size" type="number" min="64" max="260"></label>
-              <label>Abstand<input id="tdp-gap" type="number" min="0" max="40"></label>
-              <label class="tdp-check"><input id="tdp-hide-unused" type="checkbox"> Unbenutzte Tasten ausblenden</label>
               <button id="tdp-apply-grid" type="button">Raster übernehmen</button>
             </section>
             <div class="tdp-stage-meta">
@@ -174,7 +175,8 @@
             <div class="tdp-grid-viewport">
               <div id="tdp-grid" class="tdp-grid" aria-label="Touch-Deck-Tasten"></div>
             </div>
-            <p class="tdp-stage-help">Aktion links anklicken oder auf eine Taste ziehen. Tasten lassen sich untereinander verschieben.</p>
+            <div id="tdp-pagebar" class="tdp-pagebar"><button id="tdp-prev-page" type="button" title="Vorherige Seite">◀</button><div id="tdp-pages" class="tdp-pages"></div><button id="tdp-add-page" type="button" title="Neue Seite">＋</button><button id="tdp-next-page" type="button" title="Nächste Seite">▶</button></div>
+            <p class="tdp-stage-help">Aktion rechts anklicken oder auf eine Taste ziehen. Tasten lassen sich untereinander verschieben.</p>
           </main>
 
           <aside class="tdp-inspector">
@@ -206,7 +208,7 @@
                 <button id="tdp-clear-key" type="button">Leeren</button>
               </div>
             </div>
-            <div id="tdp-no-selection" class="tdp-no-selection">Wähle eine Taste aus oder ziehe links eine Aktion auf das Deck.</div>
+            <div id="tdp-no-selection" class="tdp-no-selection">Wähle eine Taste aus oder ziehe rechts eine Aktion auf das Deck.</div>
           </aside>
         </div>
       </div>`;
@@ -242,6 +244,9 @@
     });
     $("#tdp-add-profile").addEventListener("click", createProfile);
     $("#tdp-add-folder").addEventListener("click", createFolder);
+    $("#tdp-add-page").addEventListener("click", createPage);
+    $("#tdp-prev-page").addEventListener("click", () => switchPage(-1));
+    $("#tdp-next-page").addEventListener("click", () => switchPage(1));
     $("#tdp-back-folder").addEventListener("click", goBackFolder);
     $("#tdp-apply-grid").addEventListener("click", applyGrid);
     $("#tdp-grid-settings").addEventListener("click", () => {
@@ -371,15 +376,35 @@
 
     $("#tdp-rows").value = currentFolder.rows;
     $("#tdp-columns").value = currentFolder.columns;
-    $("#tdp-size").value = currentFolder.buttonSize;
-    $("#tdp-gap").value = currentFolder.gap;
-    $("#tdp-hide-unused").checked = Boolean(currentFolder.hideUnused);
     $("#tdp-back-folder").disabled = !currentFolder.parentId;
 
     renderGrid(currentProfile, currentFolder);
+    renderPages(currentProfile, currentFolder);
     renderInspector(currentProfile, currentFolder);
     renderLibrary();
     renderGridSettingsVisibility();
+  }
+
+  function renderPages(currentProfile, currentFolder) {
+    const target = $("#tdp-pages");
+    if (!target) return;
+    const pages = pageFolders(currentProfile);
+    const activePage = currentFolder?.parentId ? pages.find((page) => page.id === currentFolder.parentId) || pages[0] : currentFolder;
+    target.replaceChildren(...pages.map((page, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `tdp-page-dot${page.id === activePage?.id ? " active" : ""}`;
+      button.textContent = String(index + 1);
+      button.title = page.name || `Seite ${index + 1}`;
+      button.addEventListener("click", async () => {
+        await call("deck:activate-folder", { profileId: currentProfile.id, folderId: page.id });
+        selectedIndex = -1;
+        draft = null;
+        draftDirty = false;
+        await refresh();
+      });
+      return button;
+    }));
   }
 
   function renderGridSettingsVisibility() {
@@ -660,6 +685,32 @@
     await refresh();
   }
 
+  async function createPage() {
+    const currentProfile = profile();
+    const name = window.prompt("Name der neuen Seite:", `Seite ${pageFolders(currentProfile).length + 1}`)?.trim();
+    if (!name) return;
+    await call("deck:create-page", { profileId: currentProfile.id, name });
+    selectedIndex = -1;
+    draft = null;
+    draftDirty = false;
+    await refresh();
+  }
+
+  async function switchPage(direction) {
+    const currentProfile = profile();
+    const currentFolder = folder(currentProfile);
+    const pages = pageFolders(currentProfile);
+    if (pages.length < 2) return;
+    const activeId = currentFolder?.parentId || currentFolder?.id;
+    const currentIndex = Math.max(0, pages.findIndex((page) => page.id === activeId));
+    const next = pages[(currentIndex + direction + pages.length) % pages.length];
+    await call("deck:activate-folder", { profileId: currentProfile.id, folderId: next.id });
+    selectedIndex = -1;
+    draft = null;
+    draftDirty = false;
+    await refresh();
+  }
+
   async function createFolder() {
     const currentProfile = profile();
     const currentFolder = folder(currentProfile);
@@ -701,9 +752,9 @@
       patch: {
         rows,
         columns,
-        buttonSize: Math.max(64, Math.min(260, Number($("#tdp-size").value) || 116)),
-        gap: Math.max(0, Math.min(40, Number($("#tdp-gap").value) || 12)),
-        hideUnused: $("#tdp-hide-unused").checked
+        buttonSize: currentFolder.buttonSize,
+        gap: currentFolder.gap,
+        hideUnused: currentFolder.hideUnused
       }
     });
     await refresh();
