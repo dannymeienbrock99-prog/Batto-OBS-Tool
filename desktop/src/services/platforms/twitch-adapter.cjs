@@ -55,7 +55,8 @@ class TwitchAdapter extends EventEmitter {
       };
 
       this.ws.on("open", () => {
-        // Anonymous Twitch IRC: no OAuth token is requested, stored or transmitted.
+        // SCHMOOPIIE is Twitch's traditional anonymous IRC placeholder, not an OAuth token.
+        this.ws.send("PASS SCHMOOPIIE");
         this.ws.send(`NICK ${username}`);
         this.ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership");
         this.ws.send(`JOIN #${channel}`);
