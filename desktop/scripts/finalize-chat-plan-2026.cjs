@@ -22,32 +22,59 @@ function requirePresent(relative, patterns) {
   }
 }
 
-// Monitoring/Encoder-Hardware-Overlay vollständig aus der veröffentlichten Laufzeit entfernen.
+// Encoder-/Hardware-Monitoring und die alte Diagnose-/Empfehlungslaufzeit vollständig
+// aus dem generierten Produktions-Mainprozess entfernen. Der Patch ist idempotent.
 {
   const file = "src/main.cjs";
-  let text = read(file);
+  let text = read(file).replace(/\r\n/g, "\n");
+
+  text = text.replace(/const \{\n\s*collectHardware,\n\s*runCpuLoadTest,\n\s*runInternetTest,\n\s*SystemTelemetrySampler\n\} = require\("\.\/services\/hardware\.cjs"\);\n/, "");
+  text = text.replace(/^const \{ buildRecommendation \} = require\("\.\/services\/recommendation\.cjs"\);\n/m, "");
   text = text.replace(/^const \{ MonitoringOverlayServer \} = require\([^\n]+\);\n/m, "");
-  text = text.replace(/^let monitoringServer = null;\n/m, "");
+
+  for (const declaration of [
+    "let hardware = null;", "let internetResult = null;", "let recommendation = null;",
+    "let latestTelemetry = null;", "let telemetryTimer = null;", "let monitoringServer = null;", "let sampler = null;"
+  ]) text = text.replace(`${declaration}\n`, "");
+
   text = text.replace(/\nfunction monitoringStatus\(\) \{[\s\S]*?\n\}\n\nfunction sanitizedChatSnapshot/, "\nfunction sanitizedChatSnapshot");
-  text = text.replace(/\nfunction buildTelemetry\([\s\S]*?\n\}\n\nfunction publishMonitoring\([\s\S]*?\n\}\n\nasync function refreshTelemetry\([\s\S]*?\n\}\n\nasync function startModules/, "\nasync function startModules");
-  text = text.replace(/\n\s*const monitoringWeb = modulePath\([^\n]+\);\n\s*try \{\n\s*monitoringServer = new MonitoringOverlayServer\([\s\S]*?\n\s*\} catch \(error\) \{[^\n]*\}\n/, "\n");
-  text = text.replace(/\n\s*handle\("monitoring:status"[\s\S]*?handle\("monitoring:copy-url"[^\n]*\n/, "\n");
-  text = text.replace(/\n\s*telemetry: latestTelemetry,/, "");
-  text = text.replace(/\n\s*monitoring: monitoringStatus\(\),/, "");
-  text = text.replace(/\nlet latestTelemetry = null;/, "");
-  text = text.replace(/\nlet telemetryTimer = null;/, "");
-  text = text.replace(/\nlet sampler = null;/, "");
   text = text.replace(/\n\s*hardware: hardware \|\| null,/, "");
   text = text.replace(/\n\s*internet: internetResult \|\| null,/, "");
   text = text.replace(/\n\s*recommendation: recommendation \|\| null,/, "");
-  text = text.replace(/\n\s*modules: \{\n\s*streamOverlay:/, "\n    modules: {\n      streamOverlay:");
+  text = text.replace(/\n\s*telemetry: latestTelemetry,/, "");
+  text = text.replace(/\n\s*monitoring: monitoringStatus\(\),/, "");
+
+  // Entfernt bevorzugte GPU, Encoder-Empfehlung und Telemetrie-Funktionen als zusammenhängenden Block.
+  text = text.replace(/\nfunction preferredGpu\(\) \{[\s\S]*?\nasync function startModules\(\) \{/, "\nasync function startModules() {");
+
+  // Entfernt nur den Monitoring-Server-Start, Stream-Overlay/Multi-Chat bleiben bestehen.
+  text = text.replace(/\n\s*const monitoringWeb = modulePath\([^\n]+\);\n\s*try \{\n\s*monitoringServer = new MonitoringOverlayServer\([\s\S]*?\n\s*\} catch \(error\) \{[^\n]*\}\n/, "\n");
+
+  // Entfernt Diagnose-/Monitoring-IPC, OBS-IPC bleibt vollständig erhalten.
+  text = text.replace(/\n\s*handle\("hardware:scan"[^\n]*\n/, "\n");
+  text = text.replace(/\n\s*handle\("hardware:save-report"[\s\S]*?\n\s*\}\);\n/, "\n");
+  text = text.replace(/\n\s*handle\("internet:test"[^\n]*\n/, "\n");
+  text = text.replace(/\n\s*handle\("cpu:test"[^\n]*\n/, "\n");
+  text = text.replace(/\n\s*handle\("recommendation:build"[^\n]*\n/, "\n");
+  text = text.replace(/\n\s*handle\("monitoring:status"[\s\S]*?handle\("monitoring:copy-url"[^\n]*\n/, "\n");
+
+  // Entfernt Initialisierung und Shutdown der entfernten Telemetrie/Monitoring-Laufzeit.
+  text = text.replace(/\n\s*try \{ hardware = await collectHardware\(\); \} catch \(error\) \{ moduleErrors\.hardware = errorPayload\(error\); \}/, "");
+  text = text.replace(/\n\s*sampler = new SystemTelemetrySampler\(\);/, "");
+  text = text.replace(/\n\s*await buildEncoderRecommendation\(\{\}\);/, "");
+  text = text.replace(/\n\s*await refreshTelemetry\(\);/, "");
+  text = text.replace(/\n\s*telemetryTimer = setInterval\(refreshTelemetry, 1000\);\n\s*telemetryTimer\.unref\?\.\(\);/, "");
+  text = text.replace(/\n\s*clearInterval\(telemetryTimer\);/, "");
+  text = text.replace(/\n\s*try \{ await monitoringServer\?\.stop\?\.\(\); \} catch \{\}/, "");
+
   write(file, text);
 }
 
+// Nicht mehr veröffentlichte Module auch aus dem Arbeitsbaum entfernen.
 removeIfExists("modules/encoder-monitoring-overlay");
+removeIfExists("modules/twitch-holo-chat");
 
-// Alte sichtbare Hologramm-, Hardware-, Encoder-, Belastungs- und Monitoring-Seiten entfernen.
-// Touch-Deck Pro bleibt ausdrücklich als Hauptfunktion sichtbar.
+// Sichtbare alte Bereiche entfernen; Touch-Deck Pro bleibt ausdrücklich erhalten.
 {
   const file = "src/renderer/index.html";
   let html = read(file);
@@ -61,56 +88,42 @@ removeIfExists("modules/encoder-monitoring-overlay");
   write(file, html);
 }
 
-// Buildbeschreibung und Tests auf den echten veröffentlichten Umfang bringen.
+// Paketumfang auf die veröffentlichte Anwendung begrenzen.
 {
   const packageFile = "package.json";
   const packageJson = JSON.parse(read(packageFile));
   packageJson.description = "Batto OBS Tool – OBS-Steuerung, Multi-Chat, Stream-Overlay, Touch-Deck Pro, Plugins und lokale Handy-Steuerung";
   if (packageJson.scripts?.test) {
-    packageJson.scripts.test = packageJson.scripts.test.replace(/\s*modules\/encoder-monitoring-overlay\/test\/\*\.test\.cjs/g, "");
+    packageJson.scripts.test = packageJson.scripts.test
+      .replace(/\s*modules\/encoder-monitoring-overlay\/test\/\*\.test\.cjs/g, "")
+      .replace(/\s*modules\/twitch-holo-chat\/test\/\*\.test\.cjs/g, "");
   }
-  if (Array.isArray(packageJson.build?.files)) {
-    packageJson.build.files = packageJson.build.files.filter((entry) => entry !== "modules/**/*");
-  }
+  if (Array.isArray(packageJson.build?.files)) packageJson.build.files = packageJson.build.files.filter((entry) => entry !== "modules/**/*");
   write(packageFile, JSON.stringify(packageJson, null, 2) + "\n");
 }
 
-// Produktionsprüfung an die vereinbarten Funktionen koppeln.
+// Piper-Service in Bootstrap und Produktionsquelle synchron halten.
 {
-  const file = "scripts/check-2.0.0.cjs";
-  let text = read(file);
-  text = text.replace(/,\s*"src\/services\/hardware\.cjs",\s*"src\/services\/recommendation\.cjs"/g, "");
-  text = text.replace(/,\s*"modules\/encoder-monitoring-overlay\/src\/server\.cjs",\s*"modules\/encoder-monitoring-overlay\/src\/telemetry\.cjs",\s*"modules\/encoder-monitoring-overlay\/web\/overlay\.css"/g, "");
-  text = text.replace(/const monitoringCss = read\([^\n]+\);\n/g, "");
-  text = text.replace(/const hardware = read\([^\n]+\);\n/g, "");
-  text = text.replace(/requireText\(main, \/new MonitoringOverlayServer[^\n]+\n/g, "");
-  text = text.replace(/requireText\(main, 'sampler\?\.sample[^\n]+\n/g, "");
-  text = text.replace(/requireText\(main, 'gpu: preferredGpu\(\)'[^\n]+\n/g, "");
-  text = text.replace(/requireText\(hardware,[\s\S]*?Integrierte GPU wird nicht abgewertet\."\);\n/g, "");
-  text = text.replace(/requireText\(monitoringCss,[\s\S]*?Monitoring-Overlay enthält einen vollflächigen dunklen Hintergrund\."\);\n/g, "");
-  text += `\n// Final scope checks\nforbidText(main, /MonitoringOverlayServer|monitoring:open|monitoring:copy-url/, "Encoder-/Hardware-Monitoring ist noch in der Laufzeit enthalten.");\nforbidText(index, /Hardwarediagnose|Encoder-Empfehlung|Monitoring-Overlay|Twitch-Hologramm/, "Entfernte Bereiche sind noch im Hauptfenster sichtbar.");\nrequireText(touchDeck, 'id=\"tdp-pagebar\"', "Touch-Deck-Pro-Seitenleiste fehlt.");\nrequireText(index, /Touch-Deck|data-page=[\"']deck[\"']|data-page-panel=[\"']deck[\"']/, "Touch-Deck Pro ist im Hauptfenster nicht erreichbar.");\nrequireText(pluginRegistry, ".streamdeckplugin", ".streamDeckPlugin-Unterstützung fehlt.");\n`;
-  write(file, text);
-}
-
-// Piper-Datei muss in der Produktionsquelle existieren; HTTP-Service bleibt lokal und ohne gebündelten GPL-Binary.
-{
-  const from = path.join(root, "src", "services", "piper-tts.cjs");
+  const production = path.join(root, "src", "services", "piper-tts.cjs");
   const bootstrap = path.join(root, "bootstrap-2.0", "src", "services", "piper-tts.cjs");
-  if (fs.existsSync(from) && !fs.existsSync(bootstrap)) {
+  if (fs.existsSync(production) && !fs.existsSync(bootstrap)) {
     fs.mkdirSync(path.dirname(bootstrap), { recursive: true });
-    fs.copyFileSync(from, bootstrap);
+    fs.copyFileSync(production, bootstrap);
   }
-  if (fs.existsSync(bootstrap)) {
-    fs.copyFileSync(bootstrap, from);
-  }
+  if (fs.existsSync(bootstrap)) fs.copyFileSync(bootstrap, production);
 }
 
-requireMissing("src/main.cjs", [/MonitoringOverlayServer/, /monitoring:open/, /monitoring:copy-url/, /TwitchHoloServer/, /holo:/]);
+requireMissing("src/main.cjs", [
+  /MonitoringOverlayServer/, /monitoring:open/, /monitoring:copy-url/, /monitoring:status/,
+  /SystemTelemetrySampler/, /refreshTelemetry/, /telemetryTimer/, /TwitchHoloServer/, /holo:/,
+  /hardware:scan/, /hardware:save-report/, /internet:test/, /cpu:test/, /recommendation:build/
+]);
 requireMissing("src/renderer/index.html", [/Twitch-Hologramm/i, /Monitoring-Overlay/i, /Hardwarediagnose/i, /Encoder-Empfehlung/i]);
 requirePresent("src/renderer/index.html", [/Touch-Deck/i]);
 requirePresent("src/renderer/touch-deck-pro-v2.js", ['id="tdp-pagebar"', "addLibraryAction", "slice(newCapacity).filter(isUsed)"]);
 requirePresent("src/services/plugin-registry.cjs", ["importPackage(packageFile", ".streamdeckplugin", "sdkVersion:", "supportedInMultiActions:"]);
 requirePresent("src/services/native-plugin-additions.cjs", ["YouTube Music Desktop Connector", "TikFinity", "TikTok LIVE Studio", "Spotify", "Volume Controller"]);
 requirePresent("src/services/action-executor.cjs", ["icue.launch", "bambulab.launch", "spotify.launch", "volume.mixer", "youtube.music.open", "youtube.ticker.status"]);
+requirePresent("src/services/piper-tts.cjs", ["/voices", "/synthesize"]);
 
-console.log("Batto OBS Tool 2.0.0: finaler vereinbarter Produktionsumfang angewendet und geprüft.");
+console.log("Batto OBS Tool 2.0.0: finaler Produktionsumfang ohne Hologramm/Monitoring angewendet und geprüft.");
