@@ -13,6 +13,10 @@ function requireFile(relative) {
   return file;
 }
 
+function requireText(content, text, message) {
+  if (!content.includes(text)) throw new Error(message);
+}
+
 // Übersicht mit dem vom Nutzer gelieferten Drachen-PC-Hintergrund aufbauen.
 {
   const backgroundFile = requireFile("src/renderer/assets/overview-bg.jpg");
@@ -34,31 +38,23 @@ function requireFile(relative) {
   }
 }
 
-// Stream-Overlay: Rechtsklick-Menü, Kopieren, Duplizieren, Löschen und Ausrichten.
+// Stream-Overlay: Die moderne Editor-Laufzeit enthält diese Funktionen bereits.
+// Hier wird die reale Implementierung validiert, statt alte Patchpunkte ein zweites Mal zu verändern.
 {
   const editorFile = "src/stream-overlay/editor.js";
-  let js = read(editorFile);
+  const js = read(editorFile);
 
-  if (!js.includes("function alignSelected(mode)")) {
-    const marker = "  function deleteSelected() {";
-    if (!js.includes(marker)) throw new Error("Overlay-Editor-Patchpunkt für Kontextaktionen fehlt.");
-    const methods = `  function alignSelected(mode) {\n    const item = selected();\n    if (!item) return;\n    const canvas = state.config.resolution;\n    if (mode === "left") item.x = 0;\n    if (mode === "center") item.x = Math.max(0, (canvas.width - item.width) / 2);\n    if (mode === "right") item.x = Math.max(0, canvas.width - item.width);\n    if (mode === "top") item.y = 0;\n    if (mode === "middle") item.y = Math.max(0, (canvas.height - item.height) / 2);\n    if (mode === "bottom") item.y = Math.max(0, canvas.height - item.height);\n    markDirty("Element ausgerichtet – noch nicht gespeichert");\n    renderPreview();\n  }\n\n  async function copySelected() {\n    const item = selected();\n    if (!item) return;\n    state.elementClipboard = clone(item);\n    await copyText(JSON.stringify(item, null, 2));\n    toast("Element kopiert.");\n  }\n\n  function closeElementContextMenu() {\n    document.getElementById("overlay-element-context-menu")?.remove();\n  }\n\n  function showElementContextMenu(clientX, clientY) {\n    closeElementContextMenu();\n    if (!selected()) return;\n    const menu = document.createElement("div");\n    menu.id = "overlay-element-context-menu";\n    menu.className = "overlay-context-menu";\n    const actions = [\n      ["Kopieren", () => copySelected()],\n      ["Duplizieren", () => duplicateSelected()],\n      ["Löschen", () => deleteSelected()],\n      ["Links ausrichten", () => alignSelected("left")],\n      ["Horizontal zentrieren", () => alignSelected("center")],\n      ["Rechts ausrichten", () => alignSelected("right")],\n      ["Oben ausrichten", () => alignSelected("top")],\n      ["Vertikal zentrieren", () => alignSelected("middle")],\n      ["Unten ausrichten", () => alignSelected("bottom")]
-    ];\n    for (const [label, handler] of actions) {\n      const button = document.createElement("button");\n      button.type = "button";\n      button.textContent = label;\n      button.addEventListener("click", async () => {\n        closeElementContextMenu();\n        await handler();\n      });\n      menu.append(button);\n    }\n    document.body.append(menu);\n    const rect = menu.getBoundingClientRect();\n    menu.style.left = Math.max(8, Math.min(clientX, innerWidth - rect.width - 8)) + "px";\n    menu.style.top = Math.max(8, Math.min(clientY, innerHeight - rect.height - 8)) + "px";\n  }\n\n`;
-    js = js.replace(marker, methods + marker);
-  }
-
-  if (!js.includes('element.addEventListener("contextmenu"')) {
-    const marker = '    element.addEventListener("click", (event) => { event.stopPropagation(); state.selectedId = item.id; renderPreview(); });';
-    if (!js.includes(marker)) throw new Error("Overlay-Element-Klick-Patchpunkt fehlt.");
-    js = js.replace(marker, `${marker}\n    element.addEventListener("contextmenu", (event) => {\n      event.preventDefault();\n      event.stopPropagation();\n      state.selectedId = item.id;\n      renderPreview();\n      showElementContextMenu(event.clientX, event.clientY);\n    });`);
-  }
-
-  if (!js.includes('document.addEventListener("pointerdown", (event) =>')) {
-    const marker = '    $("preview-stage").addEventListener("click", (event) => { if (event.target === $("preview-stage")) { state.selectedId = ""; renderPreview(); } });';
-    if (!js.includes(marker)) throw new Error("Overlay-Bind-Patchpunkt fehlt.");
-    js = js.replace(marker, `${marker}\n    document.addEventListener("pointerdown", (event) => {\n      const menu = document.getElementById("overlay-element-context-menu");\n      if (menu && !menu.contains(event.target)) closeElementContextMenu();\n    });\n    document.addEventListener("keydown", (event) => {\n      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c" && selected()) { event.preventDefault(); copySelected(); }\n      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d" && selected()) { event.preventDefault(); duplicateSelected(); }\n      if (event.key === "Delete" && selected() && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) { event.preventDefault(); deleteSelected(); }\n      if (event.key === "Escape") closeElementContextMenu();\n    });`);
-  }
-  write(editorFile, js);
+  requireText(js, 'addEventListener("contextmenu"', "Stream-Overlay: echtes Rechtsklick-Menü fehlt.");
+  requireText(js, "function copySelected()", "Stream-Overlay: Kopieren fehlt.");
+  requireText(js, "function pasteElement()", "Stream-Overlay: Einfügen fehlt.");
+  requireText(js, "function duplicateSelected()", "Stream-Overlay: Duplizieren fehlt.");
+  requireText(js, "function deleteSelected()", "Stream-Overlay: Löschen fehlt.");
+  requireText(js, "function alignSelected(mode)", "Stream-Overlay: Ausrichten fehlt.");
+  requireText(js, "function moveLayer(direction)", "Stream-Overlay: Ebenensteuerung fehlt.");
+  requireText(js, 'event.key === "Delete"', "Stream-Overlay: Entf-Tastenkürzel fehlt.");
+  requireText(js, 'event.key.toLowerCase() === "c"', "Stream-Overlay: Kopieren-Tastenkürzel fehlt.");
+  requireText(js, 'event.key.toLowerCase() === "v"', "Stream-Overlay: Einfügen-Tastenkürzel fehlt.");
+  requireText(js, 'event.key.toLowerCase() === "d"', "Stream-Overlay: Duplizieren-Tastenkürzel fehlt.");
 
   const cssFile = "src/stream-overlay/editor.css";
   let css = read(cssFile);
@@ -68,4 +64,4 @@ function requireFile(relative) {
   }
 }
 
-console.log("Batto UI 2026: Übersichtshintergrund und Stream-Overlay-Kontextwerkzeuge fertig eingebaut.");
+console.log("Batto UI 2026: Übersichtshintergrund und vorhandene Stream-Overlay-Kontextwerkzeuge validiert.");
