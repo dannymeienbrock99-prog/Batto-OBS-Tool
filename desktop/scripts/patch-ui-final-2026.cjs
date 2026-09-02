@@ -27,7 +27,9 @@ function requireText(content, text, message) {
   const indexFile = "src/renderer/index.html";
   let html = read(indexFile);
   html = html.replace('<div class="hero panel">', '<div class="hero panel overview-hero">');
-  html = html.replace(/(<section class="page active" data-page-panel="overview">[\s\S]*?<div class="hero panel overview-hero">[\s\S]*?)<img src="\.\/assets\/team-logo\.(?:svg|png)" alt="Team Alpha">/, "$1");
+  html = html.replace('<div class="hero-card">', '<div class="hero-card overview-hero">');
+  html = html.replace(/(<div class="(?:hero panel|hero-card) overview-hero">[\s\S]*?)<img src="\.\/assets\/team-logo\.(?:svg|png)" alt="Team Alpha">/, "$1");
+  if (!html.includes("overview-hero")) throw new Error("Übersichts-Hero konnte nicht für das Hintergrundbild vorbereitet werden.");
   write(indexFile, html);
 
   const stylesFile = "src/renderer/styles.css";
