@@ -97,7 +97,12 @@ const streamServerFile = path.join(source, "services", "stream-overlay-server.cj
 replaceRequired(streamServerFile, 'path.join(this.webRoot, "team-logo.svg")', 'path.join(this.webRoot, "team-logo.png")', "PNG-Fallback des Team-Alpha-Logos");
 
 const preloadFile = path.join(source, "preload.cjs");
-replaceRequired(preloadFile, 'function legacyState(value) {', 'function obsForLegacy(value) {\n  if (!value) return value;\n  return {\n    ...value,\n    scenes: Array.isArray(value.scenes)\n      ? { scenes: value.scenes, currentProgramSceneName: value.currentScene }\n      : value.scenes,\n    currentScene: value.currentProgramSceneName\n  };\n}', "OBS-Kompatibilitätsform für die vorhandene Oberfläche");
+replaceRequired(
+  preloadFile,
+  'function legacyState(value) {',
+  'function obsForLegacy(value) {\n  if (!value) return value;\n  return {\n    ...value,\n    scenes: Array.isArray(value.scenes)\n      ? { scenes: value.scenes, currentProgramSceneName: value.currentScene }\n      : value.scenes,\n    currentScene: value.currentProgramSceneName\n  };\n}\n\nfunction legacyState(value) {',
+  "OBS-Kompatibilitätsform für die vorhandene Oberfläche"
+);
 replaceRequired(preloadFile, 'obs: value?.obs || { connected: false },', 'obs: obsForLegacy(value?.obs || { connected: false }),', "OBS-Kompatibilität im Startzustand");
 replaceRequired(preloadFile, 'getObsSnapshot: () => invoke("obs:refresh"),', 'getObsSnapshot: async () => obsForLegacy(await invoke("obs:refresh")),', "OBS-Kompatibilität beim Neuladen");
 replaceRequired(preloadFile, 'return (await invoke("settings:update", patch)).legacyDeck || value.deck || patch;', 'await invoke("settings:update", patch);\n    return legacyState(await invoke("state:get")).settings;', "Vollständige Rückgabe alter Einstellungen");
@@ -109,8 +114,6 @@ replaceAllRequired(multiChatFile, 'writeJsonAtomic(this.settingsFile, this.setti
 const oldApp = path.join(source, "renderer", "app.js");
 replaceRequired(oldApp, 'state?.product?.version || "1.9.1"', 'state?.product?.version || "2.0.0"', "Renderer-Fallbackversion");
 
-// Normalize the package/installer metadata after every integrated prepare run.
-// This prevents stale package.json values from breaking the Touch-Deck CI checker.
 const packagePath = path.join(root, "package.json");
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 if (packageJson.version !== "2.0.0") throw new Error(`Falsche Paketversion: ${packageJson.version}`);
