@@ -164,6 +164,17 @@ const required = [
   "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/mobile/index.html",
   "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "resources/team-logo.svg",
   "modules/encoder-monitoring-overlay/src/server.cjs", "modules/twitch-holo-chat/web/overlay.html"
+  if (!fs.existsSync(bootstrap)) {
+  throw new Error(`Bootstrap-Verzeichnis fehlt: ${path.relative(root, bootstrap)}`);
+}
+for (const file of ["main.cjs", "preload.cjs"]) {
+  const filePath = path.join(bootstrap, file);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Bootstrap-Datei fehlt: bootstrap-2.0/src/${file}`);
+  }
+}
+
+console.log(`✓ Bootstrap-Verzeichnis OK: ${fs.readdirSync(bootstrap).length} Dateien gefunden`);
 ];
 for (const relative of required) {
   const absolute = path.join(root, relative);
