@@ -84,7 +84,7 @@ test("TikTok moderation rejects invalid duration and never leaks OAuth secret in
     fetchImpl: async () => response({ code: 403, message: "missing scope" }, 403)
   });
 
-  await assert.rejects(() => client.mute({ roomId: "1", userId: "2", duration: "999" }), /Ungültige Stummschalt-Dauer/);
+  assert.throws(() => client.mute({ roomId: "1", userId: "2", duration: "999" }), /Ungültige Stummschalt-Dauer/);
   await assert.rejects(async () => {
     try { await client.ban({ roomId: "1", userId: "2" }); }
     catch (error) {
