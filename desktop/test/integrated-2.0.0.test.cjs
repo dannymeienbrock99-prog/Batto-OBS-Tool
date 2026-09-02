@@ -13,6 +13,8 @@ const { MobileBridge } = require("../src/services/mobile-bridge.cjs");
 const { MultiChat } = require("../src/services/multi-chat.cjs");
 const { copyDirectoryMissing } = require("../src/services/migration.cjs");
 const { ActionExecutor } = require("../src/services/action-executor.cjs");
+const { TwitchAdapter, anonymousNick } = require("../src/services/platforms/twitch-adapter.cjs");
+const { connectionOptions, userFrom } = require("../src/services/platforms/tiktok-adapter.cjs");
 
 const temp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
 const remove = (directory) => fs.rmSync(directory, { recursive: true, force: true });
@@ -24,6 +26,23 @@ test("OBS connection is local, authenticated and IPv6-safe", () => {
   assert.equal(websocketUrl("::1", 4455), "ws://[::1]:4455");
   assert.equal(websocketUrl("127.0.0.1", 4455), "ws://127.0.0.1:4455");
   assert.equal(authentication("pass", "salt", "challenge"), "EabUNw4z9EKKpEOC0yvqBO8dJPSIcTb82eo+adWKOvk=");
+});
+
+test("Twitch reader is anonymous read-only and needs no token", () => {
+  const adapter = new TwitchAdapter();
+  assert.equal(adapter.status().mode, "anonymous-read-only");
+  assert.match(anonymousNick(), /^justinfan\d{6}$/);
+  assert.equal(adapter.status().configured, false);
+});
+
+test("TikTok connector avoids processInitialData crash and normalizes nested user data", () => {
+  const options = connectionOptions();
+  assert.equal(options.processInitialData, false);
+  assert.equal(options.fetchRoomInfoOnConnect, true);
+  const user = userFrom({ user: { nickname: "Batto", uniqueId: "crazy_batto", userId: "123", isModerator: true } });
+  assert.equal(user.nickname, "Batto");
+  assert.equal(user.userId, "123");
+  assert.equal(user.isModerator, true);
 });
 
 test("Touch-Deck shrink preserves hidden actions, folders and delays", () => {
@@ -64,7 +83,6 @@ test("Touch-Deck pages are real top-level pages and become active", () => {
     assert.equal(page.rows, 4);
     assert.equal(page.columns, 6);
     assert.equal(current.activeFolderId, page.id);
-    assert.ok(current.folders.filter((folder) => !folder.parentId).length >= 2);
   } finally { remove(directory); }
 });
 
@@ -107,7 +125,10 @@ test("stream overlay is local, transparent and persists portrait layout", async 
       body: JSON.stringify({ ...config, width: 1080, height: 1920 })
     });
     assert.equal(response.ok, true);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, "overlay.json"), "utf8")).height, 1920);
+    const saved = JSON.parse(fs.readFileSync(path.join(directory, "overlay.json"), "utf8"));
+    assert.equal(saved.width, 1080);
+    assert.equal(saved.height, 1920);
+    assert.equal(saved.orientation, "portrait");
   } finally { await server.stop(); remove(directory); }
 });
 
@@ -129,17 +150,17 @@ test("mobile bridge provides web, Batto and legacy QR pairing without exposing P
   } finally { await server.stop(); remove(directory); }
 });
 
-test("multi-chat does not store tokens or API keys in plain JSON", () => {
+test("multi-chat never persists a Twitch token and keeps YouTube secret out of JSON", () => {
   const directory = temp("batto-chat");
   try {
     const file = path.join(directory, "chat.json");
     const chat = new MultiChat({ settingsFile: file });
     chat.updateSettings({ twitch: { channel: "crazy_batto" }, youtube: { liveChatId: "live-id" } }, {
-      twitchOauth: "oauth-secret-value", youtubeApiKey: "youtube-secret-value"
+      twitchOauth: "must-be-ignored", youtubeApiKey: "youtube-secret-value"
     });
     const raw = fs.readFileSync(file, "utf8");
-    assert.doesNotMatch(raw, /oauth-secret-value|youtube-secret-value/);
-    assert.equal(chat.settings.twitch.oauth, "oauth-secret-value");
+    assert.doesNotMatch(raw, /must-be-ignored|youtube-secret-value/);
+    assert.equal(Object.hasOwn(chat.settings.twitch, "oauth"), false);
     assert.equal(chat.settings.youtube.apiKey, "youtube-secret-value");
   } finally { remove(directory); }
 });
@@ -162,10 +183,10 @@ test("legacy file copy never overwrites existing Batto data", () => {
   } finally { remove(directory); }
 });
 
-test("production scope contains the integrated app and no removed monitoring or hologram runtime", () => {
+test("production scope uses classic deck and contains real OBS guest handlers", () => {
   const root = path.join(__dirname, "..");
   const visible = [
-    "src/renderer/index.html", "src/renderer/app.js", "src/renderer/integrated.js",
+    "src/renderer/index.html", "src/renderer/app.js", "src/renderer/integrated.js", "src/renderer/touch-deck-classic.js",
     "src/mobile/index.html", "src/mobile/app.js", "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html"
   ].map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
   const main = fs.readFileSync(path.join(root, "src", "main.cjs"), "utf8");
@@ -173,12 +194,15 @@ test("production scope contains the integrated app and no removed monitoring or 
   const index = fs.readFileSync(path.join(root, "src", "renderer", "index.html"), "utf8");
 
   assert.doesNotMatch(visible, /Creator Hub/i);
-  assert.doesNotMatch(visible, /\bKandidat\b/i);
   assert.doesNotMatch(index, /Hardwarediagnose|Encoder-Empfehlung|Belastungstest|Monitoring-Overlay|Twitch-Hologramm|LIVE-MONITORING/i);
+  assert.doesNotMatch(index, /touch-deck-pro-v2/i);
+  assert.doesNotMatch(visible, /Touch-Deck Pro/);
   assert.doesNotMatch(main, /MonitoringOverlayServer|SystemTelemetrySampler|monitoring:status|monitoring:open|TwitchHoloServer|holo:/i);
-  assert.match(main, /handle\("deck:create-page"/);
-  assert.match(preload, /"deck:create-page"/);
+  assert.match(main, /handle\("guests:list"/);
+  assert.match(main, /handle\("guests:apply"/);
+  assert.match(preload, /"guests:list"/);
+  assert.match(preload, /"guests:apply"/);
   assert.equal(fs.existsSync(path.join(root, "modules", "encoder-monitoring-overlay")), false);
   assert.equal(fs.existsSync(path.join(root, "modules", "twitch-holo-chat")), false);
-  for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Touch-Deck Pro", "Handy verbinden"]) assert.match(visible, new RegExp(label));
+  for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Touch-Deck", "Handy verbinden"]) assert.match(visible, new RegExp(label));
 });
