@@ -15,12 +15,12 @@ function userFrom(data = {}) {
   };
 }
 
-function connectionOptions() {
+function connectionOptions(config = {}) {
   return {
-    // Avoid the connector's initial replay path. Live events still arrive normally.
     processInitialData: false,
     fetchRoomInfoOnConnect: true,
-    enableExtendedGiftInfo: true
+    enableExtendedGiftInfo: true,
+    ...(config.signApiKey ? { signApiKey: String(config.signApiKey) } : {})
   };
 }
 
@@ -32,6 +32,7 @@ class TikTokAdapter extends EventEmitter {
     this.username = "";
     this.connected = false;
     this.available = false;
+    this.mode = "local";
   }
 
   onMessage(callback) { this.on("message", callback); }
@@ -42,7 +43,8 @@ class TikTokAdapter extends EventEmitter {
       connected: this.connected,
       configured: Boolean(this.username),
       available: this.available,
-      username: this.username
+      username: this.username,
+      mode: this.mode
     };
   }
   emitStatus(extra = {}) { this.emit("status", { ...this.status(), ...extra }); }
@@ -67,6 +69,20 @@ class TikTokAdapter extends EventEmitter {
     this.username = String(config.username || config.uniqueId || "").trim().replace(/^@/, "");
     if (!this.username) throw new Error("TikTok LIVE benötigt den @Username des öffentlichen LIVE-Streams.");
 
+    const mode = String(config.mode || "local").toLowerCase();
+    this.mode = mode === "direct" ? "direct" : "local";
+
+    if (this.mode !== "direct") {
+      this.available = true;
+      this.connected = true;
+      this.emitStatus({ message: "Lokaler TikFinity/Tiktory-Modus aktiv." });
+      return this.status();
+    }
+
+    if (!String(config.signApiKey || "").trim()) {
+      throw new Error("Direkter TikTok-LIVE-Modus benötigt einen eigenen EulerStream API-Key. Nutze sonst den kostenlosen lokalen TikFinity/Tiktory-Modus.");
+    }
+
     let Connector;
     try {
       const module = await import("tiktok-live-connector");
@@ -80,7 +96,7 @@ class TikTokAdapter extends EventEmitter {
     if (!this.available) throw new Error("TikTok LIVE Connector konnte nicht geladen werden.");
 
     try {
-      this.client = new Connector(this.username, connectionOptions());
+      this.client = new Connector(this.username, connectionOptions(config));
       this.client.on?.("chat", (data) => {
         const user = userFrom(data);
         this.emit("message", {
