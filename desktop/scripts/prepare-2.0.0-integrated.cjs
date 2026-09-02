@@ -72,6 +72,11 @@ copyFile(fallbackLogo, path.join(source, "mobile", "team-logo.svg"));
 const indexFile = path.join(source, "renderer", "index.html");
 let index = fs.readFileSync(indexFile, "utf8").replaceAll("1.9.1", "2.0.0");
 index = index.replaceAll("./assets/team-alpha-logo.svg", "./assets/team-alpha-logo.png");
+index = index.replace(/\s*<button class="nav-button" data-view="holo">[\s\S]*?<\/button>/g, "");
+index = index.replace(/\s*<button data-jump="holo">[\s\S]*?<\/button>/g, "");
+index = index.replace(/\s*<section id="view-holo"[\s\S]*?<\/section>/g, "");
+index = index.replace(/\s*<button[^>]*data-page="hologram"[^>]*>[\s\S]*?<\/button>/g, "");
+index = index.replace(/\s*<section class="page" data-page-panel="hologram">[\s\S]*?<\/section>/g, "");
 if (!index.includes("integrated.css")) {
   const marker = '<link rel="stylesheet" href="./styles.css">';
   if (!index.includes(marker)) throw new Error("Stylesheet-Marker im Hauptfenster fehlt.");
@@ -96,12 +101,7 @@ const streamServerFile = path.join(source, "services", "stream-overlay-server.cj
 replaceRequired(streamServerFile, 'path.join(this.webRoot, "team-logo.svg")', 'path.join(this.webRoot, "team-logo.png")', "PNG-Fallback des Team-Alpha-Logos");
 
 const preloadFile = path.join(source, "preload.cjs");
-replaceRequired(
-  preloadFile,
-  'function legacyState(value) {',
-  'function obsForLegacy(value) {\n  if (!value) return value;\n  return {\n    ...value,\n    scenes: Array.isArray(value.scenes)\n      ? { scenes: value.scenes, currentProgramSceneName: value.currentScene }\n      : value.scenes,\n    currentScene: value.currentProgramSceneName\n  };\n}\n\nfunction legacyState(value) {',
-  "OBS-Kompatibilitätsform für die vorhandene Oberfläche"
-);
+replaceRequired(preloadFile, 'function legacyState(value) {', 'function obsForLegacy(value) {\n  if (!value) return value;\n  return {\n    ...value,\n    scenes: Array.isArray(value.scenes)\n      ? { scenes: value.scenes, currentProgramSceneName: value.currentScene }\n      : value.scenes,\n    currentScene: value.currentProgramSceneName\n  };\n}\n\nfunction legacyState(value) {', "OBS-Kompatibilitätsform für die vorhandene Oberfläche");
 replaceRequired(preloadFile, 'obs: value?.obs || { connected: false },', 'obs: obsForLegacy(value?.obs || { connected: false }),', "OBS-Kompatibilität im Startzustand");
 replaceRequired(preloadFile, 'getObsSnapshot: () => invoke("obs:refresh"),', 'getObsSnapshot: async () => obsForLegacy(await invoke("obs:refresh")),', "OBS-Kompatibilität beim Neuladen");
 replaceRequired(preloadFile, 'return (await invoke("settings:update", patch)).legacyDeck || value.deck || patch;', 'await invoke("settings:update", patch);\n    return legacyState(await invoke("state:get")).settings;', "Vollständige Rückgabe alter Einstellungen");
@@ -118,13 +118,7 @@ const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 if (packageJson.version !== "2.0.0") throw new Error(`Falsche Paketversion: ${packageJson.version}`);
 if (packageJson.main !== "src/main.cjs") throw new Error(`Falscher Programmeinstieg: ${packageJson.main}`);
 packageJson.build = packageJson.build || {};
-packageJson.build.nsis = {
-  ...(packageJson.build.nsis || {}),
-  oneClick: false,
-  allowToChangeInstallationDirectory: true,
-  runAfterFinish: false,
-  include: "build/installer.nsh"
-};
+packageJson.build.nsis = { ...(packageJson.build.nsis || {}), oneClick: false, allowToChangeInstallationDirectory: true, runAfterFinish: false, include: "build/installer.nsh" };
 fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + "\n", "utf8");
 
 const required = [
