@@ -1,4 +1,4 @@
-name: Batto OBS Tool Touch-Deck Pro Windows Package
+name: Batto OBS Tool Windows Package
 
 on:
   push:
@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: batto-touch-deck-pro-${{ github.ref }}
+  group: batto-windows-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -51,17 +51,21 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           npm test
-          if ($LASTEXITCODE -ne 0) { throw "Touch-Deck-Pro- oder Integrationstests sind fehlgeschlagen." }
+          if ($LASTEXITCODE -ne 0) { throw "Batto-OBS-Tool Integrationstests sind fehlgeschlagen." }
           foreach ($required in @(
-            "src/renderer/touch-deck-pro-v2.js",
-            "src/renderer/touch-deck-pro-v2.css",
-            "src/renderer/index.html"
+            "src/renderer/touch-deck-classic.js",
+            "src/renderer/touch-deck-classic.css",
+            "src/renderer/index.html",
+            "src/services/platforms/twitch-adapter.cjs",
+            "src/services/platforms/tiktok-adapter.cjs",
+            "src/stream-overlay/overlay.js"
           )) {
-            if (-not (Test-Path $required)) { throw "Vorbereitete Touch-Deck-Pro-Datei fehlt: $required" }
+            if (-not (Test-Path $required)) { throw "Vorbereitete Produktionsdatei fehlt: $required" }
           }
           $index = Get-Content "src/renderer/index.html" -Raw
-          if ($index -notmatch 'touch-deck-pro-v2\.css') { throw "Touch-Deck-Pro-CSS ist nicht eingebunden." }
-          if ($index -notmatch 'touch-deck-pro-v2\.js') { throw "Touch-Deck-Pro-JavaScript ist nicht eingebunden." }
+          if ($index -notmatch 'touch-deck-classic\.css') { throw "Classic-Touch-Deck-CSS ist nicht eingebunden." }
+          if ($index -notmatch 'touch-deck-classic\.js') { throw "Classic-Touch-Deck-JavaScript ist nicht eingebunden." }
+          if ($index -match 'touch-deck-pro-v2') { throw "Touch-Deck Pro ist noch im veröffentlichten Hauptfenster eingebunden." }
 
       - name: Build Windows x64 application installer
         shell: pwsh
@@ -85,7 +89,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $release = Join-Path $PWD "release-touch-deck-pro"
+          $release = Join-Path $PWD "release-batto-obs-tool"
           Remove-Item -Recurse -Force $release -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $release | Out-Null
 
@@ -94,20 +98,17 @@ jobs:
           Copy-Item $installer.FullName (Join-Path $release $installer.Name)
 
           @"
-          BATTO OBS TOOL 2.0.0 – TOUCH-DECK-PRO-PAKET
+          BATTO OBS TOOL 2.0.0 – WINDOWS-PAKET
 
           1. Batto-OBS-Tool-Setup-2.0.0.exe installieren.
 
-          Touch-Deck Pro enthält jetzt:
-          - linke Plugin-/Aktionsbibliothek mit Suche
-          - Umschaltung Tasten / Plugins
-          - aufklappbare Plugin-Gruppen
-          - Aktion per Klick oder Drag-and-drop auf eine Taste
-          - mittleres variables Tastenraster
-          - rechten Tasten-Inspector mit Mehrfachaktionen
-          - leere, unbeschriftete Standardtasten
-          - Profile, Ordner, Import/Export, Kopieren/Einfügen und Verzögerungen
-          - Beibehaltung verdeckter Tasten beim Verkleinern des Rasters
+          Enthalten:
+          - klassisches profilbasiertes Touch-Deck aus dem früheren Setup
+          - Twitch Chat anonym/read-only ohne OAuth-Token
+          - TikTok LIVE Connector mit stabiler Initialisierung
+          - Stream-Overlay mit wirksamer Hoch-/Querformat-Ausrichtung
+          - OBS Co-Host/Gäste über echte Scene-Item-Schaltung
+          - Multi-Chat, Plugins, Piper TTS und lokale Handy-Steuerung
           "@ | Set-Content -Encoding UTF8 (Join-Path $release "INSTALLATION.txt")
 
           $hashLines = Get-ChildItem $release -File -Recurse | ForEach-Object {
@@ -117,7 +118,7 @@ jobs:
           }
           $hashLines | Set-Content -Encoding ASCII (Join-Path $release "SHA256.txt")
 
-          $zip = Join-Path $PWD "Batto-OBS-Tool-2.0.0-TouchDeck-Pro-Windows.zip"
+          $zip = Join-Path $PWD "Batto-OBS-Tool-2.0.0-Windows.zip"
           Remove-Item $zip -Force -ErrorAction SilentlyContinue
           Compress-Archive -Path "$release/*" -DestinationPath $zip -CompressionLevel Optimal
 
@@ -137,8 +138,8 @@ jobs:
       - name: Upload verified package
         uses: actions/upload-artifact@v4
         with:
-          name: Batto-OBS-Tool-2.0.0-TouchDeck-Pro-Windows
-          path: Batto-OBS-Tool-2.0.0-TouchDeck-Pro-Windows.zip
+          name: Batto-OBS-Tool-2.0.0-Windows
+          path: Batto-OBS-Tool-2.0.0-Windows.zip
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
