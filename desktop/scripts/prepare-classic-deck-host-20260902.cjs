@@ -33,19 +33,18 @@ if (!text.includes('id="classic-deck-host"')) {
   text = text.slice(0, begin) + replacement + text.slice(end);
 }
 
-// Twitch läuft anonym/read-only. Das frühere Bot-/Kontonamenfeld wurde entfernt;
-// übrig gebliebene Zugriffe darauf würden im Renderer auf null.value laufen.
-text = text.replace(
-  '          twitch: { channel: $("#chat-twitch-channel").value.trim(), nickname: $("#chat-twitch-name").value.trim() },',
-  '          twitch: { channel: $("#chat-twitch-channel").value.trim() },'
-);
-text = text.replace(/\n\s*\$\("#chat-twitch-name"\)\.value = settings\.twitch\?\.nickname \|\| "";/g, "");
+// Twitch ist anonym/read-only. Das alte Bot-/Kontonamenfeld darf weder sichtbar
+// sein noch irgendwo über .value angesprochen werden.
+text = text.replace(/\n\s*<label>Bot-\/Kontoname<input id="chat-twitch-name"[^>]*><\/label>/g, "");
+text = text.replace(/,\s*nickname:\s*\$\("#chat-twitch-name"\)\.value\.trim\(\)/g, "");
+text = text.replace(/nickname:\s*\$\("#chat-twitch-name"\)\.value\.trim\(\)\s*,\s*/g, "");
+text = text.replace(/\n\s*\$\("#chat-twitch-name"\)\.value\s*=\s*[^;]+;/g, "");
 
 if (!text.includes('id="classic-deck-host"')) {
   throw new Error("Classic Touch-Deck Host konnte nicht eingebaut werden.");
 }
-if (text.includes('$("#chat-twitch-name").value')) {
-  throw new Error("Entferntes Twitch-Namensfeld wird noch im Renderer angesprochen.");
+if (text.includes("chat-twitch-name")) {
+  throw new Error("Entferntes Twitch-Namensfeld wird noch im Renderer verwendet.");
 }
 
 write(integratedFile, text);
@@ -58,4 +57,4 @@ for (const file of [path.join(rendererRoot, "index.html"), path.join(rendererRoo
   }
 }
 
-console.log("Classic Touch-Deck Host eingesetzt; alte Pro-Bezeichnungen und verwaiste Twitch-Namenszugriffe entfernt.");
+console.log("Classic Touch-Deck Host eingesetzt; alte Pro-Bezeichnungen und verwaiste Twitch-Namenszugriffe vollständig entfernt.");
