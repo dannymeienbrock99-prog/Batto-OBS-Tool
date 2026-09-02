@@ -18,9 +18,9 @@
   "build": {
     "appId":"de.crazybatto.battoobstool","productName":"Batto OBS Tool","artifactName":"Batto-OBS-Tool-Setup-${version}.${ext}","asar":true,
     "files":["src/**/*","modules/**/*","resources/**/*","package.json"],
-    "extraResources":[{"from":"build/license.txt","to":"Nutzungs-und-Lizenzbedingungen.txt"},{"from":"resources/team-logo.png","to":"resources/team-logo.png"},{"from":"resources/team-logo.svg","to":"resources/team-logo.svg"}],
+    "extraResources":[{"from":"build/license.txt","to":"Nutzungs-und-Lizenzbedingungen.txt"},{"from":"resources/team-logo.png","to":"resources/team-logo.png"},{"from":"resources/team-logo.svg","to":"resources/team-logo.svg"},{"from":"resources/cng-chat-config.example.json","to":"resources/cng-chat-config.example.json"}],
     "directories":{"output":"dist","buildResources":"build"},
     "win":{"icon":"build/icon.png","requestedExecutionLevel":"asInvoker","target":[{"target":"nsis","arch":["x64"]}]},
-    "nsis":{"oneClick":false,"perMachine":true,"allowElevation":true,"allowToChangeInstallationDirectory":true,"createDesktopShortcut":true,"createStartMenuShortcut":true,"deleteAppDataOnUninstall":true}
+    "nsis":{"oneClick":false,"perMachine":true,"allowElevation":true,"allowToChangeInstallationDirectory":true,"runAfterFinish":false,"include":"build/installer.nsh","createDesktopShortcut":true,"createStartMenuShortcut":true,"deleteAppDataOnUninstall":true}
   }
 }
