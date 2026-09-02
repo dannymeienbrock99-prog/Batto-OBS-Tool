@@ -71,7 +71,7 @@ if (!/touch-deck-pro-v2/i.test(html)) throw new Error("Touch-Deck-Pro-Laufzeit i
 if (!/overview-hero/i.test(html)) throw new Error("Übersichts-Hintergrund ist nach der Bereinigung nicht aktiv.");
 fs.writeFileSync(indexFile, html, "utf8");
 
-// Texte der neuen integrierten Oberfläche dürfen das entfernte Monitoring nicht wieder ankündigen.
+// Texte der neuen integrierten Oberfläche dürfen entfernte Monitoring-/Hardware-Funktionen nicht wieder ankündigen.
 {
   const file = path.join(root, "src", "renderer", "integrated.js");
   let integrated = fs.readFileSync(file, "utf8");
@@ -79,8 +79,10 @@ fs.writeFileSync(indexFile, html, "utf8");
     "Das neue Encoder-Monitoring bleibt vollständig erhalten. Dieses Modul ergänzt die frei gestaltbare Stream-Ebene aus dem früheren Setup.",
     "Dieses Modul stellt die frei gestaltbare lokale Stream-Ebene für Chat, Ziele, Geschenke, Logo und Ereignisse bereit."
   );
-  if (/Encoder-Monitoring|Monitoring-Overlay|Twitch-Hologramm/i.test(integrated)) {
-    throw new Error("Integrierte Oberfläche enthält noch veraltete Monitoring-/Hologramm-Texte.");
+  integrated = integrated.replace(/<li>Dedizierte GPU wird bevorzugt<\/li>/g, "");
+  integrated = integrated.replace(/<li>Monitoring-Overlay bleibt transparent<\/li>/g, "<li>Stream-Overlay bleibt transparent</li>");
+  if (/Encoder-Monitoring|Monitoring-Overlay|Twitch-Hologramm|Dedizierte GPU wird bevorzugt/i.test(integrated)) {
+    throw new Error("Integrierte Oberfläche enthält noch veraltete Monitoring-/Hardware-Texte.");
   }
   fs.writeFileSync(file, integrated, "utf8");
 }
