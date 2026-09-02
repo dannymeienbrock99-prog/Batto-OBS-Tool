@@ -53,6 +53,15 @@ copyFile(path.join(bootstrap, "preload.cjs"), path.join(source, "preload.cjs"));
 copyFile(path.join(bootstrap, "renderer", "integrated.js"), path.join(source, "renderer", "integrated.js"));
 copyFile(path.join(bootstrap, "renderer", "integrated.css"), path.join(source, "renderer", "integrated.css"));
 
+// CNG / Multi-Chat integration must survive every prepare run because main.cjs is rebuilt from bootstrap-2.0.
+const generatedMain = path.join(source, "main.cjs");
+const cngRequire = 'require("./chat-bootstrap.cjs");';
+let generatedMainText = fs.readFileSync(generatedMain, "utf8");
+if (!generatedMainText.includes(cngRequire)) {
+  generatedMainText += `\n// CNG / Multi-Chat bootstrap integration\n${cngRequire}\n`;
+  fs.writeFileSync(generatedMain, generatedMainText, "utf8");
+}
+
 ensureDir(resources);
 const fallbackLogo = path.join(source, "stream-overlay", "team-logo.svg");
 if (!fs.existsSync(fallbackLogo)) throw new Error("Team-Alpha-Fallbacklogo fehlt im Stream-Overlay.");
