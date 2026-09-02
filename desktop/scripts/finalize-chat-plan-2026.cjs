@@ -65,14 +65,21 @@ function requirePresent(relative, patterns) {
   write(file, text);
 }
 
-removeIfExists("modules/encoder-monitoring-overlay");
-removeIfExists("modules/twitch-holo-chat");
+// Entfernte Komponenten dürfen auch nicht mehr im ausgelieferten src/**/*-Paket liegen.
+for (const obsolete of [
+  "modules/encoder-monitoring-overlay",
+  "modules/twitch-holo-chat",
+  "src/services/hardware.cjs",
+  "src/services/recommendation.cjs",
+  "src/services/telemetry.cjs",
+  "src/services/twitch-holo-server.cjs"
+]) removeIfExists(obsolete);
 
-// Alte sichtbare Diagnose-, Monitoring- und Hologramm-Bereiche aus beiden UI-Generationen entfernen.
+// Alte sichtbare Diagnose-, Monitoring-, Hologramm- und Alt-Deck-Bereiche entfernen.
 {
   const file = "src/renderer/index.html";
   let html = read(file);
-  const legacyPages = ["hardware", "internet", "recommendation", "loadtest", "monitoring", "holo", "encoder", "load", "hologram"];
+  const legacyPages = ["hardware", "internet", "recommendation", "loadtest", "monitoring", "holo", "encoder", "load", "hologram", "deck"];
 
   for (const page of legacyPages) {
     html = html.replace(new RegExp(`\\s*<button[^>]*data-view=[\"']${page}[\"'][^>]*>[\\s\\S]*?<\\/button>`, "gi"), "");
@@ -84,8 +91,6 @@ removeIfExists("modules/twitch-holo-chat");
 
   html = html.replace(/\s*<button[^>]*id=[\"']overview-scan[\"'][^>]*>[\s\S]*?<\/button>/gi, "");
   html = html.replace(/\s*<span[^>]*id=[\"']scan-pill[\"'][^>]*>[\s\S]*?<\/span>/gi, "");
-  html = html.replace(/\s*<div class=[\"']summary-grid[\"']>[\s\S]*?<\/div>\s*(?=<div class=[\"']two-column-cards[\"'])/i, "\n");
-  html = html.replace(/\s*<div class=[\"']two-column-cards[\"']>[\s\S]*?<\/div>\s*(?=<\/section>)/i, "\n");
   html = html.replace("Vom echten PC zur passenden OBS-Einstellung", "Streaming-Steuerung an einem Ort");
   html = html.replace(/Die Windows-Diagnose liest Hardware lokal aus\.[\s\S]*?gekennzeichnet\./, "OBS, Multi-Chat, Stream-Overlay, Touch-Deck Pro, Plugins und Handy-Steuerung arbeiten gemeinsam in Batto OBS Tool.");
   html = html.replace("PC erkennen, OBS prüfen und passende Einstellungen ermitteln.", "OBS, Chat, Overlays und Touch-Deck Pro zentral steuern.");
@@ -126,13 +131,17 @@ requireMissing("src/main.cjs", [
 ]);
 requireMissing("src/renderer/index.html", [
   /Twitch-Hologramm/i, /Monitoring-Overlay/i, /Hardwarediagnose/i, /Encoder-Empfehlung/i,
-  /Belastungstest/i, /LIVE-MONITORING/i, /data-view=["'](?:hardware|internet|recommendation|loadtest|monitoring|holo)["']/i
+  /Belastungstest/i, /LIVE-MONITORING/i, /data-view=["'](?:hardware|internet|recommendation|loadtest|monitoring|holo|deck)["']/i
 ]);
-requirePresent("src/renderer/index.html", [/Touch-Deck/i, /overview-hero/i]);
+requirePresent("src/renderer/index.html", [/touch-deck-pro-v2/i, /overview-hero/i]);
 requirePresent("src/renderer/touch-deck-pro-v2.js", ['id="tdp-pagebar"', "addLibraryAction", "slice(newCapacity).filter(isUsed)"]);
 requirePresent("src/services/plugin-registry.cjs", ["importPackage(packageFile", ".streamdeckplugin", "sdkVersion:", "supportedInMultiActions:"]);
 requirePresent("src/services/native-plugin-additions.cjs", ["YouTube Music Desktop Connector", "TikFinity", "TikTok LIVE Studio", "Spotify", "Volume Controller"]);
 requirePresent("src/services/action-executor.cjs", ["icue.launch", "bambulab.launch", "spotify.launch", "volume.mixer", "youtube.music.open", "youtube.ticker.status"]);
 requirePresent("src/services/piper-tts.cjs", ["/voices", "/synthesize"]);
 
-console.log("Batto OBS Tool 2.0.0: finaler Produktionsumfang ohne Hologramm/Monitoring angewendet und geprüft.");
+for (const obsolete of ["src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/telemetry.cjs", "src/services/twitch-holo-server.cjs"]) {
+  if (fs.existsSync(path.join(root, obsolete))) throw new Error(`Entfernte Produktionsdatei ist noch vorhanden: ${obsolete}`);
+}
+
+console.log("Batto OBS Tool 2.0.0: finaler Produktionsumfang ohne Hologramm/Monitoring/Hardwarediagnose angewendet und geprüft.");
