@@ -77,8 +77,6 @@ jobs:
           $ErrorActionPreference = "Stop"
           npm run prepare:integrated
           if ($LASTEXITCODE -ne 0) { throw "Produktionsquelle konnte für den Testbuild nicht vorbereitet werden." }
-          node node_modules/electron/cli.js scripts/generate-icon.cjs
-          if ($LASTEXITCODE -ne 0) { throw "Windows-Icon konnte nicht erzeugt werden." }
           node node_modules/electron-builder/out/cli/cli.js --win dir --x64 --publish never
           if ($LASTEXITCODE -ne 0) { throw "Ungepackte Windows-Testanwendung konnte nicht gebaut werden." }
           if (-not (Test-Path "dist/win-unpacked/Batto OBS Tool.exe")) { throw "Ungepackte Batto OBS Tool.exe fehlt." }
