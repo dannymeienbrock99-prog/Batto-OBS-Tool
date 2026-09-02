@@ -46,18 +46,18 @@ function requirePresent(relative, patterns) {
 
 removeIfExists("modules/encoder-monitoring-overlay");
 
-// Alte sichtbare Hologramm-, Hardware-, Encoder-, Belastungs- und Monitoring-Seiten aus der veröffentlichten Oberfläche entfernen.
+// Alte sichtbare Hologramm-, Hardware-, Encoder-, Belastungs- und Monitoring-Seiten entfernen.
+// Touch-Deck Pro bleibt ausdrücklich als Hauptfunktion sichtbar.
 {
   const file = "src/renderer/index.html";
   let html = read(file);
-  for (const page of ["hardware", "internet", "encoder", "load", "monitoring", "hologram", "deck"]) {
+  for (const page of ["hardware", "internet", "encoder", "load", "monitoring", "hologram"]) {
     html = html.replace(new RegExp(`\\s*<button[^>]*(?:data-page|data-view)=[\"']${page}[\"'][^>]*>[\\s\\S]*?<\\/button>`, "gi"), "");
     html = html.replace(new RegExp(`\\s*<section[^>]*(?:data-page-panel|id)=[\"'](?:${page}|view-${page})[\"'][^>]*>[\\s\\S]*?<\\/section>`, "gi"), "");
   }
   html = html.replace(/<p>Alle Funktionen laufen lokal\.[\s\S]*?<\/p>/, "<p>Alle Kernfunktionen laufen lokal: OBS, Multi-Chat, Stream-Overlay, Touch-Deck Pro, Plugins und Handy-Steuerung.</p>");
   html = html.replace(/<button[^>]*data-go=[\"']hardware[\"'][^>]*>[\s\S]*?<\/button>/gi, "");
   html = html.replace(/<button[^>]*data-action=[\"']monitoring:open[\"'][^>]*>[\s\S]*?<\/button>/gi, "");
-  html = html.replace(/<button[^>]*data-go=[\"']deck[\"'][^>]*>[\s\S]*?<\/button>/gi, "");
   write(file, html);
 }
 
@@ -88,7 +88,7 @@ removeIfExists("modules/encoder-monitoring-overlay");
   text = text.replace(/requireText\(main, 'gpu: preferredGpu\(\)'[^\n]+\n/g, "");
   text = text.replace(/requireText\(hardware,[\s\S]*?Integrierte GPU wird nicht abgewertet\."\);\n/g, "");
   text = text.replace(/requireText\(monitoringCss,[\s\S]*?Monitoring-Overlay enthält einen vollflächigen dunklen Hintergrund\."\);\n/g, "");
-  text += `\n// Final scope checks\nforbidText(main, /MonitoringOverlayServer|monitoring:open|monitoring:copy-url/, "Encoder-/Hardware-Monitoring ist noch in der Laufzeit enthalten.");\nforbidText(index, /Hardwarediagnose|Encoder-Empfehlung|Monitoring-Overlay|Twitch-Hologramm/, "Entfernte Bereiche sind noch im Hauptfenster sichtbar.");\nrequireText(touchDeck, 'id=\"tdp-pagebar\"', "Touch-Deck-Pro-Seitenleiste fehlt.");\nrequireText(pluginRegistry, ".streamdeckplugin", ".streamDeckPlugin-Unterstützung fehlt.");\n`;
+  text += `\n// Final scope checks\nforbidText(main, /MonitoringOverlayServer|monitoring:open|monitoring:copy-url/, "Encoder-/Hardware-Monitoring ist noch in der Laufzeit enthalten.");\nforbidText(index, /Hardwarediagnose|Encoder-Empfehlung|Monitoring-Overlay|Twitch-Hologramm/, "Entfernte Bereiche sind noch im Hauptfenster sichtbar.");\nrequireText(touchDeck, 'id=\"tdp-pagebar\"', "Touch-Deck-Pro-Seitenleiste fehlt.");\nrequireText(index, /Touch-Deck|data-page=[\"']deck[\"']|data-page-panel=[\"']deck[\"']/, "Touch-Deck Pro ist im Hauptfenster nicht erreichbar.");\nrequireText(pluginRegistry, ".streamdeckplugin", ".streamDeckPlugin-Unterstützung fehlt.");\n`;
   write(file, text);
 }
 
@@ -107,8 +107,9 @@ removeIfExists("modules/encoder-monitoring-overlay");
 
 requireMissing("src/main.cjs", [/MonitoringOverlayServer/, /monitoring:open/, /monitoring:copy-url/, /TwitchHoloServer/, /holo:/]);
 requireMissing("src/renderer/index.html", [/Twitch-Hologramm/i, /Monitoring-Overlay/i, /Hardwarediagnose/i, /Encoder-Empfehlung/i]);
+requirePresent("src/renderer/index.html", [/Touch-Deck/i]);
 requirePresent("src/renderer/touch-deck-pro-v2.js", ['id="tdp-pagebar"', "addLibraryAction", "slice(newCapacity).filter(isUsed)"]);
-requirePresent("src/services/plugin-registry.cjs", ["importPackage(packageFile", ".streamdeckplugin"]);
+requirePresent("src/services/plugin-registry.cjs", ["importPackage(packageFile", ".streamdeckplugin", "sdkVersion:", "supportedInMultiActions:"]);
 requirePresent("src/services/native-plugin-additions.cjs", ["YouTube Music Desktop Connector", "TikFinity", "TikTok LIVE Studio", "Spotify", "Volume Controller"]);
 requirePresent("src/services/action-executor.cjs", ["icue.launch", "bambulab.launch", "spotify.launch", "volume.mixer", "youtube.music.open", "youtube.ticker.status"]);
 
