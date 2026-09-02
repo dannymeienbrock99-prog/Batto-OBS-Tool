@@ -644,3 +644,11 @@ app.on("before-quit", () => {
   try { monitoringServer?.stop?.(); } catch {}
   for (const window of childWindows) try { window.destroy(); } catch {}
 });
+
+// Expose the already running OBS client and local overlay server to the
+// Unified Multi-Chat bootstrap. The integrated prepare step loads that
+// bootstrap after this module has finished registering the main runtime.
+module.exports = {
+  getObsClient: () => obs,
+  getStreamOverlayServer: () => streamOverlayServer
+};

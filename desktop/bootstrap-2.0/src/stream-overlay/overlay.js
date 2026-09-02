@@ -235,6 +235,11 @@
         if (packet.type === "event") ingest(packet.event || {});
         if (packet.type === "history") for (const event of packet.events || []) ingest(event);
         if (packet.type === "clear") clear();
+        if (packet.type === "chat-clear") {
+          const platform = String(packet.platform || "all");
+          state.chat = platform === "all" ? [] : state.chat.filter((event) => event.platform !== platform);
+          render();
+        }
       } catch {}
     });
     current.addEventListener("close", () => {
