@@ -49,7 +49,8 @@ function legacyRoots() {
     legacyAppData: [
       path.join(appData, "Creator Hub"),
       path.join(appData, "creator-hub"),
-      path.join(appData, "creator-hub-live")
+      path.join(appData, "creator-hub-live"),
+      path.join(localAppData, "Controller Hub")
     ],
     legacyProgramData: [
       path.join(programData, "Creator Hub"),
@@ -60,6 +61,77 @@ function legacyRoots() {
       path.join(programData, "Creator Hub")
     ]
   };
+}
+
+function migrateCreatorHubDesktopLayout(value) {
+  if (!value || typeof value !== "object" || !Array.isArray(value.Profiles)) return null;
+  const profiles = [];
+  for (const sourceProfile of value.Profiles) {
+    const pages = Array.isArray(sourceProfile?.Pages) ? sourceProfile.Pages : [];
+    const sourcePages = pages.length ? pages : [{ Name: "Seite 1", Keys: sourceProfile?.Keys || [] }];
+    const folders = sourcePages.map((page, pageIndex) => ({
+      id: pageIndex === 0 ? "root" : `creator-hub-page-${pageIndex + 1}`,
+      name: safeText(page?.Name || `Seite ${pageIndex + 1}`, 120),
+      parentId: "",
+      rows: 3,
+      columns: 5,
+      buttons: (Array.isArray(page?.Keys) ? page.Keys : []).map((key) => {
+        const actions = [];
+        const actionType = safeText(key?.ActionType || "", 160);
+        const command = safeText(key?.Command || "", 4000);
+        const argumentsText = safeText(key?.Arguments || "", 4000);
+        if (actionType) {
+          let type = actionType;
+          let settings = {};
+          if (["process.start", "file.open", "folder.open", "sound.play"].includes(type)) {
+            type = "system.launch";
+            settings = { path: command, arguments: argumentsText };
+          } else if (type === "url.open") {
+            type = "system.url";
+            settings = { url: command };
+          } else if (type === "hotkey.send") {
+            type = "system.hotkey";
+            settings = { keys: command };
+          } else if (type === "windows.volume.mute") {
+            type = "media.mute";
+          } else if (type === "windows.volume.up") {
+            type = "media.volume.up";
+          } else if (type === "windows.volume.down") {
+            type = "media.volume.down";
+          } else if (type === "obs.scene.set") {
+            type = "obs.scene";
+            settings = { sceneName: command };
+          } else if (type === "obs.audio.togglemute") {
+            type = "obs.input.mute";
+            settings = { inputName: command, toggle: true };
+          } else if (type === "obs.stream.start") {
+            type = "obs.stream.toggle";
+          } else if (type === "obs.record.start") {
+            type = "obs.record.toggle";
+          } else if (type === "obs.virtualcamera.toggle") {
+            type = "obs.virtualcam.toggle";
+          } else {
+            settings = { command, arguments: argumentsText };
+          }
+          actions.push({ type, title: safeText(key?.Title || actionType, 200), settings, delayMs: 0 });
+        }
+        return {
+          title: safeText(key?.Title || "", 120),
+          subtitle: "",
+          icon: safeText(key?.IconPath || key?.Icon || "", 2_000_000),
+          actions
+        };
+      })
+    }));
+    profiles.push({
+      id: `creator-hub-${safeText(sourceProfile?.Name || "profil", 80).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      name: safeText(sourceProfile?.Name || "Creator Hub", 120),
+      description: "Importiertes Creator-Hub-Touch-Deck",
+      activeFolderId: "root",
+      folders
+    });
+  }
+  return { version: 2, activeProfileId: profiles[0]?.id || "", profiles, updatedAt: Date.now() };
 }
 
 class LegacyMigration {
@@ -88,13 +160,14 @@ class LegacyMigration {
     };
 
     for (const directory of roots.legacyAppData) {
-      const candidates = ["profiles.json", "deck-profiles.json", "decks.json"];
+      const candidates = ["profiles.json", "deck-profiles.json", "decks.json", "desktop-layout.json"];
       for (const name of candidates) {
         const file = path.join(directory, name);
         if (!exists(file)) continue;
         try {
           const value = JSON.parse(fs.readFileSync(file, "utf8"));
-          const result = this.deckStore?.mergeLegacy(value);
+          const migrated = name === "desktop-layout.json" ? migrateCreatorHubDesktopLayout(value) : value;
+          const result = this.deckStore?.mergeLegacy(migrated || value);
           report.profilesAdded += Number(result?.added || 0);
           report.settingsImported.push(file);
         } catch (error) {
@@ -155,4 +228,4 @@ class LegacyMigration {
   }
 }
 
-module.exports = { LegacyMigration, copyDirectoryMissing, legacyRoots };
+module.exports = { LegacyMigration, copyDirectoryMissing, legacyRoots, migrateCreatorHubDesktopLayout };
