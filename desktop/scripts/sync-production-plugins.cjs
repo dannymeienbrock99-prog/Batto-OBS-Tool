@@ -15,7 +15,9 @@ for (const name of files) {
 const registry = fs.readFileSync(path.join(production, "plugin-registry.cjs"), "utf8");
 const additions = fs.readFileSync(path.join(production, "native-plugin-additions.cjs"), "utf8");
 const executor = fs.readFileSync(path.join(production, "action-executor.cjs"), "utf8");
-if (!registry.toLowerCase().includes(".streamdeckplugin")) throw new Error(".streamDeckPlugin-Prüfung fehlt nach Synchronisierung.");
+const registryLower = registry.toLowerCase();
+const hasStreamDeckPackageSupport = registryLower.includes(".streamdeckplugin") || (registry.includes("importPackage(packageFile") && registry.includes("Stream Deck Plugin"));
+if (!hasStreamDeckPackageSupport) throw new Error(".streamDeckPlugin-Import fehlt nach Synchronisierung.");
 for (const name of ["YouTube Music Desktop Connector","YouTube Ticker","iCUE","BambuLab Printer Monitor","Spotify","Volume Controller","Discord Volume Mixer","TikFinity","TikTok LIVE Studio","Polls, Word Clouds & Spinner Wheels"]) {
   if (!additions.includes(name)) throw new Error(`Native Plugin-Kompatibilität fehlt nach Synchronisierung: ${name}`);
 }
