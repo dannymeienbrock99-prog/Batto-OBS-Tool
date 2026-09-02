@@ -62,9 +62,11 @@ has(index, "touch-deck-classic.js", "Classic Touch-Deck JavaScript ist nicht ein
 lacks(index, /touch-deck-pro-v2/i, "Touch-Deck-Pro-Laufzeit ist noch eingebunden.");
 lacks(integrated, /Touch-Deck Pro/, "Touch-Deck Pro ist noch sichtbar.");
 has(integrated, "Touch-Deck", "Touch-Deck Navigation fehlt.");
-has(classicDeck, "PROFILBASIERTES TOUCH-DECK", "Altes profilbasiertes Touch-Deck-Layout fehlt.");
-has(classicDeck, "classic-deck-rows", "Touch-Deck Zeilen fehlen.");
-has(classicDeck, "classic-deck-columns", "Touch-Deck Spalten fehlen.");
+has(classicDeck, "sd-shell", "Original-orientiertes Touch-Deck-Layout fehlt.");
+has(classicDeck, "sd-rows", "Touch-Deck Zeilen fehlen.");
+has(classicDeck, "sd-cols", "Touch-Deck Spalten fehlen.");
+has(classicDeck, "application/x-batto-action", "Drag-and-Drop für Stream-Deck-Aktionen fehlt.");
+has(classicDeck, "streamdeck:open-inspector", "Originaler Stream-Deck Property Inspector ist nicht verdrahtet.");
 has(classicDeck, "deck:update-button", "Touch-Deck kann Tasten nicht speichern.");
 has(classicDeck, "deck:execute-button", "Touch-Deck kann Tasten nicht ausführen.");
 has(deckStore, "rows * columns", "Variables Touch-Deck-Raster fehlt.");
@@ -80,6 +82,7 @@ has(legacyChat, "absichtlich anonym", "Legacy MultiChat ist nicht als read-only 
 has(tiktok, "processInitialData: false", "TikTok processInitialData Fix fehlt.");
 has(tiktok, "fetchRoomInfoOnConnect: true", "TikTok Room-Initialisierung fehlt.");
 has(tiktok, "userFrom(data", "TikTok v2 User-Daten-Normalisierung fehlt.");
+has(tiktok, 'config.mode || "local"', "TikTok lokaler Gratis-Modus fehlt.");
 
 has(overlay, "function applyViewport()", "Overlay-Ausrichtungsfunktion fehlt.");
 has(overlay, "config.width", "Overlay verwendet die gespeicherte Breite nicht.");
