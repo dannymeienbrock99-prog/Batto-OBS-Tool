@@ -49,6 +49,25 @@ test("Touch-Deck shrink preserves hidden actions, folders and delays", () => {
   } finally { remove(directory); }
 });
 
+test("Touch-Deck pages are real top-level pages and become active", () => {
+  const directory = temp("batto-pages");
+  try {
+    const store = new DeckStore(path.join(directory, "deck.json"));
+    const profile = store.snapshot().profiles[0];
+    const rootPage = profile.folders.find((folder) => folder.id === "root") || profile.folders[0];
+    store.updateFolder(profile.id, rootPage.id, { rows: 4, columns: 6 });
+    store.createPage(profile.id, "Gaming");
+    const current = store.snapshot().profiles[0];
+    const page = current.folders.find((folder) => folder.name === "Gaming");
+    assert.ok(page, "Neue Seite wurde nicht gespeichert.");
+    assert.equal(page.parentId, "");
+    assert.equal(page.rows, 4);
+    assert.equal(page.columns, 6);
+    assert.equal(current.activeFolderId, page.id);
+    assert.ok(current.folders.filter((folder) => !folder.parentId).length >= 2);
+  } finally { remove(directory); }
+});
+
 test("native replacements cover the legacy plugin catalog", () => {
   const directory = temp("batto-plugins");
   try {
@@ -150,12 +169,15 @@ test("production scope contains the integrated app and no removed monitoring or 
     "src/mobile/index.html", "src/mobile/app.js", "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html"
   ].map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
   const main = fs.readFileSync(path.join(root, "src", "main.cjs"), "utf8");
+  const preload = fs.readFileSync(path.join(root, "src", "preload.cjs"), "utf8");
   const index = fs.readFileSync(path.join(root, "src", "renderer", "index.html"), "utf8");
 
   assert.doesNotMatch(visible, /Creator Hub/i);
   assert.doesNotMatch(visible, /\bKandidat\b/i);
   assert.doesNotMatch(index, /Hardwarediagnose|Encoder-Empfehlung|Belastungstest|Monitoring-Overlay|Twitch-Hologramm|LIVE-MONITORING/i);
   assert.doesNotMatch(main, /MonitoringOverlayServer|SystemTelemetrySampler|monitoring:status|monitoring:open|TwitchHoloServer|holo:/i);
+  assert.match(main, /handle\("deck:create-page"/);
+  assert.match(preload, /"deck:create-page"/);
   assert.equal(fs.existsSync(path.join(root, "modules", "encoder-monitoring-overlay")), false);
   assert.equal(fs.existsSync(path.join(root, "modules", "twitch-holo-chat")), false);
   for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Touch-Deck Pro", "Handy verbinden"]) assert.match(visible, new RegExp(label));
