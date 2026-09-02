@@ -12,8 +12,6 @@ const { StreamOverlayServer } = require("../src/services/stream-overlay-server.c
 const { MobileBridge } = require("../src/services/mobile-bridge.cjs");
 const { MultiChat } = require("../src/services/multi-chat.cjs");
 const { copyDirectoryMissing } = require("../src/services/migration.cjs");
-const { buildRecommendation } = require("../src/services/recommendation.cjs");
-const { selectPreferredGpu } = require("../src/services/hardware.cjs");
 const { ActionExecutor } = require("../src/services/action-executor.cjs");
 
 const temp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
@@ -26,17 +24,6 @@ test("OBS connection is local, authenticated and IPv6-safe", () => {
   assert.equal(websocketUrl("::1", 4455), "ws://[::1]:4455");
   assert.equal(websocketUrl("127.0.0.1", 4455), "ws://127.0.0.1:4455");
   assert.equal(authentication("pass", "salt", "challenge"), "EabUNw4z9EKKpEOC0yvqBO8dJPSIcTb82eo+adWKOvk=");
-});
-
-test("RTX 5080 wins over the CPU graphics and produces NVENC H.264 for Twitch", () => {
-  const gpu = selectPreferredGpu([
-    { name: "AMD Radeon(TM) Graphics", adapterRamBytes: 512 * 1024 * 1024 },
-    { name: "NVIDIA GeForce RTX 5080", adapterRamBytes: 16 * 1024 ** 3 }
-  ]);
-  assert.equal(gpu.name, "NVIDIA GeForce RTX 5080");
-  const result = buildRecommendation({ platform: "twitch", resolution: "1920x1080", fps: 60, uploadMbps: 30, gpu });
-  assert.equal(result.settings.encoder, "NVIDIA NVENC H.264");
-  assert.equal(result.settings.codec, "H.264");
 });
 
 test("Touch-Deck shrink preserves hidden actions, folders and delays", () => {
@@ -156,14 +143,20 @@ test("legacy file copy never overwrites existing Batto data", () => {
   } finally { remove(directory); }
 });
 
-test("production UI contains integrated pages and no visible old product name", () => {
+test("production scope contains the integrated app and no removed monitoring or hologram runtime", () => {
   const root = path.join(__dirname, "..");
   const visible = [
     "src/renderer/index.html", "src/renderer/app.js", "src/renderer/integrated.js",
     "src/mobile/index.html", "src/mobile/app.js", "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html"
   ].map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
+  const main = fs.readFileSync(path.join(root, "src", "main.cjs"), "utf8");
+  const index = fs.readFileSync(path.join(root, "src", "renderer", "index.html"), "utf8");
+
   assert.doesNotMatch(visible, /Creator Hub/i);
   assert.doesNotMatch(visible, /\bKandidat\b/i);
+  assert.doesNotMatch(index, /Hardwarediagnose|Encoder-Empfehlung|Belastungstest|Monitoring-Overlay|Twitch-Hologramm|LIVE-MONITORING/i);
+  assert.doesNotMatch(main, /MonitoringOverlayServer|SystemTelemetrySampler|monitoring:status|monitoring:open|TwitchHoloServer|holo:/i);
+  assert.equal(fs.existsSync(path.join(root, "modules", "encoder-monitoring-overlay")), false);
+  assert.equal(fs.existsSync(path.join(root, "modules", "twitch-holo-chat")), false);
   for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Touch-Deck Pro", "Handy verbinden"]) assert.match(visible, new RegExp(label));
-  assert.match(fs.readFileSync(path.join(root, "modules", "encoder-monitoring-overlay", "web", "overlay.css"), "utf8"), /background:\s*transparent\s*!important/);
 });
