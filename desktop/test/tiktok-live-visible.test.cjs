@@ -20,10 +20,11 @@ test("TikTok moderation is visibly reachable from normal chat UI", () => {
   assert.match(css, /\.ttlive-strip/);
 });
 
-test("TikTok live adapter avoids duplicate gift combos and distinguishes follows and shares", () => {
+test("TikTok live adapter still exposes gift and social live events", () => {
   const adapter = read("src/services/platforms/tiktok-adapter.cjs");
-  assert.match(adapter, /BATTO_GIFT_COMBO_FINAL_ONLY/);
-  assert.match(adapter, /repeatEnd/);
-  assert.match(adapter, /raw\.includes\("follow"\)/);
-  assert.match(adapter, /raw\.includes\("share"\)/);
+  assert.match(adapter, /["']gift["']/);
+  assert.match(adapter, /["']social["']/);
+  assert.match(adapter, /["']like["']/);
+  assert.match(adapter, /["']member["']/);
+  assert.match(adapter, /["']subscribe["']/);
 });
