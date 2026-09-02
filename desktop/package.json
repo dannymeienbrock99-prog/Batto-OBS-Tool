@@ -6,7 +6,7 @@
   "author": "Crazy_Batto / Team Alpha",
   "main": "src/main.cjs",
   "scripts": {
-    "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && echo 'Step 1: prepare-2.0.0-integrated.cjs OK' && node scripts/patch-2.0.0-integrated.cjs && echo 'Step 2: patch-2.0.0-integrated.cjs OK' && node scripts/prepare-touch-deck-pro-v2.cjs && echo 'Step 3: prepare-touch-deck-pro-v2.cjs OK'",
+    "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && echo 'Step 1: prepare-2.0.0-integrated.cjs OK' && node scripts/patch-2.0.0-integrated.cjs && echo 'Step 2: patch-2.0.0-integrated.cjs OK' && node scripts/prepare-touch-deck-pro-v2.cjs && echo 'Step 3: prepare-touch-deck-pro-v2.cjs OK' && node scripts/patch-2.0.0-chat.cjs && echo 'Step 4: Unified Multi-Chat runtime patch OK'",
     "pretest": "npm run prepare:integrated",
     "check": "node scripts/check-2.0.0.cjs && node scripts/check-icon.cjs",
     "test": "npm run check && node --test test/integrated-2.0.0.test.cjs test/touch-deck-pro-v2.test.cjs test/multi-chat.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs",
