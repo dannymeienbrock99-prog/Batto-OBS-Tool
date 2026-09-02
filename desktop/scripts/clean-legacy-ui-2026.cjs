@@ -48,6 +48,9 @@ removeDivByClass("two-column-cards");
 html = html.replace("Vom echten PC zur passenden OBS-Einstellung", "Streaming-Steuerung an einem Ort");
 html = html.replace(/Die Windows-Diagnose liest Hardware lokal aus\.[\s\S]*?gekennzeichnet\./, "OBS, Multi-Chat, Stream-Overlay, Touch-Deck Pro, Plugins und Handy-Steuerung arbeiten gemeinsam in Batto OBS Tool.");
 html = html.replace("PC erkennen, OBS prüfen und passende Einstellungen ermitteln.", "OBS, Chat, Overlays und Touch-Deck Pro zentral steuern.");
+html = html.replace(/\s*<li>Sensorwerte[^<]*<\/li>/gi, "");
+html = html.replace(/\s*<li>Belastungstests?[^<]*<\/li>/gi, "");
+html = html.replace("Hardware-, OBS- und Layoutdaten bleiben auf diesem Computer.", "OBS-, Chat- und Layoutdaten bleiben auf diesem Computer.");
 
 const forbidden = [
   /Hardwarediagnose/i,
