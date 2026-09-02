@@ -50,11 +50,16 @@ class TwitchAdapter extends EventEmitter {
     const prefixEnd = line.indexOf("!", prefixStart);
     const username = tags["display-name"] || line.slice(prefixStart, prefixEnd > prefixStart ? prefixEnd : bodyIndex);
     const badges = String(tags.badges || "").split(",").filter(Boolean).map((badge) => badge.split("/")[0]);
+    const role = badges.includes("broadcaster") ? "broadcaster"
+      : badges.includes("moderator") ? "moderator"
+      : badges.includes("vip") ? "vip"
+      : badges.includes("subscriber") ? "subscriber"
+      : "viewer";
     this.connected = true;
     this.emitStatus();
     this.emit("message", {
       platform: "twitch", username, userId: tags["user-id"] || "", message,
-      color: tags.color || "#9146ff", badges, role: badges.includes("broadcaster") ? "broadcaster" : badges.includes("moderator") ? "moderator" : badges.includes("vip") ? "vip" : "",
+      color: tags.color || "#9146ff", badges, role,
       metadata: { channel: this.config.channel, rawTags: tags }
     });
   }
