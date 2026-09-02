@@ -32,7 +32,11 @@ function png256(source, label) {
 
 app.whenReady().then(() => {
   try {
-    const shortcutPng = png256(shortcutSource, "Desktop-Verknüpfungsbild");
+    // Das Nutzer-Icon liegt bereits als geprüftes 256 × 256 PNG vor. Direkt kopieren,
+    // damit Electron/nativeImage es nicht erneut dekodieren muss.
+    if (!fs.existsSync(shortcutSource)) throw new Error(`Desktop-Verknüpfungsbild fehlt: ${shortcutSource}`);
+    const shortcutPng = fs.readFileSync(shortcutSource);
+    if (shortcutPng.length < 10_000) throw new Error(`Desktop-Verknüpfungsbild ist zu klein: ${shortcutPng.length} Bytes`);
     fs.mkdirSync(path.dirname(shortcutOutput), { recursive: true });
     fs.writeFileSync(shortcutOutput, shortcutPng);
 
@@ -42,7 +46,7 @@ app.whenReady().then(() => {
       fs.writeFileSync(output, brandPng);
     }
 
-    console.log(`Windows-Icon aus Desktop-Verknüpfungsbild erzeugt: 256 × 256, ${shortcutPng.length} Bytes. Team-Alpha-Branding separat: ${brandOutputs.length} Ziele.`);
+    console.log(`Windows-Icon aus Desktop-Verknüpfungsbild übernommen: 256 × 256, ${shortcutPng.length} Bytes. Team-Alpha-Branding separat: ${brandOutputs.length} Ziele.`);
     app.exit(0);
   } catch (error) {
     console.error(error?.stack || error);
