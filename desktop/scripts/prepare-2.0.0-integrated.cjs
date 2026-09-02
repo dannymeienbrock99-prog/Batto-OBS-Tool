@@ -40,10 +40,7 @@ function replaceAllRequired(file, before, after, minimum, label) {
   fs.writeFileSync(file, text, "utf8");
 }
 
-// Validate bootstrap directory exists
-if (!fs.existsSync(bootstrap)) {
-  throw new Error(`Bootstrap-Verzeichnis fehlt: ${path.relative(root, bootstrap)}`);
-}
+if (!fs.existsSync(bootstrap)) throw new Error(`Bootstrap-Verzeichnis fehlt: ${path.relative(root, bootstrap)}`);
 
 ensureDir(source);
 for (const file of [
@@ -58,7 +55,6 @@ copyFile(path.join(bootstrap, "preload.cjs"), path.join(source, "preload.cjs"));
 copyFile(path.join(bootstrap, "renderer", "integrated.js"), path.join(source, "renderer", "integrated.js"));
 copyFile(path.join(bootstrap, "renderer", "integrated.css"), path.join(source, "renderer", "integrated.css"));
 
-// CNG / Multi-Chat integration must survive every prepare run because main.cjs is rebuilt from bootstrap-2.0.
 const generatedMain = path.join(source, "main.cjs");
 const cngRequire = 'require("./chat-bootstrap.cjs");';
 let generatedMainText = fs.readFileSync(generatedMain, "utf8");
@@ -90,76 +86,44 @@ if (!index.includes("integrated.js")) {
 fs.writeFileSync(indexFile, index, "utf8");
 
 const mainFile = path.join(source, "main.cjs");
-replaceRequired(mainFile,
-  'Promise.resolve(sampler?.sample?.() || sampler?.snapshot?.() || {})',
-  'Promise.resolve(sampler?.sample?.(hardware) || sampler?.snapshot?.() || {})',
-  "Hardwareübergabe an den Telemetrie-Sampler");
-replaceRequired(mainFile,
-  'recommendation = await Promise.resolve(buildRecommendation({ hardware: await ensureHardware(), internet: internetResult, ...appSettings.encoder }));',
-  'recommendation = await Promise.resolve(buildRecommendation({ ...appSettings.encoder, gpu: preferredGpu(), uploadMbps: internetResult?.uploadMbps || 0 }));',
-  "Bevorzugte GPU für die Encoder-Empfehlung");
-replaceRequired(mainFile,
-  'handle("cpu:test", (payload) => runCpuLoadTest(payload));',
-  'handle("cpu:test", (payload) => runCpuLoadTest(payload.durationSeconds || payload.seconds || payload));',
-  "Dauerübergabe für den CPU-Test");
-replaceRequired(mainFile,
-  'if (payload.password !== undefined) writeSecret("obsPassword", password);',
-  'if (payload.password !== undefined && payload.rememberPassword !== false) writeSecret("obsPassword", password);\n  if (payload.rememberPassword === false) writeSecret("obsPassword", "");',
-  "Auswahl zur OBS-Passwortspeicherung");
-replaceRequired(mainFile,
-  'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });',
-  'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });\n  handle("obs:forget-password", () => { writeSecret("obsPassword", ""); return {}; });',
-  "IPC zum Entfernen des OBS-Passworts");
-replaceRequired(mainFile,
-  'logoPath: appResource("team-logo.svg")',
-  'logoPath: appResource("team-logo.png")',
-  "Originales Team-Alpha-Logo im Stream-Overlay");
+replaceRequired(mainFile, 'Promise.resolve(sampler?.sample?.() || sampler?.snapshot?.() || {})', 'Promise.resolve(sampler?.sample?.(hardware) || sampler?.snapshot?.() || {})', "Hardwareübergabe an den Telemetrie-Sampler");
+replaceRequired(mainFile, 'recommendation = await Promise.resolve(buildRecommendation({ hardware: await ensureHardware(), internet: internetResult, ...appSettings.encoder }));', 'recommendation = await Promise.resolve(buildRecommendation({ ...appSettings.encoder, gpu: preferredGpu(), uploadMbps: internetResult?.uploadMbps || 0 }));', "Bevorzugte GPU für die Encoder-Empfehlung");
+replaceRequired(mainFile, 'handle("cpu:test", (payload) => runCpuLoadTest(payload));', 'handle("cpu:test", (payload) => runCpuLoadTest(payload.durationSeconds || payload.seconds || payload));', "Dauerübergabe für den CPU-Test");
+replaceRequired(mainFile, 'if (payload.password !== undefined) writeSecret("obsPassword", password);', 'if (payload.password !== undefined && payload.rememberPassword !== false) writeSecret("obsPassword", password);\n  if (payload.rememberPassword === false) writeSecret("obsPassword", "");', "Auswahl zur OBS-Passwortspeicherung");
+replaceRequired(mainFile, 'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });', 'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });\n  handle("obs:forget-password", () => { writeSecret("obsPassword", ""); return {}; });', "IPC zum Entfernen des OBS-Passworts");
+replaceRequired(mainFile, 'logoPath: appResource("team-logo.svg")', 'logoPath: appResource("team-logo.png")', "Originales Team-Alpha-Logo im Stream-Overlay");
 
 const streamServerFile = path.join(source, "services", "stream-overlay-server.cjs");
-replaceRequired(streamServerFile,
-  'path.join(this.webRoot, "team-logo.svg")',
-  'path.join(this.webRoot, "team-logo.png")',
-  "PNG-Fallback des Team-Alpha-Logos");
+replaceRequired(streamServerFile, 'path.join(this.webRoot, "team-logo.svg")', 'path.join(this.webRoot, "team-logo.png")', "PNG-Fallback des Team-Alpha-Logos");
 
 const preloadFile = path.join(source, "preload.cjs");
-replaceRequired(preloadFile,
-  'function legacyState(value) {',
-  'function obsForLegacy(value) {\n  if (!value) return value;\n  return {\n    ...value,\n    scenes: Array.isArray(value.scenes)\n      ? { scenes: value.scenes, currentProgramSceneName: value.currentScene }\n      : value.scenes,\n    currentScene: value.currentProgramSceneName\n  };\n}',
-  "OBS-Kompatibilitätsform für die vorhandene Oberfläche");
-replaceRequired(preloadFile,
-  'obs: value?.obs || { connected: false },',
-  'obs: obsForLegacy(value?.obs || { connected: false }),',
-  "OBS-Kompatibilität im Startzustand");
-replaceRequired(preloadFile,
-  'getObsSnapshot: () => invoke("obs:refresh"),',
-  'getObsSnapshot: async () => obsForLegacy(await invoke("obs:refresh")),',
-  "OBS-Kompatibilität beim Neuladen");
-replaceRequired(preloadFile,
-  'return (await invoke("settings:update", patch)).legacyDeck || value.deck || patch;',
-  'await invoke("settings:update", patch);\n    return legacyState(await invoke("state:get")).settings;',
-  "Vollständige Rückgabe alter Einstellungen");
+replaceRequired(preloadFile, 'function legacyState(value) {', 'function obsForLegacy(value) {\n  if (!value) return value;\n  return {\n    ...value,\n    scenes: Array.isArray(value.scenes)\n      ? { scenes: value.scenes, currentProgramSceneName: value.currentScene }\n      : value.scenes,\n    currentScene: value.currentProgramSceneName\n  };\n}', "OBS-Kompatibilitätsform für die vorhandene Oberfläche");
+replaceRequired(preloadFile, 'obs: value?.obs || { connected: false },', 'obs: obsForLegacy(value?.obs || { connected: false }),', "OBS-Kompatibilität im Startzustand");
+replaceRequired(preloadFile, 'getObsSnapshot: () => invoke("obs:refresh"),', 'getObsSnapshot: async () => obsForLegacy(await invoke("obs:refresh")),', "OBS-Kompatibilität beim Neuladen");
+replaceRequired(preloadFile, 'return (await invoke("settings:update", patch)).legacyDeck || value.deck || patch;', 'await invoke("settings:update", patch);\n    return legacyState(await invoke("state:get")).settings;', "Vollständige Rückgabe alter Einstellungen");
 
 const multiChatFile = path.join(source, "services", "multi-chat.cjs");
-replaceRequired(multiChatFile,
-  '  snapshot() {',
-  '  persistSettings() {\n    const stored = deepClone(this.settings);\n    stored.twitch.oauth = "";\n    stored.youtube.apiKey = "";\n    writeJsonAtomic(this.settingsFile, stored);\n  }\n\n  snapshot() {',
-  "Getrennte Speicherung von Multi-Chat-Geheimnissen");
-replaceAllRequired(multiChatFile,
-  'writeJsonAtomic(this.settingsFile, this.settings);',
-  'this.persistSettings();',
-  3,
-  "Unverschlüsselte Multi-Chat-Geheimnisse");
+replaceRequired(multiChatFile, '  snapshot() {', '  persistSettings() {\n    const stored = deepClone(this.settings);\n    stored.twitch.oauth = "";\n    stored.youtube.apiKey = "";\n    writeJsonAtomic(this.settingsFile, stored);\n  }\n\n  snapshot() {', "Getrennte Speicherung von Multi-Chat-Geheimnissen");
+replaceAllRequired(multiChatFile, 'writeJsonAtomic(this.settingsFile, this.settings);', 'this.persistSettings();', 3, "Unverschlüsselte Multi-Chat-Geheimnisse");
 
 const oldApp = path.join(source, "renderer", "app.js");
-replaceRequired(oldApp,
-  'state?.product?.version || "1.9.1"',
-  'state?.product?.version || "2.0.0"',
-  "Renderer-Fallbackversion");
+replaceRequired(oldApp, 'state?.product?.version || "1.9.1"', 'state?.product?.version || "2.0.0"', "Renderer-Fallbackversion");
 
+// Normalize the package/installer metadata after every integrated prepare run.
+// This prevents stale package.json values from breaking the Touch-Deck CI checker.
 const packagePath = path.join(root, "package.json");
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 if (packageJson.version !== "2.0.0") throw new Error(`Falsche Paketversion: ${packageJson.version}`);
 if (packageJson.main !== "src/main.cjs") throw new Error(`Falscher Programmeinstieg: ${packageJson.main}`);
+packageJson.build = packageJson.build || {};
+packageJson.build.nsis = {
+  ...(packageJson.build.nsis || {}),
+  oneClick: false,
+  allowToChangeInstallationDirectory: true,
+  runAfterFinish: false,
+  include: "build/installer.nsh"
+};
+fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + "\n", "utf8");
 
 const required = [
   "src/main.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/app.js",
