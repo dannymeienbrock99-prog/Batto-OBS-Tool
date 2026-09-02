@@ -45,8 +45,7 @@ if (!fs.existsSync(bootstrap)) throw new Error(`Bootstrap-Verzeichnis fehlt: ${p
 ensureDir(source);
 for (const file of [
   "common.cjs", "obs-websocket.cjs", "plugin-registry.cjs", "deck-store.cjs", "migration.cjs",
-  "action-executor.cjs", "mobile-bridge.cjs", "stream-overlay-server.cjs", "multi-chat.cjs",
-  "twitch-holo-server.cjs"
+  "action-executor.cjs", "mobile-bridge.cjs", "stream-overlay-server.cjs", "multi-chat.cjs"
 ]) copyFile(path.join(bootstrap, "services", file), path.join(source, "services", file));
 copyTree(path.join(bootstrap, "stream-overlay"), path.join(source, "stream-overlay"));
 copyTree(path.join(bootstrap, "mobile"), path.join(source, "mobile"));
@@ -137,7 +136,7 @@ const required = [
   "src/services/mobile-bridge.cjs", "src/services/stream-overlay-server.cjs", "src/services/plugin-registry.cjs",
   "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/mobile/index.html",
   "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "resources/team-logo.svg",
-  "modules/encoder-monitoring-overlay/src/server.cjs", "modules/twitch-holo-chat/web/overlay.html"
+  "modules/encoder-monitoring-overlay/src/server.cjs"
 ];
 for (const relative of required) {
   const absolute = path.join(root, relative);
