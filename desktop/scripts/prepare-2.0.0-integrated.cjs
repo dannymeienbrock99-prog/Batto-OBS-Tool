@@ -40,6 +40,11 @@ function replaceAllRequired(file, before, after, minimum, label) {
   fs.writeFileSync(file, text, "utf8");
 }
 
+// Validate bootstrap directory exists
+if (!fs.existsSync(bootstrap)) {
+  throw new Error(`Bootstrap-Verzeichnis fehlt: ${path.relative(root, bootstrap)}`);
+}
+
 ensureDir(source);
 for (const file of [
   "common.cjs", "obs-websocket.cjs", "plugin-registry.cjs", "deck-store.cjs", "migration.cjs",
@@ -103,7 +108,7 @@ replaceRequired(mainFile,
   "Auswahl zur OBS-Passwortspeicherung");
 replaceRequired(mainFile,
   'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });',
-  'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });\n  handle("obs:forget-password", () => { writeSecret("obsPassword", ""); return true; });',
+  'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });\n  handle("obs:forget-password", () => { writeSecret("obsPassword", ""); return {}; });',
   "IPC zum Entfernen des OBS-Passworts");
 replaceRequired(mainFile,
   'logoPath: appResource("team-logo.svg")',
@@ -119,7 +124,7 @@ replaceRequired(streamServerFile,
 const preloadFile = path.join(source, "preload.cjs");
 replaceRequired(preloadFile,
   'function legacyState(value) {',
-  'function obsForLegacy(value) {\n  if (!value) return value;\n  return {\n    ...value,\n    scenes: Array.isArray(value.scenes)\n      ? { scenes: value.scenes, currentProgramSceneName: value.currentProgramSceneName || "" }\n      : value.scenes || { scenes: [], currentProgramSceneName: value.currentProgramSceneName || "" }\n  };\n}\n\nfunction legacyState(value) {',
+  'function obsForLegacy(value) {\n  if (!value) return value;\n  return {\n    ...value,\n    scenes: Array.isArray(value.scenes)\n      ? { scenes: value.scenes, currentProgramSceneName: value.currentScene }\n      : value.scenes,\n    currentScene: value.currentProgramSceneName\n  };\n}',
   "OBS-Kompatibilitätsform für die vorhandene Oberfläche");
 replaceRequired(preloadFile,
   'obs: value?.obs || { connected: false },',
@@ -164,17 +169,6 @@ const required = [
   "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/mobile/index.html",
   "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "resources/team-logo.svg",
   "modules/encoder-monitoring-overlay/src/server.cjs", "modules/twitch-holo-chat/web/overlay.html"
-  if (!fs.existsSync(bootstrap)) {
-  throw new Error(`Bootstrap-Verzeichnis fehlt: ${path.relative(root, bootstrap)}`);
-}
-for (const file of ["main.cjs", "preload.cjs"]) {
-  const filePath = path.join(bootstrap, file);
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Bootstrap-Datei fehlt: bootstrap-2.0/src/${file}`);
-  }
-}
-
-console.log(`✓ Bootstrap-Verzeichnis OK: ${fs.readdirSync(bootstrap).length} Dateien gefunden`);
 ];
 for (const relative of required) {
   const absolute = path.join(root, relative);
