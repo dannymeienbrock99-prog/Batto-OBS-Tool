@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 const packageFile = path.join(root, "package.json");
 const icon = path.join(root, "build", "icon.png");
 const license = path.join(root, "resources", "LICENSE-DE.txt");
-const include = path.join(root, "build", "installer-2.0.nsh");
+const include = path.join(root, "build", "installer.nsh");
 for (const required of [icon, license, include]) {
   if (!fs.existsSync(required) || fs.statSync(required).size === 0) throw new Error(`Installer-Ressource fehlt: ${required}`);
 }
@@ -16,7 +16,7 @@ packageJson.build = packageJson.build || {};
 packageJson.build.win = { ...(packageJson.build.win || {}), icon: "build/icon.png", target: [{ target: "nsis", arch: ["x64"] }] };
 packageJson.build.nsis = {
   ...(packageJson.build.nsis || {}),
-  include: "build/installer-2.0.nsh",
+  include: "build/installer.nsh",
   license: "resources/LICENSE-DE.txt",
   oneClick: false,
   perMachine: true,
