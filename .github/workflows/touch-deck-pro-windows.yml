@@ -105,13 +105,23 @@ jobs:
           npm install --no-audit --no-fund --ignore-scripts=false
           if ($LASTEXITCODE -ne 0) { throw "npm install ist fehlgeschlagen." }
 
-      - name: Assemble and test Batto OBS Tool
+      - name: Prepare Batto OBS Tool
         shell: pwsh
         working-directory: desktop
         run: |
           $ErrorActionPreference = "Stop"
-          npm test
-          if ($LASTEXITCODE -ne 0) { throw "Touch-Deck-Pro- oder Integrationstests sind fehlgeschlagen." }
+          Write-Host "=== prepare:integrated ==="
+          npm run prepare:integrated
+          if ($LASTEXITCODE -ne 0) { throw "prepare:integrated fehlgeschlagen. Die obige Ausgabe ist die eigentliche Fehlerursache." }
+
+      - name: Validate Batto OBS Tool
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "=== check ==="
+          npm run check
+          if ($LASTEXITCODE -ne 0) { throw "check fehlgeschlagen. Die obige Ausgabe enthält die konkreten fehlgeschlagenen Prüfungen." }
           foreach ($required in @(
             "src/renderer/touch-deck-pro-v2.js",
             "src/renderer/touch-deck-pro-v2.css",
@@ -122,6 +132,15 @@ jobs:
           $index = Get-Content "src/renderer/index.html" -Raw
           if ($index -notmatch 'touch-deck-pro-v2\.css') { throw "Touch-Deck-Pro-CSS ist nicht eingebunden." }
           if ($index -notmatch 'touch-deck-pro-v2\.js') { throw "Touch-Deck-Pro-JavaScript ist nicht eingebunden." }
+
+      - name: Run Node integration tests
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "=== node --test ==="
+          node --test test/integrated-2.0.0.test.cjs test/touch-deck-pro-v2.test.cjs test/multi-chat.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw "Ein konkreter Node-Test ist fehlgeschlagen. Die vollständige Testausgabe steht direkt oberhalb." }
 
       - name: Build Windows x64 application installer
         shell: pwsh
