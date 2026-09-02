@@ -33,9 +33,10 @@ function removeDivByClass(className) {
   html = removeBalancedBlock(html, open, "div", "div");
 }
 
-for (const id of ["hardware", "internet", "recommendation", "loadtest", "monitoring", "holo"]) removeLegacyView(id);
+const removedViews = ["hardware", "internet", "recommendation", "loadtest", "monitoring", "holo", "deck"];
+for (const id of removedViews) removeLegacyView(id);
 
-for (const id of ["hardware", "internet", "recommendation", "loadtest", "monitoring", "holo"]) {
+for (const id of removedViews) {
   html = html.replace(new RegExp(`\\s*<button\\b[^>]*\\bdata-view=["']${id}["'][^>]*>[\\s\\S]*?<\\/button>`, "gi"), "");
   html = html.replace(new RegExp(`\\s*<button\\b[^>]*\\bdata-jump=["']${id}["'][^>]*>[\\s\\S]*?<\\/button>`, "gi"), "");
 }
@@ -59,15 +60,29 @@ const forbidden = [
   /Twitch-Hologramm/i,
   /Belastungstest/i,
   /LIVE-MONITORING/i,
-  /data-view=["'](?:hardware|internet|recommendation|loadtest|monitoring|holo)["']/i,
-  /id=["']view-(?:hardware|internet|recommendation|loadtest|monitoring|holo)["']/i
+  /data-view=["'](?:hardware|internet|recommendation|loadtest|monitoring|holo|deck)["']/i,
+  /id=["']view-(?:hardware|internet|recommendation|loadtest|monitoring|holo|deck)["']/i
 ];
 for (const pattern of forbidden) {
   if (pattern.test(html)) throw new Error(`Alte Diagnose-/Monitoring-Oberfläche wurde nicht vollständig entfernt: ${pattern}`);
 }
 
-if (!/Touch-Deck/i.test(html)) throw new Error("Touch-Deck Pro ist nach der Bereinigung nicht mehr erreichbar.");
+if (!/touch-deck-pro-v2/i.test(html)) throw new Error("Touch-Deck-Pro-Laufzeit ist nach der Bereinigung nicht eingebunden.");
 if (!/overview-hero/i.test(html)) throw new Error("Übersichts-Hintergrund ist nach der Bereinigung nicht aktiv.");
-
 fs.writeFileSync(indexFile, html, "utf8");
-console.log("Batto UI 2026: alte Diagnose-, Belastungs-, Monitoring- und Hologramm-Oberfläche vollständig entfernt.");
+
+// Texte der neuen integrierten Oberfläche dürfen das entfernte Monitoring nicht wieder ankündigen.
+{
+  const file = path.join(root, "src", "renderer", "integrated.js");
+  let integrated = fs.readFileSync(file, "utf8");
+  integrated = integrated.replace(
+    "Das neue Encoder-Monitoring bleibt vollständig erhalten. Dieses Modul ergänzt die frei gestaltbare Stream-Ebene aus dem früheren Setup.",
+    "Dieses Modul stellt die frei gestaltbare lokale Stream-Ebene für Chat, Ziele, Geschenke, Logo und Ereignisse bereit."
+  );
+  if (/Encoder-Monitoring|Monitoring-Overlay|Twitch-Hologramm/i.test(integrated)) {
+    throw new Error("Integrierte Oberfläche enthält noch veraltete Monitoring-/Hologramm-Texte.");
+  }
+  fs.writeFileSync(file, integrated, "utf8");
+}
+
+console.log("Batto UI 2026: alte Diagnose-, Belastungs-, Monitoring-, Hologramm- und Alt-Deck-Oberfläche vollständig entfernt.");
