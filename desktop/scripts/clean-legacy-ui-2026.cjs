@@ -75,12 +75,13 @@ fs.writeFileSync(indexFile, html, "utf8");
 {
   const file = path.join(root, "src", "renderer", "integrated.js");
   let integrated = fs.readFileSync(file, "utf8");
-  integrated = integrated.replace(
-    "Das neue Encoder-Monitoring bleibt vollständig erhalten. Dieses Modul ergänzt die frei gestaltbare Stream-Ebene aus dem früheren Setup.",
-    "Dieses Modul stellt die frei gestaltbare lokale Stream-Ebene für Chat, Ziele, Geschenke, Logo und Ereignisse bereit."
-  );
-  integrated = integrated.replace(/<li>Dedizierte GPU wird bevorzugt<\/li>/g, "");
-  integrated = integrated.replace(/<li>Monitoring-Overlay bleibt transparent<\/li>/g, "<li>Stream-Overlay bleibt transparent</li>");
+  integrated = integrated.replace(/Das neue Encoder-Monitoring[^<]*<\/p>/gi, "Dieses Modul stellt die frei gestaltbare lokale Stream-Ebene für Chat, Ziele, Geschenke, Logo und Ereignisse bereit.</p>");
+  integrated = integrated.replace(/<li>[^<]*Dedizierte GPU[^<]*<\/li>/gi, "");
+  integrated = integrated.replace(/<li>[^<]*Monitoring-Overlay[^<]*<\/li>/gi, "<li>Stream-Overlay bleibt transparent</li>");
+  integrated = integrated.replace(/Encoder-Monitoring/gi, "Stream-Overlay");
+  integrated = integrated.replace(/Monitoring-Overlay/gi, "Stream-Overlay");
+  integrated = integrated.replace(/Twitch-Hologramm/gi, "Multi-Chat");
+  integrated = integrated.replace(/Dedizierte GPU wird bevorzugt/gi, "");
   if (/Encoder-Monitoring|Monitoring-Overlay|Twitch-Hologramm|Dedizierte GPU wird bevorzugt/i.test(integrated)) {
     throw new Error("Integrierte Oberfläche enthält noch veraltete Monitoring-/Hardware-Texte.");
   }
