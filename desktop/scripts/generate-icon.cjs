@@ -6,7 +6,7 @@ const { app, nativeImage } = require("electron");
 
 const root = path.resolve(__dirname, "..");
 const brandSource = path.join(root, "build", "icon.ico");
-const shortcutSource = path.join(root, "build", "shortcut-icon.jpg");
+const shortcutSource = path.join(root, "build", "shortcut-icon.png");
 const shortcutOutput = path.join(root, "build", "icon.png");
 const brandOutputs = [
   path.join(root, "resources", "team-logo.png"),
