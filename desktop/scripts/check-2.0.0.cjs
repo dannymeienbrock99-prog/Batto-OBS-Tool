@@ -31,12 +31,11 @@ const required = [
   "src/services/common.cjs", "src/services/deck-store.cjs", "src/services/plugin-registry.cjs",
   "src/services/native-plugin-additions.cjs", "src/services/action-executor.cjs", "src/services/migration.cjs",
   "src/services/mobile-bridge.cjs", "src/services/multi-chat.cjs", "src/services/stream-overlay-server.cjs",
-  "src/services/twitch-holo-server.cjs", "src/mobile/index.html", "src/mobile/styles.css", "src/mobile/app.js",
+  "src/mobile/index.html", "src/mobile/styles.css", "src/mobile/app.js",
   "src/stream-overlay/editor.html", "src/stream-overlay/editor.css", "src/stream-overlay/editor.js",
   "src/stream-overlay/overlay.html", "src/stream-overlay/overlay.css", "src/stream-overlay/overlay.js",
   "src/stream-overlay/team-logo.svg", "modules/encoder-monitoring-overlay/src/server.cjs",
   "modules/encoder-monitoring-overlay/src/telemetry.cjs", "modules/encoder-monitoring-overlay/web/overlay.css",
-  "modules/twitch-holo-chat/web/overlay.html", "modules/twitch-holo-chat/web/overlay.js",
   "build/installer.nsh", "build/license.txt", "resources/team-logo.svg", "package.json"
 ];
 required.forEach(read);
@@ -60,13 +59,16 @@ if (packageJson.build?.nsis?.runAfterFinish !== false) fail("Installer darf die 
 if (packageJson.build?.nsis?.include !== "build/installer.nsh") fail("Installer-Erweiterung fehlt.");
 if (!packageJson.dependencies?.ws || !packageJson.dependencies?.qrcode) fail("WebSocket- oder QR-Abhängigkeit fehlt.");
 if (!String(packageJson.scripts?.test || "").includes("integrated-2.0.0.test.cjs")) fail("2.0.0-Integrationstest ist nicht eingebunden.");
+forbidText(String(packageJson.scripts?.test || ""), "twitch-holo-chat", "Entfernte Twitch-Hologramm-Tests sind noch eingebunden.");
 
 const main = read("src/main.cjs");
 const preload = read("src/preload.cjs");
 const index = read("src/renderer/index.html");
+const styles = read("src/renderer/styles.css");
 const appJs = read("src/renderer/app.js");
 const integratedJs = read("src/renderer/integrated.js");
 const integratedCss = read("src/renderer/integrated.css");
+const touchDeck = read("src/renderer/touch-deck-pro-v2.js");
 const mobileBridge = read("src/services/mobile-bridge.cjs");
 const mobileHtml = read("src/mobile/index.html");
 const mobileJs = read("src/mobile/app.js");
@@ -76,6 +78,8 @@ const actionExecutor = read("src/services/action-executor.cjs");
 const deckStore = read("src/services/deck-store.cjs");
 const migration = read("src/services/migration.cjs");
 const multiChat = read("src/services/multi-chat.cjs");
+const unifiedChat = read("src/renderer/multi-chat.js");
+const streamEditor = read("src/stream-overlay/editor.js");
 const streamOverlayCss = read("src/stream-overlay/overlay.css");
 const monitoringCss = read("modules/encoder-monitoring-overlay/web/overlay.css");
 const hardware = read("src/services/hardware.cjs");
@@ -85,7 +89,8 @@ requireText(main, "requestSingleInstanceLock", "Single-Instance-Sperre fehlt.");
 requireText(main, /new MobileBridge\(/, "Handy-Brücke wird nicht gestartet.");
 requireText(main, /new StreamOverlayServer\(/, "Stream-Overlay wird nicht gestartet.");
 requireText(main, /new MonitoringOverlayServer\(/, "Monitoring-Overlay wird nicht gestartet.");
-requireText(main, /new TwitchHoloServer\(/, "Twitch-Hologramm wird nicht gestartet.");
+forbidText(main, /new TwitchHoloServer\(/, "Twitch-Hologramm wird weiterhin gestartet.");
+forbidText(main, /handle\("holo:/, "Twitch-Hologramm-IPC ist weiterhin aktiv.");
 requireText(main, 'sampler?.sample?.(hardware)', "Hardware wird nicht an die Telemetrie übergeben.");
 requireText(main, 'gpu: preferredGpu()', "Encoder-Empfehlung verwendet nicht die bevorzugte GPU.");
 requireText(main, 'handle("obs:forget-password"', "Gespeichertes OBS-Passwort kann nicht gelöscht werden.");
@@ -102,13 +107,17 @@ requireText(hardware, /score -= 1000/, "Integrierte GPU wird nicht abgewertet.")
 requireText(index, "Version 2.0.0", "Hauptfenster zeigt nicht Version 2.0.0.");
 requireText(index, "integrated.css", "Integrierte Styles werden nicht geladen.");
 requireText(index, "integrated.js", "Integrierte Oberfläche wird nicht geladen.");
+forbidText(index, "Twitch-Hologramm", "Twitch-Hologramm ist im Hauptfenster noch sichtbar.");
+forbidText(index, 'data-view="deck"', "Alter Touch-Deck-Menüpunkt ist noch sichtbar.");
+requireText(index, "overview-hero", "Übersichts-Hero wurde nicht für das Hintergrundbild vorbereitet.");
+requireText(styles, "overview-bg.jpg", "Übersichts-Hintergrundbild ist nicht eingebunden.");
 for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Touch-Deck Pro", "Handy verbinden", "Übernahme & Diagnose"]) {
   requireText(integratedJs, label, `Navigationsbereich fehlt: ${label}`);
 }
 requireText(integratedCss, "overflow-x: hidden", "Horizontaler Überlauf ist nicht abgesichert.");
 requireText(integratedCss, "@media (max-width: 980px)", "Schmale Fenster werden nicht responsiv behandelt.");
 
-const visible = [index, appJs, integratedJs, mobileHtml, mobileJs, read("src/stream-overlay/editor.html"), read("src/stream-overlay/editor.js"), read("src/stream-overlay/overlay.html"), read("src/stream-overlay/overlay.js")].join("\n");
+const visible = [index, appJs, integratedJs, mobileHtml, mobileJs, read("src/stream-overlay/editor.html"), streamEditor, read("src/stream-overlay/overlay.html"), read("src/stream-overlay/overlay.js")].join("\n");
 forbidText(visible, /Creator Hub/i, "Alte Produktbezeichnung ist in einer sichtbaren Oberfläche enthalten.");
 forbidText(visible, /\bKandidat\b/i, "Alte Encoderbezeichnung „Kandidat“ ist sichtbar.");
 forbidText(visible, /show-test-values|Testwerte anzeigen|createTestTelemetry/i, "Veröffentlichte Demo-/Testwerte-Funktion gefunden.");
@@ -117,6 +126,10 @@ forbidText(index, /Encorder/i, "Falsche Schreibweise „Encorder“ im Hauptfens
 requireText(streamOverlayCss, /background:\s*transparent\s*!important/, "Stream-Overlay ist nicht vollständig transparent.");
 requireText(monitoringCss, /background:\s*transparent\s*!important/, "Monitoring-Overlay ist nicht vollständig transparent.");
 forbidText(monitoringCss, /body[^}]*background:\s*#0[0-9a-f]{5}/i, "Monitoring-Overlay enthält einen vollflächigen dunklen Hintergrund.");
+requireText(streamEditor, 'addEventListener("contextmenu"', "Stream-Overlay hat kein Rechtsklick-Menü.");
+requireText(streamEditor, "duplicateSelected", "Stream-Overlay kann Elemente nicht duplizieren.");
+requireText(streamEditor, "alignSelected", "Stream-Overlay hat keine Elementausrichtung.");
+requireText(streamEditor, "moveLayer", "Stream-Overlay kann Ebenen nicht ändern.");
 
 requireText(mobileBridge, "battoobstool://pair", "Neues Batto-Kopplungsschema fehlt.");
 requireText(mobileBridge, "creatorhub://pair", "Kompatibles Kopplungsschema der alten APK fehlt.");
@@ -128,11 +141,20 @@ requireText(mobileHtml, "Batto OBS Tool", "Mobile Oberfläche ist nicht umbenann
 requireText(deckStore, "rows * columns", "Variables Touch-Deck-Raster fehlt.");
 requireText(deckStore, "moveButton", "Drag-and-drop-Datenoperation fehlt.");
 requireText(deckStore, "delayMs", "Mehrfachaktions-Verzögerung fehlt.");
+requireText(deckStore, "createPage(profileId, name)", "Touch-Deck-Seiten fehlen.");
 forbidText(deckStore, /buttons\s*=\s*buttons\.slice\(0,\s*capacity\)/, "Rasterverkleinerung würde Belegungen löschen.");
+requireText(touchDeck, 'id="tdp-pagebar"', "Touch-Deck-Seitenleiste unter dem Deck fehlt.");
+requireText(touchDeck, "Zeilen", "Touch-Deck-Zeileneinstellung fehlt.");
+requireText(touchDeck, "Spalten", "Touch-Deck-Spalteneinstellung fehlt.");
+forbidText(touchDeck, 'id="tdp-size"', "Tastengröße ist weiterhin als Rasteroption sichtbar.");
+forbidText(touchDeck, 'id="tdp-gap"', "Tastenabstand ist weiterhin als Rasteroption sichtbar.");
+forbidText(touchDeck, 'id="tdp-hide-unused"', "Unbenutzte-Tasten-Schalter ist weiterhin als Rasteroption sichtbar.");
 requireText(migration, "copyDirectoryMissing", "Nicht überschreibende Altdatenmigration fehlt.");
 requireText(migration, "Creator Hub", "Legacy-Pfade werden nicht erkannt.");
 
 requireText(pluginRegistry, "EXTRA_BUILT_IN_PLUGINS", "Zusätzliche native Plugin-Kompatibilität wird nicht geladen.");
+requireText(pluginRegistry, "importPackage(packageFile", "Originale .streamDeckPlugin-Pakete können nicht importiert werden.");
+requireText(pluginRegistry, ".streamdeckplugin", "Stream-Deck-Dateierweiterung wird nicht geprüft.");
 for (const name of [
   "YouTube Music Desktop Connector", "YouTube Ticker", "iCUE", "BambuLab Printer Monitor", "Spotify",
   "Volume Controller", "Discord Volume Mixer", "TikFinity", "TikTok LIVE Studio", "Polls, Word Clouds & Spinner Wheels"
@@ -145,6 +167,9 @@ requireText(actionExecutor, "wird ohne passende Laufzeit nicht ausgeführt", "Un
 requireText(multiChat, "persistSettings()", "Multi-Chat-Einstellungen werden nicht sicher getrennt gespeichert.");
 requireText(multiChat, 'stored.twitch.oauth = ""', "Twitch-Token würde unverschlüsselt gespeichert.");
 requireText(multiChat, 'stored.youtube.apiKey = ""', "YouTube-Schlüssel würde unverschlüsselt gespeichert.");
+requireText(unifiedChat, "Twitch-Rollenfarben", "Twitch-Rollenfarben fehlen im Unified Multi-Chat.");
+requireText(unifiedChat, "subscriber", "Subscriber-Rollenfarbe fehlt.");
+requireText(unifiedChat, "follower", "Follower-Rollenfarbe fehlt.");
 requireText(preload, "contextBridge", "Sichere Electron-Brücke fehlt.");
 forbidText(main, /nodeIntegration:\s*true/, "Node-Integration ist im Renderer aktiviert.");
 requireText(preload, "legacyState", "Bestehende 1.9-Oberfläche hat keine Kompatibilitätsschicht.");
