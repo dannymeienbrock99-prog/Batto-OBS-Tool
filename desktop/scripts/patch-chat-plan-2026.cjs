@@ -33,7 +33,7 @@ const write = (relative, value) => fs.writeFileSync(path.join(root, relative), v
 // Registry um echte Stream-Deck-Paketinstallation und Manifest-Metadaten erweitern.
 {
   const file = "src/services/plugin-registry.cjs";
-  let text = read(file);
+  let text = read(file).replace(/\r\n/g, "\n");
 
   if (!text.includes('const childProcess = require("node:child_process");')) {
     text = text.replace('const path = require("node:path");', 'const path = require("node:path");\nconst childProcess = require("node:child_process");');
@@ -44,6 +44,7 @@ const write = (relative, value) => fs.writeFileSync(path.join(root, relative), v
       '    controllers: Array.isArray(action.Controllers) ? action.Controllers : [],\n    propertyInspectorPath: action.PropertyInspectorPath || action.propertyInspectorPath || "",',
       '    controllers: Array.isArray(action.Controllers) ? action.Controllers : [],\n    supportedInMultiActions: action.SupportedInMultiActions !== false,\n    supportedInKeyLogicActions: action.SupportedInKeyLogicActions !== false,\n    userTitleEnabled: action.UserTitleEnabled !== false,\n    disableAutomaticStates: Boolean(action.DisableAutomaticStates),\n    encoder: action.Encoder && typeof action.Encoder === "object" ? action.Encoder : null,\n    settings: action.Settings && typeof action.Settings === "object" ? action.Settings : {},\n    propertyInspectorPath: action.PropertyInspectorPath || action.propertyInspectorPath || "",'
     );
+    if (!text.includes("supportedInMultiActions:")) throw new Error("Action-Metadaten konnten nicht in PluginRegistry eingebaut werden.");
   }
 
   if (!text.includes("sdkVersion:")) {
@@ -51,6 +52,7 @@ const write = (relative, value) => fs.writeFileSync(path.join(root, relative), v
       '    propertyInspectorPath: manifest.PropertyInspectorPath || manifest.propertyInspectorPath || "",\n    actions,',
       '    propertyInspectorPath: manifest.PropertyInspectorPath || manifest.propertyInspectorPath || "",\n    sdkVersion: Number(manifest.SDKVersion ?? manifest.sdkVersion ?? 0) || null,\n    nodejs: manifest.Nodejs && typeof manifest.Nodejs === "object" ? manifest.Nodejs : null,\n    codePathWin: executable,\n    os: Array.isArray(manifest.OS) ? manifest.OS : [],\n    software: manifest.Software && typeof manifest.Software === "object" ? manifest.Software : null,\n    applicationsToMonitor: manifest.ApplicationsToMonitor && typeof manifest.ApplicationsToMonitor === "object" ? manifest.ApplicationsToMonitor : null,\n    actions,'
     );
+    if (!text.includes("sdkVersion:")) throw new Error("Plugin-SDK-/Nodejs-Metadaten konnten nicht eingebaut werden.");
   }
 
   if (!text.includes("  importPackage(packageFile, destinationRoot) {")) {
