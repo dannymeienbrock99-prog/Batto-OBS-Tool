@@ -12,8 +12,9 @@ function copyRequired(name) {
   const source = path.join(bootstrap, name);
   const target = path.join(renderer, name);
   if (!fs.existsSync(source) || !fs.statSync(source).size) {
-    throw new Error(`Touch-Deck-Pro-Quelldatei fehlt: bootstrap-2.0/src/renderer/${name}`);
-  }
+  const actual = fs.existsSync(source) ? `${fs.statSync(source).size} bytes` : "NICHT VORHANDEN";
+  throw new Error(`Touch-Deck-Pro-Quelldatei fehlt oder ist leer: bootstrap-2.0/src/renderer/${name} (Status: ${actual})`);
+}
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(source, target);
 }
