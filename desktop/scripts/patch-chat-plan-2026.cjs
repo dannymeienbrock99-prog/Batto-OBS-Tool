@@ -7,23 +7,25 @@ const root = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const write = (relative, value) => fs.writeFileSync(path.join(root, relative), value, "utf8");
 
-function replaceRequired(relative, before, after, label) {
-  let text = read(relative);
-  if (text.includes(after)) return;
-  if (!text.includes(before)) throw new Error(`${label}: Patchpunkt fehlt in ${relative}`);
-  text = text.replace(before, after);
-  write(relative, text);
-}
-
 // Originale .streamDeckPlugin-Pakete über den Dateidialog installieren.
 {
   const file = "src/main.cjs";
   let text = read(file);
-  const oldImport = `  handle("plugins:import", async () => {\n    const result = await dialog.showOpenDialog(mainWindow, { title: "Plugin-Ordner auswählen", properties: ["openDirectory"] });\n    if (result.canceled || !result.filePaths[0]) return null;\n    return pluginRegistry.importDirectory(result.filePaths[0], path.join(programDataRoot(), "Plugins"));\n  });`;
-  const newImport = `  handle("plugins:import", async () => {\n    const result = await dialog.showOpenDialog(mainWindow, {\n      title: "Stream-Deck-Plugin installieren",\n      properties: ["openFile"],\n      filters: [{ name: "Stream Deck Plugin", extensions: ["streamDeckPlugin"] }]\n    });\n    if (result.canceled || !result.filePaths[0]) return null;\n    return pluginRegistry.importPackage(result.filePaths[0], path.join(programDataRoot(), "Plugins"));\n  });`;
-  if (!text.includes(newImport)) {
-    if (!text.includes(oldImport)) throw new Error("Plugin-Import-IPC wurde nicht gefunden.");
-    text = text.replace(oldImport, newImport);
+  if (!text.includes("pluginRegistry.importPackage(")) {
+    const pattern = /  handle\("plugins:import", async \(\) => \{[\s\S]*?\r?\n  \}\);/;
+    if (!pattern.test(text)) throw new Error("Plugin-Import-IPC wurde nicht gefunden.");
+    const replacement = [
+      '  handle("plugins:import", async () => {',
+      '    const result = await dialog.showOpenDialog(mainWindow, {',
+      '      title: "Stream-Deck-Plugin installieren",',
+      '      properties: ["openFile"],',
+      '      filters: [{ name: "Stream Deck Plugin", extensions: ["streamDeckPlugin"] }]',
+      '    });',
+      '    if (result.canceled || !result.filePaths[0]) return null;',
+      '    return pluginRegistry.importPackage(result.filePaths[0], path.join(programDataRoot(), "Plugins"));',
+      '  });'
+    ].join("\n");
+    text = text.replace(pattern, replacement);
     write(file, text);
   }
 }
