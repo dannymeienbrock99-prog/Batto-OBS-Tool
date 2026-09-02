@@ -45,9 +45,12 @@ if (!fs.existsSync(bootstrap)) throw new Error(`Bootstrap-Verzeichnis fehlt: ${p
 ensureDir(source);
 for (const file of [
   "common.cjs", "obs-websocket.cjs", "plugin-registry.cjs", "deck-store.cjs", "migration.cjs",
-  "action-executor.cjs", "mobile-bridge.cjs", "stream-overlay-server.cjs", "multi-chat.cjs",
-  "twitch-holo-server.cjs"
+  "action-executor.cjs", "native-plugin-additions.cjs", "mobile-bridge.cjs", "stream-overlay-server.cjs", "multi-chat.cjs"
 ]) copyFile(path.join(bootstrap, "services", file), path.join(source, "services", file));
+
+const bootstrapPiper = path.join(bootstrap, "services", "piper-tts.cjs");
+if (fs.existsSync(bootstrapPiper)) copyFile(bootstrapPiper, path.join(source, "services", "piper-tts.cjs"));
+
 copyTree(path.join(bootstrap, "stream-overlay"), path.join(source, "stream-overlay"));
 copyTree(path.join(bootstrap, "mobile"), path.join(source, "mobile"));
 copyFile(path.join(bootstrap, "main.cjs"), path.join(source, "main.cjs"));
@@ -73,6 +76,11 @@ copyFile(fallbackLogo, path.join(source, "mobile", "team-logo.svg"));
 const indexFile = path.join(source, "renderer", "index.html");
 let index = fs.readFileSync(indexFile, "utf8").replaceAll("1.9.1", "2.0.0");
 index = index.replaceAll("./assets/team-alpha-logo.svg", "./assets/team-alpha-logo.png");
+index = index.replace(/\s*<button class="nav-button" data-view="holo">[\s\S]*?<\/button>/g, "");
+index = index.replace(/\s*<button data-jump="holo">[\s\S]*?<\/button>/g, "");
+index = index.replace(/\s*<section id="view-holo"[\s\S]*?<\/section>/g, "");
+index = index.replace(/\s*<button[^>]*data-page="hologram"[^>]*>[\s\S]*?<\/button>/g, "");
+index = index.replace(/\s*<section class="page" data-page-panel="hologram">[\s\S]*?<\/section>/g, "");
 if (!index.includes("integrated.css")) {
   const marker = '<link rel="stylesheet" href="./styles.css">';
   if (!index.includes(marker)) throw new Error("Stylesheet-Marker im Hauptfenster fehlt.");
@@ -86,9 +94,6 @@ if (!index.includes("integrated.js")) {
 fs.writeFileSync(indexFile, index, "utf8");
 
 const mainFile = path.join(source, "main.cjs");
-replaceRequired(mainFile, 'Promise.resolve(sampler?.sample?.() || sampler?.snapshot?.() || {})', 'Promise.resolve(sampler?.sample?.(hardware) || sampler?.snapshot?.() || {})', "Hardwareübergabe an den Telemetrie-Sampler");
-replaceRequired(mainFile, 'recommendation = await Promise.resolve(buildRecommendation({ hardware: await ensureHardware(), internet: internetResult, ...appSettings.encoder }));', 'recommendation = await Promise.resolve(buildRecommendation({ ...appSettings.encoder, gpu: preferredGpu(), uploadMbps: internetResult?.uploadMbps || 0 }));', "Bevorzugte GPU für die Encoder-Empfehlung");
-replaceRequired(mainFile, 'handle("cpu:test", (payload) => runCpuLoadTest(payload));', 'handle("cpu:test", (payload) => runCpuLoadTest(payload.durationSeconds || payload.seconds || payload));', "Dauerübergabe für den CPU-Test");
 replaceRequired(mainFile, 'if (payload.password !== undefined) writeSecret("obsPassword", password);', 'if (payload.password !== undefined && payload.rememberPassword !== false) writeSecret("obsPassword", password);\n  if (payload.rememberPassword === false) writeSecret("obsPassword", "");', "Auswahl zur OBS-Passwortspeicherung");
 replaceRequired(mainFile, 'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });', 'handle("obs:disconnect", async () => { await obs.disconnect(); latestObs = { available: false, ...obs.status() }; scheduleState(); return latestObs; });\n  handle("obs:forget-password", () => { writeSecret("obsPassword", ""); return {}; });', "IPC zum Entfernen des OBS-Passworts");
 replaceRequired(mainFile, 'logoPath: appResource("team-logo.svg")', 'logoPath: appResource("team-logo.png")', "Originales Team-Alpha-Logo im Stream-Overlay");
@@ -97,12 +102,7 @@ const streamServerFile = path.join(source, "services", "stream-overlay-server.cj
 replaceRequired(streamServerFile, 'path.join(this.webRoot, "team-logo.svg")', 'path.join(this.webRoot, "team-logo.png")', "PNG-Fallback des Team-Alpha-Logos");
 
 const preloadFile = path.join(source, "preload.cjs");
-replaceRequired(
-  preloadFile,
-  'function legacyState(value) {',
-  'function obsForLegacy(value) {\n  if (!value) return value;\n  return {\n    ...value,\n    scenes: Array.isArray(value.scenes)\n      ? { scenes: value.scenes, currentProgramSceneName: value.currentScene }\n      : value.scenes,\n    currentScene: value.currentProgramSceneName\n  };\n}\n\nfunction legacyState(value) {',
-  "OBS-Kompatibilitätsform für die vorhandene Oberfläche"
-);
+replaceRequired(preloadFile, 'function legacyState(value) {', 'function obsForLegacy(value) {\n  if (!value) return value;\n  return {\n    ...value,\n    scenes: Array.isArray(value.scenes)\n      ? { scenes: value.scenes, currentProgramSceneName: value.currentScene }\n      : value.scenes,\n    currentScene: value.currentProgramSceneName\n  };\n}\n\nfunction legacyState(value) {', "OBS-Kompatibilitätsform für die vorhandene Oberfläche");
 replaceRequired(preloadFile, 'obs: value?.obs || { connected: false },', 'obs: obsForLegacy(value?.obs || { connected: false }),', "OBS-Kompatibilität im Startzustand");
 replaceRequired(preloadFile, 'getObsSnapshot: () => invoke("obs:refresh"),', 'getObsSnapshot: async () => obsForLegacy(await invoke("obs:refresh")),', "OBS-Kompatibilität beim Neuladen");
 replaceRequired(preloadFile, 'return (await invoke("settings:update", patch)).legacyDeck || value.deck || patch;', 'await invoke("settings:update", patch);\n    return legacyState(await invoke("state:get")).settings;', "Vollständige Rückgabe alter Einstellungen");
@@ -119,13 +119,7 @@ const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 if (packageJson.version !== "2.0.0") throw new Error(`Falsche Paketversion: ${packageJson.version}`);
 if (packageJson.main !== "src/main.cjs") throw new Error(`Falscher Programmeinstieg: ${packageJson.main}`);
 packageJson.build = packageJson.build || {};
-packageJson.build.nsis = {
-  ...(packageJson.build.nsis || {}),
-  oneClick: false,
-  allowToChangeInstallationDirectory: true,
-  runAfterFinish: false,
-  include: "build/installer.nsh"
-};
+packageJson.build.nsis = { ...(packageJson.build.nsis || {}), oneClick: false, allowToChangeInstallationDirectory: true, runAfterFinish: false, include: "build/installer.nsh" };
 fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + "\n", "utf8");
 
 const required = [
@@ -133,15 +127,14 @@ const required = [
   "src/renderer/multi-chat.html", "src/renderer/multi-chat.js", "src/renderer/multi-chat.css", "src/renderer/chat-overlay-controls.js",
   "src/stream-overlay/chat-overlay.html", "src/stream-overlay/chat-overlay.css", "src/stream-overlay/chat-overlay.js",
   "src/renderer/integrated.js", "src/renderer/integrated.css", "src/renderer/assets/team-alpha-logo.svg",
-  "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs", "src/services/obs-chat-overlay.cjs",
-  "src/services/mobile-bridge.cjs", "src/services/stream-overlay-server.cjs", "src/services/plugin-registry.cjs",
-  "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/mobile/index.html",
-  "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "resources/team-logo.svg",
-  "modules/encoder-monitoring-overlay/src/server.cjs", "modules/twitch-holo-chat/web/overlay.html"
+  "src/services/obs-websocket.cjs", "src/services/obs-chat-overlay.cjs", "src/services/mobile-bridge.cjs",
+  "src/services/stream-overlay-server.cjs", "src/services/plugin-registry.cjs", "src/services/native-plugin-additions.cjs",
+  "src/services/action-executor.cjs", "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/mobile/index.html",
+  "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "resources/team-logo.svg"
 ];
 for (const relative of required) {
   const absolute = path.join(root, relative);
   if (!fs.existsSync(absolute) || !fs.statSync(absolute).size) throw new Error(`Integrierte Datei fehlt oder ist leer: ${relative}`);
 }
 
-console.log(`Batto OBS Tool 2.0.0: ${required.length} Kernbestandteile korrekt zusammengesetzt.`);
+console.log(`Batto OBS Tool 2.0.0: ${required.length} Kernbestandteile ohne alte Monitoring-Abhängigkeit zusammengesetzt.`);

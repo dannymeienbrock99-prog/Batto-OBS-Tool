@@ -1,0 +1,13 @@
+"use strict";
+const fs = require("node:fs");
+const path = require("node:path");
+const file = path.join(__dirname, "upgrade-tiktok-moderation-ui-v2-20260902.cjs");
+let text = fs.readFileSync(file, "utf8");
+const bad = '})();`));';
+const good = '})();`);';
+if (text.includes(bad)) text = text.replace(bad, good);
+text = text.replace('["src/renderer/tiktok-moderation-list.html", "Gesperrte"]', '["src/renderer/tiktok-moderation-list.html", "Nutzerliste"]');
+if (!text.includes(good)) throw new Error("TikTok MOD V2 Syntax-Reparatur konnte Zielstelle nicht bestätigen.");
+if (!text.includes('["src/renderer/tiktok-moderation-list.html", "Nutzerliste"]')) throw new Error("TikTok MOD V2 Listen-Assertion konnte nicht repariert werden.");
+fs.writeFileSync(file, text, "utf8");
+console.log("TikTok MOD V2 Build-Skript und Listen-Assertion repariert.");

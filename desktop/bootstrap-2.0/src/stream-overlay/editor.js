@@ -24,6 +24,8 @@
   let socket = null;
   let drag = null;
   let saveTimer = null;
+  let elementClipboard = null;
+  let contextMenu = null;
 
   function toast(message, error = false) {
     ui.toast.textContent = message;
@@ -36,6 +38,7 @@
   function selected() { return config.elements.find((element) => element.id === selectedId) || null; }
   function clamp(value, minimum, maximum) { return Math.max(minimum, Math.min(maximum, Number(value) || 0)); }
   function debounceSave() { clearTimeout(saveTimer); saveTimer = setTimeout(() => save(false), 450); }
+  function nextId(type = "element") { return `${type}-${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`; }
 
   function connect() {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -127,10 +130,17 @@
       handle.addEventListener("pointerdown", (event) => beginDrag(event, item, "resize"));
       node.append(handle);
       node.addEventListener("pointerdown", (event) => {
+        hideContextMenu();
         selectedId = item.id;
         renderInspector();
         document.querySelectorAll(".editor-element").forEach((element) => element.classList.toggle("selected", element.dataset.id === selectedId));
         if (!item.locked && !event.target.classList.contains("resize-handle")) beginDrag(event, item, "move");
+      });
+      node.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        selectedId = item.id;
+        render();
+        showContextMenu(event.clientX, event.clientY);
       });
       return node;
     });
@@ -208,7 +218,7 @@
 
   function addElement(type) {
     fetch("/api/config").then(() => {
-      const id = `${type}-${crypto.randomUUID?.() || Date.now()}`;
+      const id = nextId(type);
       const base = {
         id, type, title: palette.find((entry) => entry[0] === type)?.[1] || type, text: type === "text" ? "Freier Hinweis" : "",
         x: 8 + config.elements.length % 5 * 8, y: 8 + config.elements.length % 4 * 8, width: type === "logo" ? 18 : 24, height: type === "logo" ? 20 : 14,
@@ -223,6 +233,93 @@
       save(false);
     });
   }
+
+  function deleteSelected() {
+    if (!selectedId) return;
+    config.elements = config.elements.filter((element) => element.id !== selectedId);
+    selectedId = "";
+    hideContextMenu();
+    render();
+    save(false);
+    toast("Element gelöscht");
+  }
+
+  function copySelected() {
+    const item = selected();
+    if (!item) return;
+    elementClipboard = structuredClone(item);
+    toast("Element kopiert");
+  }
+
+  function pasteElement() {
+    if (!elementClipboard) return;
+    const copy = structuredClone(elementClipboard);
+    copy.id = nextId(copy.type || "element");
+    copy.x = clamp(Number(copy.x || 0) + 2, 0, 100 - Number(copy.width || 10));
+    copy.y = clamp(Number(copy.y || 0) + 2, 0, 100 - Number(copy.height || 10));
+    copy.zIndex = Math.max(0, ...config.elements.map((item) => Number(item.zIndex) || 0)) + 1;
+    config.elements.push(copy);
+    selectedId = copy.id;
+    render();
+    save(false);
+    toast("Element eingefügt");
+  }
+
+  function duplicateSelected() { copySelected(); pasteElement(); }
+  function alignSelected(mode) {
+    const item = selected();
+    if (!item) return;
+    if (mode === "left") item.x = 0;
+    if (mode === "center-x") item.x = (100 - item.width) / 2;
+    if (mode === "right") item.x = 100 - item.width;
+    if (mode === "top") item.y = 0;
+    if (mode === "center-y") item.y = (100 - item.height) / 2;
+    if (mode === "bottom") item.y = 100 - item.height;
+    render(); save(false);
+  }
+  function moveLayer(direction) {
+    const item = selected();
+    if (!item) return;
+    const values = config.elements.map((entry) => Number(entry.zIndex) || 0);
+    item.zIndex = direction > 0 ? Math.max(...values, 0) + 1 : Math.min(...values, 0) - 1;
+    render(); save(false);
+  }
+
+  function ensureContextMenu() {
+    if (contextMenu) return contextMenu;
+    contextMenu = document.createElement("div");
+    contextMenu.className = "overlay-context-menu";
+    contextMenu.hidden = true;
+    contextMenu.innerHTML = `
+      <button data-cmd="copy">Kopieren <kbd>Ctrl+C</kbd></button>
+      <button data-cmd="duplicate">Duplizieren <kbd>Ctrl+D</kbd></button>
+      <button data-cmd="paste">Einfügen <kbd>Ctrl+V</kbd></button><hr>
+      <button data-cmd="front">Nach vorne</button><button data-cmd="back">Nach hinten</button><hr>
+      <button data-cmd="left">Links ausrichten</button><button data-cmd="center-x">Horizontal zentrieren</button><button data-cmd="right">Rechts ausrichten</button>
+      <button data-cmd="top">Oben ausrichten</button><button data-cmd="center-y">Vertikal zentrieren</button><button data-cmd="bottom">Unten ausrichten</button><hr>
+      <button class="danger-item" data-cmd="delete">Löschen <kbd>Entf</kbd></button>`;
+    document.body.append(contextMenu);
+    contextMenu.addEventListener("click", (event) => {
+      const command = event.target.closest("button")?.dataset.cmd;
+      if (!command) return;
+      if (command === "copy") copySelected();
+      else if (command === "duplicate") duplicateSelected();
+      else if (command === "paste") pasteElement();
+      else if (command === "front") moveLayer(1);
+      else if (command === "back") moveLayer(-1);
+      else if (command === "delete") deleteSelected();
+      else alignSelected(command);
+      hideContextMenu();
+    });
+    return contextMenu;
+  }
+  function showContextMenu(x, y) {
+    const menu = ensureContextMenu();
+    menu.hidden = false;
+    menu.style.left = `${Math.min(x, window.innerWidth - 230)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - 390)}px`;
+  }
+  function hideContextMenu() { if (contextMenu) contextMenu.hidden = true; }
 
   ui.palette.replaceChildren(...palette.map(([type, name, description]) => {
     const button = document.createElement("button");
@@ -251,13 +348,7 @@
   ];
   for (const [control, event, build] of bindings) control.addEventListener(event, () => updateSelected(build()));
 
-  ui.deleteElement.addEventListener("click", () => {
-    if (!selectedId) return;
-    config.elements = config.elements.filter((element) => element.id !== selectedId);
-    selectedId = "";
-    render();
-    save(false);
-  });
+  ui.deleteElement.addEventListener("click", deleteSelected);
   ui.orientation.addEventListener("change", () => {
     const [width, height] = ui.orientation.value.split("x").map(Number);
     config.width = width;
@@ -276,6 +367,18 @@
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", endDrag);
   window.addEventListener("pointercancel", endDrag);
+  window.addEventListener("pointerdown", (event) => { if (!event.target.closest(".overlay-context-menu")) hideContextMenu(); });
+  window.addEventListener("blur", hideContextMenu);
+  window.addEventListener("keydown", (event) => {
+    const tag = event.target?.tagName?.toLowerCase();
+    if (["input", "textarea", "select"].includes(tag)) return;
+    const control = event.ctrlKey || event.metaKey;
+    if (control && event.key.toLowerCase() === "c") { event.preventDefault(); copySelected(); }
+    else if (control && event.key.toLowerCase() === "v") { event.preventDefault(); pasteElement(); }
+    else if (control && event.key.toLowerCase() === "d") { event.preventDefault(); duplicateSelected(); }
+    else if (event.key === "Delete") { event.preventDefault(); deleteSelected(); }
+    else if (event.key === "Escape") hideContextMenu();
+  });
 
   connect();
 })();

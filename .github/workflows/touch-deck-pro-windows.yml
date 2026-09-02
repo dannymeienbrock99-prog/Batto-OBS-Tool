@@ -1,4 +1,4 @@
-name: Batto OBS Tool Touch-Deck Pro Windows Package
+name: Batto OBS Tool Windows Package
 
 on:
   push:
@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: batto-touch-deck-pro-${{ github.ref }}
+  group: batto-windows-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -45,25 +45,128 @@ jobs:
           npm install --no-audit --no-fund --ignore-scripts=false
           if ($LASTEXITCODE -ne 0) { throw "npm install ist fehlgeschlagen." }
 
-      - name: Assemble and test Batto OBS Tool
+      - name: Assemble and test Batto OBS Tool source
         shell: pwsh
         working-directory: desktop
         run: |
           $ErrorActionPreference = "Stop"
           npm test
-          if ($LASTEXITCODE -ne 0) { throw "Touch-Deck-Pro- oder Integrationstests sind fehlgeschlagen." }
+          if ($LASTEXITCODE -ne 0) { throw "Batto-OBS-Tool Integrationstests sind fehlgeschlagen." }
           foreach ($required in @(
-            "src/renderer/touch-deck-pro-v2.js",
-            "src/renderer/touch-deck-pro-v2.css",
-            "src/renderer/index.html"
+            "src/renderer/touch-deck-classic.js",
+            "src/renderer/touch-deck-classic.css",
+            "src/renderer/index.html",
+            "src/services/platforms/twitch-adapter.cjs",
+            "src/services/platforms/tiktok-adapter.cjs",
+            "src/stream-overlay/overlay.js"
           )) {
-            if (-not (Test-Path $required)) { throw "Vorbereitete Touch-Deck-Pro-Datei fehlt: $required" }
+            if (-not (Test-Path $required)) { throw "Vorbereitete Produktionsdatei fehlt: $required" }
           }
           $index = Get-Content "src/renderer/index.html" -Raw
-          if ($index -notmatch 'touch-deck-pro-v2\.css') { throw "Touch-Deck-Pro-CSS ist nicht eingebunden." }
-          if ($index -notmatch 'touch-deck-pro-v2\.js') { throw "Touch-Deck-Pro-JavaScript ist nicht eingebunden." }
+          if ($index -notmatch 'touch-deck-classic\.css') { throw "Classic-Touch-Deck-CSS ist nicht eingebunden." }
+          if ($index -notmatch 'touch-deck-classic\.js') { throw "Classic-Touch-Deck-JavaScript ist nicht eingebunden." }
+          if ($index -match 'touch-deck-pro-v2') { throw "Touch-Deck Pro ist noch im veröffentlichten Hauptfenster eingebunden." }
 
-      - name: Build Windows x64 application installer
+      - name: Build unpacked Windows test application
+        shell: pwsh
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          npm_config_ignore_scripts: "false"
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm run prepare:integrated
+          if ($LASTEXITCODE -ne 0) { throw "Produktionsquelle konnte für den Testbuild nicht vorbereitet werden." }
+          node node_modules/electron-builder/out/cli/cli.js --win dir --x64 --publish never
+          if ($LASTEXITCODE -ne 0) { throw "Ungepackte Windows-Testanwendung konnte nicht gebaut werden." }
+          if (-not (Test-Path "dist/win-unpacked/Batto OBS Tool.exe")) { throw "Ungepackte Batto OBS Tool.exe fehlt." }
+
+      - name: Smoke-test unpacked application before installer
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = Resolve-Path "dist/win-unpacked/Batto OBS Tool.exe"
+
+          $selfTest = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Self-Test der ungepackten Anwendung fehlgeschlagen: $($selfTest.ExitCode)" }
+
+          $app = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 10
+          if ($app.HasExited) { throw "Testanwendung wurde unmittelbar beendet. ExitCode: $($app.ExitCode)" }
+
+          function Wait-LocalEndpoint([string]$Url, [int]$Seconds = 35) {
+            $deadline = (Get-Date).AddSeconds($Seconds)
+            $lastError = $null
+            while ((Get-Date) -lt $deadline) {
+              try {
+                $response = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 3
+                if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) { return }
+              } catch { $lastError = $_.Exception.Message }
+              Start-Sleep -Seconds 2
+            }
+            throw "Lokaler Dienst antwortet nicht: $Url. Letzter Fehler: $lastError"
+          }
+
+          Wait-LocalEndpoint "http://127.0.0.1:48620/api/status"
+          Wait-LocalEndpoint "http://127.0.0.1:48620/mobile/"
+          Wait-LocalEndpoint "http://127.0.0.1:48621/api/status"
+          Wait-LocalEndpoint "http://127.0.0.1:48621/overlay"
+          Wait-LocalEndpoint "http://127.0.0.1:48621/editor"
+          Wait-LocalEndpoint "http://127.0.0.1:48621/chat-overlay"
+
+          $status = Invoke-RestMethod -Uri "http://127.0.0.1:48621/api/status" -TimeoutSec 5
+          if (-not $status.active) { throw "Stream-Overlay-Server meldet sich nicht als aktiv." }
+
+          $config = Invoke-RestMethod -Uri "http://127.0.0.1:48621/api/config" -TimeoutSec 5
+          $portrait = $config | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+          $portrait.width = 1080
+          $portrait.height = 1920
+          $portrait.orientation = "portrait"
+          $portraitJson = $portrait | ConvertTo-Json -Depth 20
+          Invoke-RestMethod -Method Put -Uri "http://127.0.0.1:48621/api/config" -ContentType "application/json" -Body $portraitJson -TimeoutSec 5 | Out-Null
+          $portraitCheck = Invoke-RestMethod -Uri "http://127.0.0.1:48621/api/config" -TimeoutSec 5
+          if ($portraitCheck.width -ne 1080 -or $portraitCheck.height -ne 1920 -or $portraitCheck.orientation -ne "portrait") {
+            throw "Overlay-Hochformat wurde nicht gespeichert."
+          }
+
+          $landscape = $portraitCheck | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+          $landscape.width = 1920
+          $landscape.height = 1080
+          $landscape.orientation = "landscape"
+          $landscapeJson = $landscape | ConvertTo-Json -Depth 20
+          Invoke-RestMethod -Method Put -Uri "http://127.0.0.1:48621/api/config" -ContentType "application/json" -Body $landscapeJson -TimeoutSec 5 | Out-Null
+          $landscapeCheck = Invoke-RestMethod -Uri "http://127.0.0.1:48621/api/config" -TimeoutSec 5
+          if ($landscapeCheck.width -ne 1920 -or $landscapeCheck.height -ne 1080 -or $landscapeCheck.orientation -ne "landscape") {
+            throw "Overlay-Querformat wurde nicht gespeichert."
+          }
+
+          $twitch = Get-Content "src/services/platforms/twitch-adapter.cjs" -Raw
+          if ($twitch -match 'OAuth-Token|config\.token|oauth:\$\{token\}') { throw "Twitch verlangt noch einen OAuth-Token." }
+          if ($twitch -notmatch 'anonymous-read-only') { throw "Anonymer Twitch-Lesemodus fehlt." }
+
+          Get-Process | Where-Object { $_.Path -eq $exe.Path } | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+
+      - name: Package unpacked test build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $testZip = Join-Path $PWD "Batto-OBS-Tool-2.0.0-Testbuild.zip"
+          Remove-Item $testZip -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "desktop/dist/win-unpacked/*" -DestinationPath $testZip -CompressionLevel Optimal
+          if (-not (Test-Path $testZip)) { throw "Testbuild-ZIP wurde nicht erzeugt." }
+
+      - name: Upload unpacked test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Batto-OBS-Tool-2.0.0-Testbuild
+          path: Batto-OBS-Tool-2.0.0-Testbuild.zip
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Build Windows x64 installer only after test build passed
         shell: pwsh
         working-directory: desktop
         env:
@@ -75,17 +178,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Windows-Installer konnte nicht gebaut werden." }
           $installer = Get-ChildItem "dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
           if (-not $installer) { throw "Batto-OBS-Tool-Setup-2.0.0.exe fehlt." }
-          $unpacked = Resolve-Path "dist/win-unpacked"
-          $exe = Get-ChildItem $unpacked -Filter "Batto OBS Tool.exe" -File -Recurse | Select-Object -First 1
-          if (-not $exe) { throw "Ungepackte Hauptanwendung fehlt." }
-          $selfTest = Start-Process -FilePath $exe.FullName -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
-          if ($selfTest.ExitCode -ne 0) { throw "Self-Test fehlgeschlagen: $($selfTest.ExitCode)" }
 
       - name: Package application
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $release = Join-Path $PWD "release-touch-deck-pro"
+          $release = Join-Path $PWD "release-batto-obs-tool"
           Remove-Item -Recurse -Force $release -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $release | Out-Null
 
@@ -94,20 +192,17 @@ jobs:
           Copy-Item $installer.FullName (Join-Path $release $installer.Name)
 
           @"
-          BATTO OBS TOOL 2.0.0 – TOUCH-DECK-PRO-PAKET
+          BATTO OBS TOOL 2.0.0 – WINDOWS-PAKET
 
-          1. Batto-OBS-Tool-Setup-2.0.0.exe installieren.
+          Vor dem Installer wurde die ungepackte Windows-Anwendung automatisch gestartet und geprüft.
 
-          Touch-Deck Pro enthält jetzt:
-          - linke Plugin-/Aktionsbibliothek mit Suche
-          - Umschaltung Tasten / Plugins
-          - aufklappbare Plugin-Gruppen
-          - Aktion per Klick oder Drag-and-drop auf eine Taste
-          - mittleres variables Tastenraster
-          - rechten Tasten-Inspector mit Mehrfachaktionen
-          - leere, unbeschriftete Standardtasten
-          - Profile, Ordner, Import/Export, Kopieren/Einfügen und Verzögerungen
-          - Beibehaltung verdeckter Tasten beim Verkleinern des Rasters
+          Enthalten:
+          - klassisches profilbasiertes Touch-Deck aus dem früheren Setup
+          - Twitch Chat anonym/read-only ohne OAuth-Token
+          - TikTok LIVE Connector mit stabiler Initialisierung
+          - Stream-Overlay mit wirksamer Hoch-/Querformat-Ausrichtung
+          - OBS Co-Host/Gäste über echte Scene-Item-Schaltung
+          - Multi-Chat, Plugins, Piper TTS und lokale Handy-Steuerung
           "@ | Set-Content -Encoding UTF8 (Join-Path $release "INSTALLATION.txt")
 
           $hashLines = Get-ChildItem $release -File -Recurse | ForEach-Object {
@@ -117,7 +212,7 @@ jobs:
           }
           $hashLines | Set-Content -Encoding ASCII (Join-Path $release "SHA256.txt")
 
-          $zip = Join-Path $PWD "Batto-OBS-Tool-2.0.0-TouchDeck-Pro-Windows.zip"
+          $zip = Join-Path $PWD "Batto-OBS-Tool-2.0.0-Windows.zip"
           Remove-Item $zip -Force -ErrorAction SilentlyContinue
           Compress-Archive -Path "$release/*" -DestinationPath $zip -CompressionLevel Optimal
 
@@ -137,8 +232,8 @@ jobs:
       - name: Upload verified package
         uses: actions/upload-artifact@v4
         with:
-          name: Batto-OBS-Tool-2.0.0-TouchDeck-Pro-Windows
-          path: Batto-OBS-Tool-2.0.0-TouchDeck-Pro-Windows.zip
+          name: Batto-OBS-Tool-2.0.0-Windows
+          path: Batto-OBS-Tool-2.0.0-Windows.zip
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
