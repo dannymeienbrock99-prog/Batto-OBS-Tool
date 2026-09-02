@@ -2,14 +2,14 @@
   "name": "batto-obs-tool",
   "version": "2.0.0",
   "private": true,
-  "description": "Batto OBS Tool – OBS-Steuerung, Multi-Chat, Stream-Overlay, Touch-Deck Pro, Plugins und lokale Handy-Steuerung",
+  "description": "Batto OBS Tool – OBS-Steuerung, Multi-Chat, Stream-Overlay, Touch-Deck, Plugins und lokale Handy-Steuerung",
   "author": "Crazy_Batto / Team Alpha",
   "main": "src/main.cjs",
   "scripts": {
-    "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && echo 'Step 1: Base Integration OK' && node scripts/patch-2.0.0-integrated.cjs && echo 'Step 2: Native Actions OK' && node scripts/prepare-touch-deck-pro-v2.cjs && echo 'Step 3: Touch-Deck Pro OK' && node scripts/patch-touch-deck-pages-2026.cjs && echo 'Step 4: Touch-Deck Pages OK' && node scripts/patch-2.0.0-chat.cjs && echo 'Step 5: Unified Multi-Chat OK' && node scripts/patch-chat-plan-2026.cjs && echo 'Step 6: Real StreamDeck Plugin Import OK' && node scripts/patch-ui-final-2026.cjs && echo 'Step 7: Final UI/Overlay Tools OK' && node scripts/clean-legacy-ui-2026.cjs && echo 'Step 8: Legacy Monitoring UI Removed' && node scripts/sync-production-plugins.cjs && echo 'Step 9: Plugin Package Selftest OK' && node scripts/patch-piper-tts-runtime.cjs && echo 'Step 10: Piper TTS Runtime OK' && node scripts/finalize-chat-plan-2026.cjs && echo 'Step 11: Final Production Scope OK'",
+    "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && echo 'Step 1: Base Integration OK' && node scripts/patch-2.0.0-integrated.cjs && echo 'Step 2: Native Actions OK' && node scripts/prepare-touch-deck-pro-v2.cjs && echo 'Step 3: Temporary Deck Source OK' && node scripts/patch-touch-deck-pages-2026.cjs && echo 'Step 4: Touch-Deck Pages OK' && node scripts/patch-2.0.0-chat.cjs && echo 'Step 5: Unified Multi-Chat OK' && node scripts/patch-chat-plan-2026.cjs && echo 'Step 6: Real StreamDeck Plugin Import OK' && node scripts/patch-ui-final-2026.cjs && echo 'Step 7: Final UI/Overlay Tools OK' && node scripts/clean-legacy-ui-2026.cjs && echo 'Step 8: Legacy Monitoring UI Removed' && node scripts/sync-production-plugins.cjs && echo 'Step 9: Plugin Package Selftest OK' && node scripts/patch-piper-tts-runtime.cjs && echo 'Step 10: Piper TTS Runtime OK' && node scripts/finalize-chat-plan-2026.cjs && echo 'Step 11: Final Production Scope OK' && node scripts/repair-runtime-20260902.cjs && echo 'Step 12: Classic Deck Chat Overlay Guests Repair OK'",
     "pretest": "npm run prepare:integrated",
     "check": "node scripts/check-2.0.0.cjs && node scripts/check-icon.cjs",
-    "test": "npm run check && node --test test/integrated-2.0.0.test.cjs test/touch-deck-pro-v2.test.cjs test/multi-chat.test.cjs",
+    "test": "npm run check && node --test test/integrated-2.0.0.test.cjs test/multi-chat.test.cjs",
     "predist:win": "npm run prepare:integrated && electron scripts/generate-icon.cjs",
     "dist:win": "electron-builder --win nsis --x64 --publish never"
   },
