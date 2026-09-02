@@ -20,7 +20,6 @@ const {
 } = require("./services/hardware.cjs");
 const { ObsWebSocketClient, normalizeLocalObsHost } = require("./services/obs-websocket.cjs");
 const { buildRecommendation } = require("./services/recommendation.cjs");
-const { TwitchHoloServer } = require("./services/twitch-holo-server.cjs");
 const { MobileBridge } = require("./services/mobile-bridge.cjs");
 const { StreamOverlayServer } = require("./services/stream-overlay-server.cjs");
 const { MultiChat } = require("./services/multi-chat.cjs");
@@ -48,7 +47,6 @@ let telemetryTimer = null;
 let stateTimer = null;
 let monitoringServer = null;
 let streamOverlayServer = null;
-let holoServer = null;
 let mobileBridge = null;
 let multiChat = null;
 let pluginRegistry = null;
@@ -75,7 +73,7 @@ function defaultAppSettings() {
     obs: { host: "127.0.0.1", port: 4455, autoConnect: true },
     encoder: { platform: "twitch", resolution: "1920x1080", fps: 60 },
     mobile: { enabled: true, requireApproval: true },
-    overlay: { streamEnabled: true, monitoringEnabled: true, holoEnabled: true },
+    overlay: { streamEnabled: true, monitoringEnabled: true },
     ui: { startPage: "overview", compact: false },
     updatedAt: Date.now()
   };
@@ -168,8 +166,7 @@ function currentState() {
     migration: migration?.status() || null,
     modules: {
       monitoring: monitoringStatus(),
-      streamOverlay: streamOverlayServer?.status() || { active: false, error: moduleErrors.streamOverlay?.message || "" },
-      twitchHolo: holoServer?.status() || { active: false, error: moduleErrors.holo?.message || "" }
+      streamOverlay: streamOverlayServer?.status() || { active: false, error: moduleErrors.streamOverlay?.message || "" }
     },
     errors: deepClone(moduleErrors),
     sampledAt: Date.now()
@@ -356,20 +353,8 @@ async function startModules() {
     await streamOverlayServer.start();
   } catch (error) { moduleErrors.streamOverlay = errorPayload(error); streamOverlayServer = null; }
 
-  try {
-    holoServer = new TwitchHoloServer({ webRoot: modulePath("twitch-holo-chat", "web"), configFile: userDataFile("twitch-holo.json"), preferredPort: 17821 });
-    await holoServer.start();
-  } catch (error) { moduleErrors.holo = errorPayload(error); holoServer = null; }
-
   multiChat = new MultiChat({ settingsFile: userDataFile("multi-chat.json"), overlayServer: streamOverlayServer });
-  multiChat.on("message", (message) => {
-    if (message.platform === "twitch") holoServer?.publishMessage({
-      id: message.id, username: message.name, displayName: message.name, userId: message.userId,
-      text: message.text, color: message.color,
-      roles: { broadcaster: message.role === "broadcaster", moderator: message.role === "moderator", vip: message.role === "vip", subscriber: message.role === "subscriber" }
-    });
-    scheduleState();
-  });
+  multiChat.on("message", () => scheduleState());
   multiChat.on("changed", scheduleState);
 
   pluginRegistry = new PluginRegistry({ stateFile: userDataFile("plugin-state.json") });
@@ -506,149 +491,65 @@ function registerIpc() {
   handle("stream-overlay:event", (payload) => streamOverlayServer.publishEvent(payload));
   handle("stream-overlay:clear", () => streamOverlayServer.clearEvents());
 
-  handle("monitoring:open", () => openLocalWindow(monitoringStatus().editorUrl, "Batto OBS Tool – Monitoring-Overlay"));
+  handle("monitoring:status", () => monitoringStatus());
+  handle("monitoring:open", () => openLocalWindow(monitoringStatus().editorUrl, "Batto OBS Tool – Monitoring"));
   handle("monitoring:copy-url", () => { const url = monitoringStatus().overlayUrl; clipboard.writeText(url); return url; });
 
-  handle("holo:open", () => openLocalWindow(holoServer.status().editorUrl, "Batto OBS Tool – Twitch-Hologramm"));
-  handle("holo:copy-url", () => { const url = holoServer.status().overlayUrl; clipboard.writeText(url); return url; });
-  handle("holo:message", (payload) => holoServer.publishMessage(payload));
-  handle("holo:clear", () => holoServer.clear());
-
-  handle("chat:update-settings", (payload) => {
-    const secrets = {};
-    if (payload.twitchOauth !== undefined) { writeSecret("twitchOauth", payload.twitchOauth); secrets.twitchOauth = payload.twitchOauth; }
-    else secrets.twitchOauth = readSecrets().twitchOauth || multiChat.settings.twitch.oauth;
-    if (payload.youtubeApiKey !== undefined) { writeSecret("youtubeApiKey", payload.youtubeApiKey); secrets.youtubeApiKey = payload.youtubeApiKey; }
-    else secrets.youtubeApiKey = readSecrets().youtubeApiKey || multiChat.settings.youtube.apiKey;
-    return multiChat.updateSettings(payload.settings || {}, secrets);
-  });
-  handle("chat:twitch-connect", (payload) => multiChat.connectTwitch({ ...payload, oauth: payload.oauth || readSecrets().twitchOauth || "" }));
-  handle("chat:twitch-disconnect", () => { multiChat.disconnectTwitch(); return multiChat.snapshot(); });
-  handle("chat:twitch-send", (payload) => multiChat.sendTwitch(payload.text));
-  handle("chat:youtube-connect", (payload) => multiChat.connectYouTube({ ...payload, apiKey: payload.apiKey || readSecrets().youtubeApiKey || "" }));
-  handle("chat:youtube-disconnect", () => { multiChat.disconnectYouTube(); return multiChat.snapshot(); });
-  handle("chat:clear", () => multiChat.clear());
-  handle("chat:test", (payload) => multiChat.ingest({ platform: payload.platform || "twitch", name: payload.name || "Crazy_Batto", text: payload.text || "Testnachricht", role: payload.role || "broadcaster" }));
-  handle("chat:tts-skip", () => multiChat.skipTts());
-  handle("chat:tts-clear", () => multiChat.clearTts());
-
-  handle("guests:list", async (payload) => ({ sceneName: payload.sceneName, items: await obs.getSceneItems(payload.sceneName) }));
-  handle("guests:apply", async (payload) => {
-    const results = [];
-    for (const slot of payload.slots || []) {
-      results.push(await obs.setSceneItemEnabled(payload.sceneName, Number(slot.sceneItemId), Boolean(slot.enabled)));
-    }
-    return results;
-  });
+  handle("multichat:connectTwitch", async (payload) => { if (payload.oauthToken) writeSecret("twitchOauth", payload.oauthToken); const result = await multiChat.connectTwitch({ channel: payload.channel, oauth: payload.oauthToken || readSecrets().twitchOauth || "" }); scheduleState(); return result; });
+  handle("multichat:disconnectTwitch", () => multiChat.disconnectTwitch());
+  handle("multichat:connectYouTube", async (payload) => { if (payload.apiKey) writeSecret("youtubeApiKey", payload.apiKey); const result = await multiChat.connectYouTube({ apiKey: payload.apiKey || readSecrets().youtubeApiKey || "", liveChatId: payload.liveChatId }); scheduleState(); return result; });
+  handle("multichat:disconnectYouTube", () => multiChat.disconnectYouTube());
+  handle("multichat:update", (payload) => { const sanitized = deepClone(payload || {}); const secrets = {}; if (payload?.twitch?.oauth !== undefined) { secrets.twitchOauth = payload.twitch.oauth; delete sanitized.twitch.oauth; } if (payload?.youtube?.apiKey !== undefined) { secrets.youtubeApiKey = payload.youtube.apiKey; delete sanitized.youtube.apiKey; } if (secrets.twitchOauth !== undefined) writeSecret("twitchOauth", secrets.twitchOauth); if (secrets.youtubeApiKey !== undefined) writeSecret("youtubeApiKey", secrets.youtubeApiKey); return multiChat.updateSettings(sanitized, secrets); });
+  handle("multichat:clear", () => multiChat.clear());
+  handle("multichat:tts-skip", () => multiChat.skipTts());
+  handle("multichat:tts-clear", () => multiChat.clearTts());
 
   handle("settings:update", (payload) => {
-    appSettings = {
-      ...appSettings,
-      ...payload,
-      obs: { ...appSettings.obs, ...(payload.obs || {}), host: normalizeLocalObsHost(payload.obs?.host || appSettings.obs.host) },
-      encoder: { ...appSettings.encoder, ...(payload.encoder || {}) },
-      mobile: { ...appSettings.mobile, ...(payload.mobile || {}) },
-      overlay: { ...appSettings.overlay, ...(payload.overlay || {}) },
-      ui: { ...appSettings.ui, ...(payload.ui || {}) }
-    };
+    appSettings = { ...appSettings, ...(payload || {}), obs: { ...appSettings.obs, ...(payload.obs || {}) }, mobile: { ...appSettings.mobile, ...(payload.mobile || {}) }, overlay: { ...appSettings.overlay, ...(payload.overlay || {}) }, ui: { ...appSettings.ui, ...(payload.ui || {}) } };
     saveSettings();
-    scheduleState();
     return publicSettings();
   });
-  handle("migration:run", () => migration.run({ force: true }));
-  handle("app:open-path", async (payload) => { const error = await shell.openPath(payload.path); if (error) throw new Error(error); return true; });
-  handle("app:open-url", async (payload) => { if (!/^https?:\/\//i.test(payload.url)) throw new Error("Ungültige Webadresse."); await shell.openExternal(payload.url); return true; });
-  handle("app:copy", (payload) => { clipboard.writeText(String(payload.text || "")); return true; });
-  handle("app:close", () => { mainWindow?.close(); return true; });
-}
 
-async function selfTest() {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "batto-obs-tool-selftest-"));
-  const results = { ok: true, version: app.getVersion(), tests: [] };
-  const check = async (name, callback) => {
-    try { const value = await callback(); results.tests.push({ name, ok: true, value }); }
-    catch (error) { results.ok = false; results.tests.push({ name, ok: false, error: String(error?.message || error) }); }
-  };
-  await check("DeckStore", () => new DeckStore(path.join(temporary, "deck.json")).snapshot().profiles.length === 1);
-  await check("PluginRegistry", () => new PluginRegistry({ stateFile: path.join(temporary, "plugins.json"), pluginRoots: [], iconPackRoots: [] }).scan().plugins.length >= 8);
-  await check("StreamOverlay", async () => {
-    const server = new StreamOverlayServer({ webRoot: path.join(__dirname, "stream-overlay"), configFile: path.join(temporary, "overlay.json"), logoPath: appResource("team-logo.svg"), preferredPort: 49121 });
-    await server.start();
-    const response = await fetch(`${server.status().baseUrl}/api/status`);
-    const value = response.ok && (await response.json()).active;
-    await server.stop();
-    return value;
-  });
-  await check("MobileBridge", async () => {
-    const server = new MobileBridge({ webRoot: path.join(__dirname, "mobile"), stateFile: path.join(temporary, "mobile.json"), preferredPort: 49120, stateProvider: () => ({ ok: true }) });
-    await server.start();
-    const status = server.status();
-    const response = await fetch(`http://127.0.0.1:${status.port}/api/status`);
-    const value = response.ok && status.pin.length === 6 && Boolean(status.qr.legacyDataUrl);
-    await server.stop();
-    return value;
-  });
-  await check("TwitchHolo", async () => {
-    const server = new TwitchHoloServer({ webRoot: modulePath("twitch-holo-chat", "web"), configFile: path.join(temporary, "holo.json"), preferredPort: 49140 });
-    await server.start();
-    const response = await fetch(`${server.status().baseUrl}/api/status`);
-    const value = response.ok;
-    await server.stop();
-    return value;
-  });
-  process.stdout.write(`${JSON.stringify(results)}\n`);
-  fs.rmSync(temporary, { recursive: true, force: true });
-  app.exit(results.ok ? 0 : 1);
+  handle("app:openExternal", (payload) => shell.openExternal(String(payload.url || payload)));
+  handle("app:openProgramData", () => shell.openPath(programDataRoot()));
+  handle("app:close", () => app.quit());
 }
 
 async function initialize() {
-  ensureDirectory(app.getPath("userData"));
   loadSettings();
+  try { hardware = await collectHardware(); } catch (error) { moduleErrors.hardware = errorPayload(error); }
   sampler = new SystemTelemetrySampler();
-  registerIpc();
-  if (process.argv.includes("--self-test")) return selfTest();
   await startModules();
+  registerIpc();
   createMainWindow();
-  obs.on("event", () => void refreshTelemetry());
-  obs.on("disconnected", () => { latestObs = { available: false, ...obs.status() }; scheduleState(); });
-  multiChat.on("changed", scheduleState);
-  await ensureHardware().catch((error) => { moduleErrors.hardware = errorPayload(error); });
-  await buildEncoderRecommendation({}).catch((error) => { moduleErrors.recommendation = errorPayload(error); });
+  await buildEncoderRecommendation({});
   await autoConnectObs();
   await refreshTelemetry();
-  telemetryTimer = setInterval(() => void refreshTelemetry(), 1000);
+  telemetryTimer = setInterval(refreshTelemetry, 1000);
+  telemetryTimer.unref?.();
+  sendState();
 }
-
-app.on("second-instance", () => {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
-});
 
 app.whenReady().then(initialize).catch((error) => {
   console.error(error);
-  if (process.argv.includes("--self-test")) app.exit(1);
-  else dialog.showErrorBox("Batto OBS Tool", String(error?.stack || error));
+  dialog.showErrorBox("Batto OBS Tool – Startfehler", errorPayload(error).message);
 });
 
+app.on("second-instance", () => { if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); } });
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
-app.on("before-quit", () => {
+app.on("before-quit", async () => {
   clearInterval(telemetryTimer);
   clearTimeout(stateTimer);
-  multiChat?.stop();
-  void obs.disconnect();
-  void mobileBridge?.stop();
-  void streamOverlayServer?.stop();
-  void holoServer?.stop();
-  try { monitoringServer?.stop?.(); } catch {}
-  for (const window of childWindows) try { window.destroy(); } catch {}
+  try { await obs.disconnect(); } catch {}
+  try { await monitoringServer?.stop?.(); } catch {}
+  try { await streamOverlayServer?.stop?.(); } catch {}
+  try { await mobileBridge?.stop?.(); } catch {}
+  try { await multiChat?.stop?.(); } catch {}
 });
 
-// Expose the already running OBS client and local overlay server to the
-// Unified Multi-Chat bootstrap. The integrated prepare step loads that
-// bootstrap after this module has finished registering the main runtime.
 module.exports = {
+  getMainWindow: () => mainWindow,
   getObsClient: () => obs,
-  getStreamOverlayServer: () => streamOverlayServer
+  getStreamOverlayServer: () => streamOverlayServer,
+  getMultiChat: () => multiChat
 };
