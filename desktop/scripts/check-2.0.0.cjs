@@ -23,9 +23,11 @@ function forbidText(content, pattern, message) {
 }
 
 const required = [
-  "src/main.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/styles.css", "src/renderer/app.js",
+  "src/main.cjs", "src/chat-bootstrap.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/styles.css", "src/renderer/app.js",
+  "src/renderer/multi-chat.html", "src/renderer/multi-chat.js", "src/renderer/multi-chat.css", "src/renderer/chat-overlay-controls.js",
+  "src/stream-overlay/chat-overlay.html", "src/stream-overlay/chat-overlay.css", "src/stream-overlay/chat-overlay.js",
   "src/renderer/integrated.js", "src/renderer/integrated.css", "src/renderer/assets/team-alpha-logo.svg",
-  "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs",
+  "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs", "src/services/obs-chat-overlay.cjs",
   "src/services/common.cjs", "src/services/deck-store.cjs", "src/services/plugin-registry.cjs",
   "src/services/native-plugin-additions.cjs", "src/services/action-executor.cjs", "src/services/migration.cjs",
   "src/services/mobile-bridge.cjs", "src/services/multi-chat.cjs", "src/services/stream-overlay-server.cjs",

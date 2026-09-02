@@ -129,9 +129,11 @@ packageJson.build.nsis = {
 fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + "\n", "utf8");
 
 const required = [
-  "src/main.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/app.js",
+  "src/main.cjs", "src/chat-bootstrap.cjs", "src/preload.cjs", "src/renderer/index.html", "src/renderer/app.js",
+  "src/renderer/multi-chat.html", "src/renderer/multi-chat.js", "src/renderer/multi-chat.css", "src/renderer/chat-overlay-controls.js",
+  "src/stream-overlay/chat-overlay.html", "src/stream-overlay/chat-overlay.css", "src/stream-overlay/chat-overlay.js",
   "src/renderer/integrated.js", "src/renderer/integrated.css", "src/renderer/assets/team-alpha-logo.svg",
-  "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs",
+  "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs", "src/services/obs-chat-overlay.cjs",
   "src/services/mobile-bridge.cjs", "src/services/stream-overlay-server.cjs", "src/services/plugin-registry.cjs",
   "src/services/deck-store.cjs", "src/services/multi-chat.cjs", "src/mobile/index.html",
   "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "resources/team-logo.svg",

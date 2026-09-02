@@ -29,6 +29,14 @@ if (!preloadText.includes("chatHistory:")) {
   fs.writeFileSync(preload, preloadText, "utf8");
 }
 
+if (!preloadText.includes("chatOverlayStatus:")) {
+  const marker = "  onStateChanged(callback) {";
+  if (!preloadText.includes(marker)) throw new Error("OBS-Chat-Overlay: Preload-Patchpunkt fehlt.");
+  const overlayBridge = `  chatOverlayStatus: () => ipcRenderer.invoke("chat:overlay-status"),\n  chatOverlayCopyUrl: () => ipcRenderer.invoke("chat:overlay-copy-url"),\n  chatOverlayOpen: () => ipcRenderer.invoke("chat:overlay-open"),\n  chatOverlayInstall: (config) => ipcRenderer.invoke("chat:overlay-install", config),\n  chatOverlayRemove: () => ipcRenderer.invoke("chat:overlay-remove"),\n`;
+  preloadText = preloadText.replace(marker, overlayBridge + marker);
+  fs.writeFileSync(preload, preloadText, "utf8");
+}
+
 // main.cjs already owns the legacy chat:clear IPC handler. Give the Unified Chat its
 // own clear channel so chat-bootstrap can register all of its handlers instead of aborting.
 const bootstrap = path.join(root, "src", "chat-bootstrap.cjs");
@@ -36,7 +44,7 @@ let bootstrapText = fs.readFileSync(bootstrap, "utf8");
 bootstrapText = bootstrapText.replace('ipcMain.handle("chat:clear", (_event, platform)', 'ipcMain.handle("chat:unified-clear", (_event, platform)');
 fs.writeFileSync(bootstrap, bootstrapText, "utf8");
 
-for (const required of ["chatHistory:", "onChatWindow:", 'ipcMain.handle("chat:unified-clear"']) {
+for (const required of ["chatHistory:", "onChatWindow:", "chatOverlayInstall:", 'ipcMain.handle("chat:unified-clear"']) {
   const haystack = required.startsWith("ipcMain") ? bootstrapText : preloadText;
   if (!haystack.includes(required)) throw new Error(`Unified-Multi-Chat-Patch fehlt: ${required}`);
 }

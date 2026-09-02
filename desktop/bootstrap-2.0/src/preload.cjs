@@ -189,6 +189,11 @@ const api = {
   openHoloEditor: () => invoke("holo:open"),
   copyHoloUrl: () => invoke("holo:copy-url"),
   executeDeckAction: (assignment) => invoke("action:execute", { action: actionForLegacyAssignment(assignment), context: { source: "legacy-deck" } }),
+  chatOverlayStatus: () => ipcRenderer.invoke("chat:overlay-status"),
+  chatOverlayCopyUrl: () => ipcRenderer.invoke("chat:overlay-copy-url"),
+  chatOverlayOpen: () => ipcRenderer.invoke("chat:overlay-open"),
+  chatOverlayInstall: (config) => ipcRenderer.invoke("chat:overlay-install", config),
+  chatOverlayRemove: () => ipcRenderer.invoke("chat:overlay-remove"),
   saveReport: async () => {
     const filePath = await invoke("hardware:save-report");
     return { saved: Boolean(filePath), filePath };
