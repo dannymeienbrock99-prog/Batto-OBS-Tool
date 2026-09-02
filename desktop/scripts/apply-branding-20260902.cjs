@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 const cssFile = path.join(root, "src", "renderer", "styles.css");
 const indexFile = path.join(root, "src", "renderer", "index.html");
 const backgroundFile = path.join(root, "src", "renderer", "assets", "overview-bg.jpg");
-const shortcutFile = path.join(root, "build", "shortcut-icon.jpg");
+const shortcutFile = path.join(root, "build", "shortcut-icon.png");
 const marker = "/* BATTO 2.0 CUSTOM OVERVIEW BRANDING */";
 
 for (const [file, label] of [[cssFile, "styles.css"], [indexFile, "index.html"], [backgroundFile, "Übersichts-Hintergrund"], [shortcutFile, "Desktop-Verknüpfungsbild"]]) {
