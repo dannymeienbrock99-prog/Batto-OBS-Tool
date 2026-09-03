@@ -129,7 +129,9 @@ function createMainWindow({ show = true, diagnostics = null } = {}) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      webSecurity: true
+      webSecurity: true,
+      offscreen: !show,
+      backgroundThrottling: false
     }
   });
 
