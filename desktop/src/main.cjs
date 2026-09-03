@@ -48,6 +48,20 @@ function errorPayload(error) {
   };
 }
 
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function withTimeout(promise, milliseconds, label) {
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} nach ${milliseconds} ms abgebrochen.`)), milliseconds);
+    })
+  ]);
+}
+
 async function safeObsSnapshot() {
   try {
     return await obs.snapshot();
@@ -242,9 +256,22 @@ async function runUiSmokeTest() {
   createHybridRuntime();
   registerIpc();
   const { window, loadPromise } = createMainWindow({ show: false });
-  await loadPromise;
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  const result = await window.webContents.executeJavaScript(`(() => ({
+  await withTimeout(loadPromise, 10000, "Renderer-Datei laden");
+
+  let readiness = null;
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    readiness = await withTimeout(
+      window.webContents.executeJavaScript("window.__battoRendererReady || null"),
+      2000,
+      "Renderer-Bereitschaft abfragen"
+    );
+    if (readiness) break;
+    await sleep(250);
+  }
+  if (!readiness) throw new Error("Renderer hat innerhalb von 10 Sekunden keinen Bereitschaftsstatus gemeldet.");
+
+  const result = await withTimeout(window.webContents.executeJavaScript(`(() => ({
     api: Boolean(window.batto),
     renderer: window.__battoRendererReady || null,
     pageTitle: document.getElementById("page-title")?.textContent || "",
@@ -254,7 +281,8 @@ async function runUiSmokeTest() {
     hardwareView: Boolean(document.getElementById("view-hardware")),
     hardwareText: document.body.innerText.includes("Hardwarediagnose"),
     monitoringText: document.body.innerText.includes("Encoder- und Hardware-Monitoring")
-  }))()`);
+  }))()`), 3000, "Renderer-Zustand prüfen");
+
   if (!result.api) throw new Error("Preload API fehlt im Renderer.");
   if (!result.renderer?.ok) throw new Error(`Renderer nicht bereit: ${result.renderer?.error || "unbekannt"}`);
   if (!result.obsConnect || !result.settingsView) throw new Error("Kernoberfläche wurde nicht vollständig geladen.");
