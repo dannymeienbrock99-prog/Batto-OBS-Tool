@@ -136,21 +136,11 @@ function createMainWindow({ show = true, diagnostics = null } = {}) {
   });
 
   const window = mainWindow;
-  const domReadyPromise = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("DOM-ready wurde nicht ausgelöst.")), 10000);
-    window.webContents.once("dom-ready", () => {
-      clearTimeout(timer);
-      diagnostics?.push?.("dom-ready");
-      resolve();
-    });
-    window.webContents.once("render-process-gone", (_event, details) => {
-      clearTimeout(timer);
-      reject(new Error(`Renderer-Prozess beendet: ${details.reason || "unbekannt"}`));
-    });
-  });
-
   window.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     diagnostics?.push?.(`did-fail-load ${code} ${description} ${url} main=${isMainFrame}`);
+  });
+  window.webContents.on("render-process-gone", (_event, details) => {
+    diagnostics?.push?.(`render-process-gone ${details.reason || "unbekannt"}`);
   });
   window.webContents.on("console-message", (_event, level, message) => {
     if (level >= 2) diagnostics?.push?.(`console[${level}] ${message}`);
@@ -160,7 +150,7 @@ function createMainWindow({ show = true, diagnostics = null } = {}) {
   loadPromise.then(() => diagnostics?.push?.("did-finish-load")).catch((error) => diagnostics?.push?.(`loadFile: ${String(error?.message || error)}`));
   if (show) window.once("ready-to-show", () => window?.show());
   window.on("closed", () => { if (mainWindow === window) mainWindow = null; });
-  return { window, loadPromise, domReadyPromise };
+  return { window, loadPromise };
 }
 
 function registerIpc() {
@@ -281,8 +271,8 @@ async function runUiSmokeTest() {
   createHybridRuntime();
   registerIpc();
   const diagnostics = [];
-  const { window, domReadyPromise } = createMainWindow({ show: false, diagnostics });
-  await withTimeout(domReadyPromise, 12000, "Renderer DOM laden");
+  const { window, loadPromise } = createMainWindow({ show: false, diagnostics });
+  await withTimeout(loadPromise, 12000, "Renderer laden");
 
   let readiness = null;
   const deadline = Date.now() + 12000;
