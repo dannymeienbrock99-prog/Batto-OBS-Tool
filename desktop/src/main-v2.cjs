@@ -9,3 +9,5 @@ hardwareApi.collectHardware = async function collectEnrichedHardware() {
 };
 
 require("./main.cjs");
+require("./deck-bootstrap.cjs");
+require("./chat-bootstrap.cjs");
