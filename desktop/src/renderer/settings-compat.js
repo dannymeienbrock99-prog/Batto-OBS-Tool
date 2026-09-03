@@ -10,6 +10,13 @@
     ["settings-fps", "cs-fps", "60"]
   ];
 
+  function correctTransportLabels() {
+    const twitch = document.querySelector("#cs-twitch-transport option");
+    if (twitch) twitch.textContent = "Twitch IRC WebSocket";
+    const youtube = document.querySelector("#cs-youtube-transport option");
+    if (youtube) youtube.textContent = "YouTube Data API – liveChatMessages.list";
+  }
+
   function ensureCompatFields() {
     let host = document.getElementById("settings-compat-fields");
     if (!host) {
@@ -38,6 +45,7 @@
         }
       }
     }
+    correctTransportLabels();
   }
 
   ensureCompatFields();
