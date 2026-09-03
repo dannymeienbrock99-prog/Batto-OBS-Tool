@@ -6,8 +6,9 @@
   const pageMeta = {
     overview: ["Übersicht", "OBS, TikTok, Multi-Chat, Touch-Deck und Overlays an einem Ort."],
     obs: ["OBS-Verbindung", "OBS WebSocket 5 lokal verbinden und steuern."],
+    chat: ["Multi-Chat", "TikTok, Twitch, YouTube und CNG in einem gemeinsamen Verlauf."],
+    "deck-pro": ["Touch-Deck Pro", "Profile, Ordner, Tasten und OBS-Aktionen konfigurieren."],
     holo: ["Twitch-Hologramm", "Twitch-Namen und Chatfarben als OBS-Browserquelle."],
-    deck: ["Touch-Deck", "Profile, Ordner, Tasten und OBS-Aktionen konfigurieren."],
     settings: ["Einstellungen", "Plattformen, TikTok LIVE Studio, Secrets, Chat und Overlays konfigurieren."]
   };
 
@@ -27,27 +28,6 @@
 
   function errorMessage(error) {
     return String(error?.message || error || "Unbekannter Fehler");
-  }
-
-  function removeLegacyUi() {
-    for (const name of ["hardware", "internet", "recommendation", "loadtest", "monitoring"]) {
-      document.querySelector(`.nav-button[data-view="${name}"]`)?.remove();
-      byId(`view-${name}`)?.remove();
-    }
-    document.querySelectorAll('[data-jump="recommendation"], [data-jump="monitoring"]').forEach((node) => node.remove());
-    byId("scan-pill")?.remove();
-    byId("overview-scan")?.remove();
-    for (const id of ["summary-cpu", "summary-gpu", "summary-ram", "summary-board", "summary-upload"]) byId(id)?.closest("article")?.remove();
-    byId("live-cpu")?.closest("article")?.remove();
-    const hero = byId("view-overview")?.querySelector(".hero-card");
-    if (hero) {
-      const eyebrow = hero.querySelector(".eyebrow");
-      const title = hero.querySelector("h2");
-      const text = hero.querySelector("p");
-      if (eyebrow) eyebrow.textContent = "BATTO OBS TOOL 2.1.0";
-      if (title) title.textContent = "OBS, TikTok und Multi-Chat zentral steuern";
-      if (text) text.textContent = "Die Anwendung konzentriert sich auf OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck und Overlays.";
-    }
   }
 
   function switchView(name) {
@@ -158,11 +138,11 @@
       catch (error) { showToast(errorMessage(error), "error"); }
     });
     byId("holo-external")?.addEventListener("click", () => void api.openHoloEditor());
+    api.onObsStatusChanged?.((status) => setObsConnected(Boolean(status?.connected), status || {}));
   }
 
   async function initialize() {
     if (!api) throw new Error("Batto Desktop API ist nicht verfügbar.");
-    removeLegacyUi();
     state = await api.getState();
     latestObs = state.obs || {};
     if (byId("version-label")) byId("version-label").textContent = `Version ${state.product.version}`;
