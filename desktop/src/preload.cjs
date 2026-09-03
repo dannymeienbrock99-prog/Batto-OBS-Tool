@@ -2,6 +2,20 @@
 
 const { contextBridge, ipcRenderer } = require("electron");
 
+const SAFE_INVOKE_CHANNELS = new Set([
+  "state:get",
+  "plugins:scan", "plugins:enable", "plugins:settings",
+  "deck:create-profile", "deck:update-profile", "deck:delete-profile", "deck:activate-profile",
+  "deck:create-folder", "deck:update-folder", "deck:delete-folder", "deck:activate-folder",
+  "deck:update-button", "deck:move-button", "deck:clear-button", "deck:execute-button",
+  "deck:export", "deck:import"
+]);
+
+function invoke(channel, payload) {
+  if (!SAFE_INVOKE_CHANNELS.has(channel)) return Promise.reject(new Error(`IPC-Kanal nicht freigegeben: ${channel}`));
+  return ipcRenderer.invoke(channel, payload);
+}
+
 function on(channel, callback) {
   const handler = (_event, payload) => callback(payload);
   ipcRenderer.on(channel, handler);
@@ -9,6 +23,7 @@ function on(channel, callback) {
 }
 
 contextBridge.exposeInMainWorld("batto", Object.freeze({
+  invoke,
   getState: () => ipcRenderer.invoke("app:get-state"),
   saveSettings: (value) => ipcRenderer.invoke("settings:save", value),
   scanHardware: () => ipcRenderer.invoke("hardware:scan"),
@@ -42,7 +57,7 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   chatStatuses: () => ipcRenderer.invoke("chat:statuses"),
   chatConnect: (platform, config) => ipcRenderer.invoke("chat:connect", platform, config),
   chatDisconnect: (platform) => ipcRenderer.invoke("chat:disconnect", platform),
-  chatClear: (platform) => ipcRenderer.invoke("chat:clear", platform),
+  chatClear: (platform) => ipcRenderer.invoke("chat:unified-clear", platform),
   chatToggleWindow: () => ipcRenderer.invoke("chat:toggle-window"),
   chatWindowStatus: () => ipcRenderer.invoke("chat:window-status"),
   setChatAlwaysOnTop: (value) => ipcRenderer.invoke("chat:window-always-on-top", value),
