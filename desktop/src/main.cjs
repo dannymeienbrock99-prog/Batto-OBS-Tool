@@ -113,7 +113,7 @@ async function stateSnapshot() {
   };
 }
 
-function createMainWindow({ show = true } = {}) {
+function createMainWindow({ show = true, diagnostics = null } = {}) {
   mainWindow = new BrowserWindow({
     title: "Batto OBS Tool",
     width: 1500,
@@ -132,10 +132,33 @@ function createMainWindow({ show = true } = {}) {
       webSecurity: true
     }
   });
-  const loadPromise = mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
-  if (show) mainWindow.once("ready-to-show", () => mainWindow?.show());
-  mainWindow.on("closed", () => { mainWindow = null; });
-  return { window: mainWindow, loadPromise };
+
+  const window = mainWindow;
+  const domReadyPromise = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("DOM-ready wurde nicht ausgelöst.")), 10000);
+    window.webContents.once("dom-ready", () => {
+      clearTimeout(timer);
+      diagnostics?.push?.("dom-ready");
+      resolve();
+    });
+    window.webContents.once("render-process-gone", (_event, details) => {
+      clearTimeout(timer);
+      reject(new Error(`Renderer-Prozess beendet: ${details.reason || "unbekannt"}`));
+    });
+  });
+
+  window.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
+    diagnostics?.push?.(`did-fail-load ${code} ${description} ${url} main=${isMainFrame}`);
+  });
+  window.webContents.on("console-message", (_event, level, message) => {
+    if (level >= 2) diagnostics?.push?.(`console[${level}] ${message}`);
+  });
+
+  const loadPromise = window.loadFile(path.join(__dirname, "renderer", "index.html"));
+  loadPromise.then(() => diagnostics?.push?.("did-finish-load")).catch((error) => diagnostics?.push?.(`loadFile: ${String(error?.message || error)}`));
+  if (show) window.once("ready-to-show", () => window?.show());
+  window.on("closed", () => { if (mainWindow === window) mainWindow = null; });
+  return { window, loadPromise, domReadyPromise };
 }
 
 function registerIpc() {
@@ -255,11 +278,12 @@ async function runSelfTest() {
 async function runUiSmokeTest() {
   createHybridRuntime();
   registerIpc();
-  const { window, loadPromise } = createMainWindow({ show: false });
-  await withTimeout(loadPromise, 10000, "Renderer-Datei laden");
+  const diagnostics = [];
+  const { window, domReadyPromise } = createMainWindow({ show: false, diagnostics });
+  await withTimeout(domReadyPromise, 12000, "Renderer DOM laden");
 
   let readiness = null;
-  const deadline = Date.now() + 10000;
+  const deadline = Date.now() + 12000;
   while (Date.now() < deadline) {
     readiness = await withTimeout(
       window.webContents.executeJavaScript("window.__battoRendererReady || null"),
@@ -269,7 +293,7 @@ async function runUiSmokeTest() {
     if (readiness) break;
     await sleep(250);
   }
-  if (!readiness) throw new Error("Renderer hat innerhalb von 10 Sekunden keinen Bereitschaftsstatus gemeldet.");
+  if (!readiness) throw new Error(`Renderer hat keinen Bereitschaftsstatus gemeldet. Diagnose: ${diagnostics.join(" | ")}`);
 
   const result = await withTimeout(window.webContents.executeJavaScript(`(() => ({
     api: Boolean(window.batto),
@@ -284,10 +308,10 @@ async function runUiSmokeTest() {
   }))()`), 3000, "Renderer-Zustand prüfen");
 
   if (!result.api) throw new Error("Preload API fehlt im Renderer.");
-  if (!result.renderer?.ok) throw new Error(`Renderer nicht bereit: ${result.renderer?.error || "unbekannt"}`);
-  if (!result.obsConnect || !result.settingsView) throw new Error("Kernoberfläche wurde nicht vollständig geladen.");
+  if (!result.renderer?.ok) throw new Error(`Renderer nicht bereit: ${result.renderer?.error || "unbekannt"}; Diagnose: ${diagnostics.join(" | ")}`);
+  if (!result.obsConnect || !result.settingsView) throw new Error(`Kernoberfläche wurde nicht vollständig geladen. Diagnose: ${diagnostics.join(" | ")}`);
   if (result.hardwareNav || result.hardwareView || result.hardwareText || result.monitoringText) throw new Error("Hardwarediagnose/Monitoring ist noch im ausgelieferten Renderer vorhanden.");
-  process.stdout.write(`${JSON.stringify({ uiSmoke: true, ...result })}\n`);
+  process.stdout.write(`${JSON.stringify({ uiSmoke: true, diagnostics, ...result })}\n`);
   window.destroy();
 }
 
