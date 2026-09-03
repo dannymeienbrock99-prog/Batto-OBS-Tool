@@ -22,6 +22,7 @@ const { ObsWebSocketClient, normalizeLocalObsHost } = require("./services/obs-we
 const { buildRecommendation } = require("./services/recommendation.cjs");
 const { composeTelemetry } = require("./services/telemetry.cjs");
 const { TwitchHoloServer } = require("./services/twitch-holo-server.cjs");
+const { HybridRuntime } = require("./services/hybrid-runtime.cjs");
 const { MonitoringOverlayServer } = require("../modules/encoder-monitoring-overlay/src/server.cjs");
 
 app.setName("Batto OBS Tool");
@@ -38,6 +39,7 @@ app.on("second-instance", () => {
 let mainWindow = null;
 let settingsStore = null;
 let secretStore = null;
+let hybridRuntime = null;
 let monitoringServer = null;
 let holoServer = null;
 let hardware = null;
@@ -134,6 +136,8 @@ function startTelemetryLoop() {
 async function stateSnapshot() {
   const state = await settingsStore.get();
   const obsSnapshot = await safeObsSnapshot();
+  const platformSecrets = hybridRuntime ? await hybridRuntime.secretStatus() : {};
+  const connections = hybridRuntime ? await hybridRuntime.refresh().catch(() => ({})) : {};
   return {
     product: {
       name: "Batto OBS Tool",
@@ -149,6 +153,8 @@ async function stateSnapshot() {
         passwordConfigured: await secretStore.has("obs-websocket-password")
       }
     },
+    platformSecrets,
+    connections,
     hardware,
     internetResult,
     recommendation,
@@ -192,8 +198,18 @@ function registerIpc() {
     if (payload.obs && Object.prototype.hasOwnProperty.call(payload.obs, "password")) {
       payload.obs = { ...payload.obs, password: "" };
     }
-    return settingsStore.patch(payload);
+    const saved = await settingsStore.patch(payload);
+    await hybridRuntime?.configureFromSettings();
+    return saved;
   });
+
+  ipcMain.handle("hybrid:status", () => hybridRuntime?.refresh() || {});
+  ipcMain.handle("hybrid:refresh", () => hybridRuntime?.refresh() || {});
+  ipcMain.handle("hybrid:health-check", () => hybridRuntime?.healthCheck() || { ready: false, checks: {} });
+  ipcMain.handle("hybrid:secret-status", () => hybridRuntime?.secretStatus() || {});
+  ipcMain.handle("hybrid:set-secret", (_event, name, value) => hybridRuntime.setSecret(name, value));
+  ipcMain.handle("tiktok-live-studio:status", () => hybridRuntime.liveStudio.status());
+  ipcMain.handle("tiktok-live-studio:launch", () => hybridRuntime.liveStudio.launch());
 
   ipcMain.handle("hardware:scan", async () => {
     hardware = await collectHardware();
@@ -337,10 +353,22 @@ app.whenReady().then(async () => {
     return;
   }
 
+  hybridRuntime = new HybridRuntime({
+    settingsStore,
+    secretStore,
+    obs,
+    emit: (channel, payload) => mainWindow?.webContents.send(channel, payload)
+  });
+
   registerIpc();
   await startLocalModules();
   createMainWindow();
   startTelemetryLoop();
+
+  Promise.resolve(hybridRuntime.start()).catch((error) => {
+    moduleErrors.hybridRuntime = errorPayload(error);
+    console.error("Hybrid-Runtime konnte nicht vollständig starten:", error);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
@@ -356,6 +384,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   clearInterval(telemetryTimer);
+  void hybridRuntime?.stop();
   void obs.disconnect();
   void monitoringServer?.stop();
   void holoServer?.stop();
