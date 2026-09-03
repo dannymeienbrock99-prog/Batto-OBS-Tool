@@ -29,7 +29,7 @@
     return String(error?.message || error || "Unbekannter Fehler");
   }
 
-  function removeDiagnosticsUi() {
+  function removeLegacyUi() {
     for (const name of ["hardware", "internet", "recommendation", "loadtest", "monitoring"]) {
       document.querySelector(`.nav-button[data-view="${name}"]`)?.remove();
       byId(`view-${name}`)?.remove();
@@ -46,7 +46,7 @@
       const text = hero.querySelector("p");
       if (eyebrow) eyebrow.textContent = "BATTO OBS TOOL 2.1.0";
       if (title) title.textContent = "OBS, TikTok und Multi-Chat zentral steuern";
-      if (text) text.textContent = "Keine Hardwarediagnose. Die Anwendung konzentriert sich auf OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck und Overlays.";
+      if (text) text.textContent = "Die Anwendung konzentriert sich auf OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck und Overlays.";
     }
   }
 
@@ -162,7 +162,7 @@
 
   async function initialize() {
     if (!api) throw new Error("Batto Desktop API ist nicht verfügbar.");
-    removeDiagnosticsUi();
+    removeLegacyUi();
     state = await api.getState();
     latestObs = state.obs || {};
     if (byId("version-label")) byId("version-label").textContent = `Version ${state.product.version}`;
