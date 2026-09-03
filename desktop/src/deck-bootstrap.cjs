@@ -17,13 +17,8 @@ let obs;
 let liveStudio;
 let registered = false;
 
-function userDataFile(name) {
-  return path.join(app.getPath("userData"), name);
-}
-
-function register(channel, handler) {
-  ipcMain.handle(channel, (_event, payload = {}) => handler(payload || {}));
-}
+function userDataFile(name) { return path.join(app.getPath("userData"), name); }
+function register(channel, handler) { ipcMain.handle(channel, (_event, payload = {}) => handler(payload || {})); }
 
 async function ensureObs() {
   if (obs.connected) return obs;
@@ -37,14 +32,23 @@ function obsAction(action) {
   const type = String(action?.type || "");
   const settings = action?.settings && typeof action.settings === "object" ? action.settings : {};
   if (type === "obs.scene") return ["scene.set", { sceneName: settings.sceneName || settings.scene || settings.name || "" }];
-  if (type === "obs.input.mute") return ["input.mute", { inputName: settings.inputName || settings.sourceName || "", inputMuted: settings.inputMuted !== false }];
   if (type === "obs.stream.start") return ["stream.start", {}];
   if (type === "obs.stream.stop") return ["stream.stop", {}];
   if (type === "obs.record.start") return ["record.start", {}];
   if (type === "obs.record.stop") return ["record.stop", {}];
+  if (type === "obs.record.pause") return ["record.pause", {}];
+  if (type === "obs.record.resume") return ["record.resume", {}];
   if (type === "obs.virtualcam.start") return ["virtualcam.start", {}];
   if (type === "obs.virtualcam.stop") return ["virtualcam.stop", {}];
+  if (type === "obs.replay.start") return ["replay.start", {}];
+  if (type === "obs.replay.stop") return ["replay.stop", {}];
+  if (type === "obs.replay.save") return ["replay.save", {}];
   return null;
+}
+
+async function toggleObsOutput(client, requestType, activeAction, inactiveAction) {
+  const status = await client.request(requestType);
+  return client.execute(status.outputActive ? activeAction : inactiveAction);
 }
 
 async function executeAction(action) {
@@ -59,30 +63,77 @@ async function executeAction(action) {
 
   const type = String(action?.type || "");
   const settings = action?.settings && typeof action.settings === "object" ? action.settings : {};
+
   if (type === "obs.stream.toggle") {
     const client = await ensureObs();
-    const status = await client.request("GetStreamStatus");
-    return client.execute(status.outputActive ? "stream.stop" : "stream.start");
+    return toggleObsOutput(client, "GetStreamStatus", "stream.stop", "stream.start");
   }
   if (type === "obs.record.toggle") {
     const client = await ensureObs();
-    const status = await client.request("GetRecordStatus");
-    return client.execute(status.outputActive ? "record.stop" : "record.start");
+    return toggleObsOutput(client, "GetRecordStatus", "record.stop", "record.start");
   }
   if (type === "obs.virtualcam.toggle") {
     const client = await ensureObs();
-    const status = await client.requestSafe("GetVirtualCamStatus");
-    return client.execute(status.outputActive ? "virtualcam.stop" : "virtualcam.start");
+    return toggleObsOutput(client, "GetVirtualCamStatus", "virtualcam.stop", "virtualcam.start");
+  }
+  if (type === "obs.replay.toggle") {
+    const client = await ensureObs();
+    return toggleObsOutput(client, "GetReplayBufferStatus", "replay.stop", "replay.start");
+  }
+  if (type === "obs.input.mute") {
+    const client = await ensureObs();
+    const inputName = String(settings.inputName || settings.sourceName || "").trim();
+    if (!inputName) throw new Error("OBS-Audioquelle fehlt.");
+    let inputMuted;
+    if (settings.toggle !== false && settings.inputMuted === undefined && settings.muted === undefined) {
+      const current = await client.request("GetInputMute", { inputName });
+      inputMuted = !current.inputMuted;
+    } else {
+      inputMuted = Boolean(settings.inputMuted ?? settings.muted);
+    }
+    return client.execute("input.mute", { inputName, inputMuted });
+  }
+  if (type === "obs.input.volume") {
+    const client = await ensureObs();
+    const inputName = String(settings.inputName || settings.sourceName || "").trim();
+    if (!inputName) throw new Error("OBS-Audioquelle fehlt.");
+    const volume = Number(settings.volumeMul ?? settings.volume ?? 1);
+    if (!Number.isFinite(volume) || volume < 0 || volume > 20) throw new Error("OBS-Lautstärke liegt außerhalb des erlaubten Bereichs.");
+    return client.request("SetInputVolume", { inputName, inputVolumeMul: volume });
+  }
+  if (type === "obs.source.toggle") {
+    const client = await ensureObs();
+    let sceneName = String(settings.sceneName || "").trim();
+    const sourceName = String(settings.sourceName || settings.inputName || "").trim();
+    if (!sourceName) throw new Error("OBS-Quellenname fehlt.");
+    if (!sceneName) {
+      const scene = await client.request("GetCurrentProgramScene");
+      sceneName = scene.currentProgramSceneName;
+    }
+    const item = await client.request("GetSceneItemId", { sceneName, sourceName, searchOffset: 0 });
+    const current = await client.request("GetSceneItemEnabled", { sceneName, sceneItemId: item.sceneItemId });
+    return client.request("SetSceneItemEnabled", { sceneName, sceneItemId: item.sceneItemId, sceneItemEnabled: !current.sceneItemEnabled });
   }
   if (type === "system.url") {
-    const url = String(settings.url || settings.href || "").trim();
+    const url = String(settings.url || settings.href || settings.target || "").trim();
     if (!/^https?:\/\//i.test(url)) throw new Error("Touch-Deck-Webadresse ist ungültig.");
     await shell.openExternal(url);
+    return { opened: true, url };
+  }
+  if (type === "system.launch") {
+    const target = String(settings.path || settings.target || "").trim();
+    if (!target) throw new Error("Programm- oder Dateipfad fehlt.");
+    const error = await shell.openPath(target);
+    if (error) throw new Error(error);
+    return { opened: true, target };
+  }
+  if (type === "youtube.dashboard") {
+    await shell.openExternal("https://studio.youtube.com/");
     return { opened: true };
   }
   if (type === "tiktok.live-studio.launch") return liveStudio.launch();
 
-  throw new Error(`Touch-Deck-Aktion wird noch nicht unterstützt: ${type || "ohne Typ"}`);
+  throw new Error(`Touch-Deck-Aktion wird in 2.1 noch nicht unterstützt: ${type || "ohne Typ"}`);
 }
 
 async function executeButton(payload) {
@@ -129,11 +180,7 @@ async function initialize() {
   register("deck:execute-button", executeButton);
 
   register("deck:export", async () => {
-    const result = await dialog.showSaveDialog({
-      title: "Touch-Deck exportieren",
-      defaultPath: "Batto-OBS-Tool-Deck.json",
-      filters: [{ name: "JSON", extensions: ["json"] }]
-    });
+    const result = await dialog.showSaveDialog({ title: "Touch-Deck exportieren", defaultPath: "Batto-OBS-Tool-Deck.json", filters: [{ name: "JSON", extensions: ["json"] }] });
     if (result.canceled || !result.filePath) return null;
     return deckStore.exportTo(result.filePath);
   });
@@ -147,4 +194,4 @@ async function initialize() {
 app.whenReady().then(initialize).catch((error) => console.error("Touch-Deck-Runtime konnte nicht starten:", error));
 app.on("before-quit", () => { void obs?.disconnect(); });
 
-module.exports = { executeAction, initialize };
+module.exports = { executeAction, initialize, obsAction, toggleObsOutput };
