@@ -130,7 +130,6 @@ function createMainWindow({ show = true, diagnostics = null } = {}) {
       nodeIntegration: false,
       sandbox: false,
       webSecurity: true,
-      offscreen: !show,
       backgroundThrottling: false
     }
   });
