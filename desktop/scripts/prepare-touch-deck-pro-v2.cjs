@@ -12,9 +12,9 @@ function copyRequired(name) {
   const source = path.join(bootstrap, name);
   const target = path.join(renderer, name);
   if (!fs.existsSync(source) || !fs.statSync(source).size) {
-  const actual = fs.existsSync(source) ? `${fs.statSync(source).size} bytes` : "NICHT VORHANDEN";
-  throw new Error(`Touch-Deck-Pro-Quelldatei fehlt oder ist leer: bootstrap-2.0/src/renderer/${name} (Status: ${actual})`);
-}
+    const actual = fs.existsSync(source) ? `${fs.statSync(source).size} bytes` : "NICHT VORHANDEN";
+    throw new Error(`Touch-Deck-Pro-Quelldatei fehlt oder ist leer: bootstrap-2.0/src/renderer/${name} (Status: ${actual})`);
+  }
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(source, target);
 }
@@ -24,13 +24,13 @@ copyRequired("touch-deck-pro-v2.js");
 
 let index = fs.readFileSync(indexFile, "utf8");
 if (!index.includes('href="./touch-deck-pro-v2.css"')) {
-  const marker = '<link rel="stylesheet" href="./integrated.css">';
-  if (!index.includes(marker)) throw new Error("Integrated-CSS-Marker im Hauptfenster fehlt.");
+  const marker = '<link rel="stylesheet" href="./styles.css">';
+  if (!index.includes(marker)) throw new Error("styles.css-Marker im Hauptfenster fehlt.");
   index = index.replace(marker, `${marker}\n    <link rel="stylesheet" href="./touch-deck-pro-v2.css">`);
 }
 if (!index.includes('src="./touch-deck-pro-v2.js"')) {
-  const marker = '<script src="./integrated.js"></script>';
-  if (!index.includes(marker)) throw new Error("Integrated-JavaScript-Marker im Hauptfenster fehlt.");
+  const marker = '<script src="./app.js"></script>';
+  if (!index.includes(marker)) throw new Error("app.js-Marker im Hauptfenster fehlt.");
   index = index.replace(marker, `${marker}\n    <script src="./touch-deck-pro-v2.js"></script>`);
 }
 fs.writeFileSync(indexFile, index, "utf8");
@@ -43,4 +43,4 @@ for (const relative of [
   if (!fs.existsSync(file) || !fs.statSync(file).size) throw new Error(`Touch-Deck-Pro-Builddatei fehlt: ${relative}`);
 }
 
-console.log("Touch-Deck Pro V2 mit Plugin-Seitenleiste eingebunden.");
+console.log("Touch-Deck Pro V2 in die 2.1-Produktionsquelle eingebunden.");
