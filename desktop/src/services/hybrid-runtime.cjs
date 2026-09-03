@@ -54,7 +54,23 @@ class HybridRuntime {
   }
 
   async start() {
-    await this.configureFromSettings();
+    const state = await this.configureFromSettings();
+    const live = state.platforms?.tiktok?.liveStudio || {};
+    if (state.platforms?.tiktok?.enabled && live.enabled !== false && live.launchWithApp) {
+      const status = await this.liveStudio.status();
+      if (status.installed && !status.running) {
+        await this.liveStudio.launch().catch((error) => {
+          this.emit("connections:status", {
+            name: "tiktokLiveStudio",
+            state: "error",
+            enabled: true,
+            lastError: { message: String(error?.message || error), name: error?.name || "Error", code: error?.code || "" },
+            updatedAt: Date.now(),
+            details: { role: "tiktok-host" }
+          });
+        });
+      }
+    }
     this.started = true;
     return this.connections.startEnabled();
   }
