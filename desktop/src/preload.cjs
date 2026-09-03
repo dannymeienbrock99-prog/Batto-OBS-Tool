@@ -61,6 +61,8 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   getTtsConfig: () => ipcRenderer.invoke("tts:get-config"),
   saveTtsConfig: (value) => ipcRenderer.invoke("tts:save-config", value),
 
+  onStateChanged: (callback) => on("state:update", callback),
+  onObsStatusChanged: (callback) => on("obs:status-changed", callback),
   onConnectionStatus: (callback) => on("connections:status", callback),
   onChatMessages: (callback) => on("chat:messages", callback),
   onChatStatus: (callback) => on("chat:status", callback),
