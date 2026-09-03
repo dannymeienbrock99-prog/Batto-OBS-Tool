@@ -25,6 +25,7 @@ const required = [
   "src/renderer/app.js",
   "src/renderer/commercial-settings.js",
   "src/renderer/commercial-settings.css",
+  "src/renderer/settings-compat.js",
   "src/renderer/multi-chat.js",
   "src/renderer/multi-chat.css",
   "src/renderer/touch-deck-pro-v2.js",
@@ -43,7 +44,7 @@ for (const relative of syntaxFiles) {
 }
 
 const index = fs.readFileSync(path.join(root, "src", "renderer", "index.html"), "utf8");
-for (const marker of ["touch-deck-pro-v2.css", "touch-deck-pro-v2.js", "commercial-settings.css", "commercial-settings.js"]) {
+for (const marker of ["touch-deck-pro-v2.css", "touch-deck-pro-v2.js", "commercial-settings.css", "commercial-settings.js", "settings-compat.js"]) {
   if (!index.includes(marker)) throw new Error(`Renderer-Einbindung fehlt: ${marker}`);
 }
 
@@ -51,6 +52,8 @@ const preload = fs.readFileSync(path.join(root, "src", "preload.cjs"), "utf8");
 if (!preload.includes("SAFE_INVOKE_CHANNELS") || !preload.includes('"deck:execute-button"')) {
   throw new Error("Touch-Deck IPC-Allowlist fehlt im Preload.");
 }
+if (!preload.includes('ipcRenderer.invoke("chat:unified-clear"')) throw new Error("Multi-Chat-Clear ist nicht auf den registrierten IPC-Kanal verdrahtet.");
+
 const entry = fs.readFileSync(path.join(root, "src", "main-v2.cjs"), "utf8");
 for (const marker of ["deck-bootstrap.cjs", "chat-bootstrap.cjs", "hardware-enrichment-v2.cjs"]) {
   if (!entry.includes(marker)) throw new Error(`2.1-Einstieg lädt Runtime-Modul nicht: ${marker}`);
