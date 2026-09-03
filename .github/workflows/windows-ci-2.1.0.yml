@@ -66,7 +66,14 @@ jobs:
           $exe = Resolve-Path "dist/win-unpacked/Batto OBS Tool.exe"
           $stdout = Join-Path $env:RUNNER_TEMP "batto-ui-smoke.out.txt"
           $stderr = Join-Path $env:RUNNER_TEMP "batto-ui-smoke.err.txt"
-          $process = Start-Process -FilePath $exe -ArgumentList "--ui-smoke-test" -PassThru -Wait -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          $process = Start-Process -FilePath $exe -ArgumentList "--ui-smoke-test" -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          $finished = $process.WaitForExit(30000)
+          if (-not $finished) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (Test-Path $stdout) { Get-Content $stdout }
+            if (Test-Path $stderr) { Get-Content $stderr }
+            throw "Packaged UI smoke test timed out after 30 seconds"
+          }
           if (Test-Path $stdout) { Get-Content $stdout }
           if (Test-Path $stderr) { Get-Content $stderr }
           if ($process.ExitCode -ne 0) { throw "Packaged UI smoke test failed with exit code $($process.ExitCode)" }
