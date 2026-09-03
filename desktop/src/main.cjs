@@ -99,7 +99,7 @@ async function stateSnapshot() {
   };
 }
 
-function createMainWindow() {
+function createMainWindow({ show = true } = {}) {
   mainWindow = new BrowserWindow({
     title: "Batto OBS Tool",
     width: 1500,
@@ -118,9 +118,10 @@ function createMainWindow() {
       webSecurity: true
     }
   });
-  mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
+  const loadPromise = mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  if (show) mainWindow.once("ready-to-show", () => mainWindow?.show());
   mainWindow.on("closed", () => { mainWindow = null; });
+  return { window: mainWindow, loadPromise };
 }
 
 function registerIpc() {
@@ -128,9 +129,7 @@ function registerIpc() {
 
   ipcMain.handle("settings:save", async (_event, value) => {
     const payload = value && typeof value === "object" ? value : {};
-    if (payload.obs && Object.prototype.hasOwnProperty.call(payload.obs, "password")) {
-      payload.obs = { ...payload.obs, password: "" };
-    }
+    if (payload.obs && Object.prototype.hasOwnProperty.call(payload.obs, "password")) payload.obs = { ...payload.obs, password: "" };
     const saved = await settingsStore.patch(payload);
     await hybridRuntime?.configureFromSettings();
     return saved;
@@ -212,6 +211,15 @@ function registerIpc() {
   });
 }
 
+function createHybridRuntime() {
+  hybridRuntime = new HybridRuntime({
+    settingsStore,
+    secretStore,
+    obs,
+    emit: (channel, payload) => mainWindow?.webContents.send(channel, payload)
+  });
+}
+
 async function runSelfTest() {
   const result = {
     product: "Batto OBS Tool",
@@ -230,6 +238,31 @@ async function runSelfTest() {
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
+async function runUiSmokeTest() {
+  createHybridRuntime();
+  registerIpc();
+  const { window, loadPromise } = createMainWindow({ show: false });
+  await loadPromise;
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const result = await window.webContents.executeJavaScript(`(() => ({
+    api: Boolean(window.batto),
+    renderer: window.__battoRendererReady || null,
+    pageTitle: document.getElementById("page-title")?.textContent || "",
+    obsConnect: Boolean(document.getElementById("obs-connect")),
+    settingsView: Boolean(document.getElementById("view-settings")),
+    hardwareNav: Boolean(document.querySelector('[data-view="hardware"]')),
+    hardwareView: Boolean(document.getElementById("view-hardware")),
+    hardwareText: document.body.innerText.includes("Hardwarediagnose"),
+    monitoringText: document.body.innerText.includes("Encoder- und Hardware-Monitoring")
+  }))()`);
+  if (!result.api) throw new Error("Preload API fehlt im Renderer.");
+  if (!result.renderer?.ok) throw new Error(`Renderer nicht bereit: ${result.renderer?.error || "unbekannt"}`);
+  if (!result.obsConnect || !result.settingsView) throw new Error("Kernoberfläche wurde nicht vollständig geladen.");
+  if (result.hardwareNav || result.hardwareView || result.hardwareText || result.monitoringText) throw new Error("Hardwarediagnose/Monitoring ist noch im ausgelieferten Renderer vorhanden.");
+  process.stdout.write(`${JSON.stringify({ uiSmoke: true, ...result })}\n`);
+  window.destroy();
+}
+
 app.whenReady().then(async () => {
   settingsStore = new SettingsStore(userDataFile("settings.json"));
   secretStore = new SecretStore(userDataFile("secrets.json"), safeStorage);
@@ -246,13 +279,18 @@ app.whenReady().then(async () => {
     return;
   }
 
-  hybridRuntime = new HybridRuntime({
-    settingsStore,
-    secretStore,
-    obs,
-    emit: (channel, payload) => mainWindow?.webContents.send(channel, payload)
-  });
+  if (process.argv.includes("--ui-smoke-test")) {
+    try {
+      await runUiSmokeTest();
+      app.exit(0);
+    } catch (error) {
+      process.stderr.write(`${String(error?.stack || error)}\n`);
+      app.exit(1);
+    }
+    return;
+  }
 
+  createHybridRuntime();
   registerIpc();
   await startLocalModules();
   createMainWindow();
