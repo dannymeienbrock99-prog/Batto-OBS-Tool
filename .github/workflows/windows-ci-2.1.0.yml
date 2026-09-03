@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Prepare production source
+        run: npm run prepare:integrated
+
       - name: Verify production source
         run: node scripts/verify-source-tree.cjs
 
@@ -35,6 +38,15 @@ jobs:
 
       - name: Build unpacked Windows app
         run: npm run pack:win
+
+      - name: Verify Windows executable
+        shell: pwsh
+        run: |
+          $exe = "dist/win-unpacked/Batto OBS Tool.exe"
+          if (-not (Test-Path $exe)) { throw "Windows executable missing: $exe" }
+          $item = Get-Item $exe
+          if ($item.Length -lt 1MB) { throw "Windows executable is unexpectedly small: $($item.Length) bytes" }
+          Write-Host "Windows executable verified: $($item.FullName) ($($item.Length) bytes)"
 
       - name: Upload unpacked app
         uses: actions/upload-artifact@v4
