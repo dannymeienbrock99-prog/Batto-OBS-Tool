@@ -9,6 +9,7 @@ let html = fs.readFileSync(htmlFile, "utf8");
 
 const cssTag = '<link rel="stylesheet" href="./commercial-settings.css">';
 const jsTag = '<script src="./commercial-settings.js"></script>';
+const compatTag = '<script src="./settings-compat.js"></script>';
 
 if (!html.includes(cssTag)) {
   const marker = '<link rel="stylesheet" href="./styles.css">';
@@ -19,7 +20,9 @@ if (!html.includes(cssTag)) {
 if (!html.includes(jsTag)) {
   const marker = "</body>";
   if (!html.includes(marker)) throw new Error("body closing tag missing in renderer/index.html");
-  html = html.replace(marker, `  ${jsTag}\n  ${marker}`);
+  html = html.replace(marker, `  ${jsTag}\n  ${compatTag}\n  ${marker}`);
+} else if (!html.includes(compatTag)) {
+  html = html.replace(jsTag, `${jsTag}\n  ${compatTag}`);
 }
 
 html = html
@@ -27,4 +30,4 @@ html = html
   .replaceAll("Version 1.9.1", "Version 2.1.0");
 
 fs.writeFileSync(htmlFile, html, "utf8");
-console.log("Commercial settings center integrated.");
+console.log("Commercial settings center + compatibility layer integrated.");
