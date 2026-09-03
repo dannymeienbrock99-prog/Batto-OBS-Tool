@@ -48,6 +48,18 @@ jobs:
           if ($item.Length -lt 1MB) { throw "Windows executable is unexpectedly small: $($item.Length) bytes" }
           Write-Host "Windows executable verified: $($item.FullName) ($($item.Length) bytes)"
 
+      - name: Run packaged self-test
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "dist/win-unpacked/Batto OBS Tool.exe"
+          $stdout = Join-Path $env:RUNNER_TEMP "batto-self-test.out.txt"
+          $stderr = Join-Path $env:RUNNER_TEMP "batto-self-test.err.txt"
+          $process = Start-Process -FilePath $exe -ArgumentList "--self-test" -PassThru -Wait -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          if (Test-Path $stdout) { Get-Content $stdout }
+          if (Test-Path $stderr) { Get-Content $stderr }
+          if ($process.ExitCode -ne 0) { throw "Packaged self-test failed with exit code $($process.ExitCode)" }
+          Write-Host "Packaged self-test passed."
+
       - name: Upload unpacked app
         uses: actions/upload-artifact@v4
         with:
