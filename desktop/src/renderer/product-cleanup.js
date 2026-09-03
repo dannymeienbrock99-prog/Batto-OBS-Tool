@@ -22,9 +22,17 @@
     for (const name of ["hardware", "internet", "recommendation", "loadtest", "monitoring"]) {
       document.getElementById(`view-${name}`)?.remove();
     }
+
+    const hero = document.querySelector("#view-overview .hero-card");
+    if (hero) {
+      const text = hero.querySelector("p");
+      if (text && /Hardwarediagnose|Windows-Diagnose/i.test(text.textContent || "")) {
+        text.textContent = "Die Anwendung konzentriert sich auf OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck und Overlays.";
+      }
+    }
   }
 
   clean();
   const observer = new MutationObserver(clean);
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 })();
