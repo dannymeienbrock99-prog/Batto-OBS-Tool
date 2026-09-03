@@ -3,27 +3,12 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function asObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-function asString(value, fallback = "", max = 500) {
-  const result = String(value ?? fallback).trim();
-  return result.slice(0, max);
-}
-
-function asBool(value, fallback = false) {
-  return typeof value === "boolean" ? value : fallback;
-}
-
-function asPort(value, fallback) {
-  const port = Math.round(Number(value) || fallback);
-  return Math.max(1, Math.min(65535, port));
-}
+function clone(value) { return JSON.parse(JSON.stringify(value)); }
+function asObject(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
+function asString(value, fallback = "", max = 500) { return String(value ?? fallback).trim().slice(0, max); }
+function asBool(value, fallback = false) { return typeof value === "boolean" ? value : fallback; }
+function asPort(value, fallback) { return Math.max(1, Math.min(65535, Math.round(Number(value) || fallback))); }
+function asInt(value, fallback, min, max) { return Math.max(min, Math.min(max, Math.round(Number(value) || fallback))); }
 
 function normalizeLocalObsHost(value) {
   let host = String(value || "").trim();
@@ -35,13 +20,14 @@ function normalizeLocalObsHost(value) {
 }
 
 const DEFAULT_STATE = Object.freeze({
-  version: 3,
+  version: 4,
   product: {
     language: "de-DE",
     startMinimized: false,
     minimizeToTray: false,
     checkForUpdates: true,
-    diagnosticsEnabled: true
+    diagnosticsEnabled: true,
+    launchHealthCheck: true
   },
   obs: {
     host: "127.0.0.1",
@@ -56,24 +42,46 @@ const DEFAULT_STATE = Object.freeze({
   platforms: {
     tiktok: {
       enabled: false,
-      provider: "eulerstream",
       username: "",
       autoConnect: false,
-      gifts: true,
-      chat: true,
-      follows: true,
-      shares: true,
-      likes: true,
-      moderation: true,
-      liveCenterUrl: "https://livecenter.tiktok.com/"
+      preferLiveStudio: true,
+      fallbackToApi: true,
+      liveCenterUrl: "https://livecenter.tiktok.com/",
+      liveStudio: {
+        enabled: true,
+        executablePath: "",
+        detectAutomatically: true,
+        launchWithApp: false,
+        preferForTikTokFeatures: true
+      },
+      api: {
+        enabled: true,
+        provider: "eulerstream",
+        reconnect: true,
+        reconnectMinMs: 5000,
+        reconnectMaxMs: 60000,
+        rateLimitGuard: true,
+        gifts: true,
+        chat: true,
+        follows: true,
+        shares: true,
+        likes: true,
+        joins: true,
+        subscriptions: true,
+        moderation: true
+      }
     },
     twitch: {
       enabled: false,
       channel: "",
       username: "",
       autoConnect: false,
+      transport: "eventsub",
       chat: true,
       moderation: true,
+      subs: true,
+      bits: true,
+      raids: true,
       holoOverlay: true
     },
     youtube: {
@@ -81,6 +89,7 @@ const DEFAULT_STATE = Object.freeze({
       channelId: "",
       liveChatId: "",
       autoConnect: false,
+      transport: "streamList",
       chat: true
     },
     cng: {
@@ -136,13 +145,7 @@ const DEFAULT_STATE = Object.freeze({
   deck: {
     activeProfile: "Standard",
     profiles: {
-      Standard: {
-        rows: 3,
-        columns: 5,
-        pages: {
-          root: Array.from({ length: 15 }, () => null)
-        }
-      }
+      Standard: { rows: 3, columns: 5, pages: { root: Array.from({ length: 15 }, () => null) } }
     }
   }
 });
@@ -154,44 +157,84 @@ function normalizePlatformState(source, defaults) {
     if (!(key in input)) continue;
     if (typeof defaults[key] === "boolean") output[key] = asBool(input[key], defaults[key]);
     else if (typeof defaults[key] === "number") output[key] = Number.isFinite(Number(input[key])) ? Number(input[key]) : defaults[key];
-    else output[key] = asString(input[key], defaults[key], 1000);
+    else if (typeof defaults[key] === "string") output[key] = asString(input[key], defaults[key], 1000);
   }
   return output;
+}
+
+function normalizeTikTok(source) {
+  const input = asObject(source);
+  const oldProvider = asString(input.provider, "", 50);
+  const oldFlags = {
+    gifts: input.gifts,
+    chat: input.chat,
+    follows: input.follows,
+    shares: input.shares,
+    likes: input.likes,
+    moderation: input.moderation
+  };
+  const liveStudio = asObject(input.liveStudio);
+  const api = asObject(input.api);
+  return {
+    enabled: asBool(input.enabled, false),
+    username: asString(input.username, "", 120),
+    autoConnect: asBool(input.autoConnect, false),
+    preferLiveStudio: asBool(input.preferLiveStudio, true),
+    fallbackToApi: asBool(input.fallbackToApi, true),
+    liveCenterUrl: asString(input.liveCenterUrl, DEFAULT_STATE.platforms.tiktok.liveCenterUrl, 1000),
+    liveStudio: {
+      enabled: asBool(liveStudio.enabled, true),
+      executablePath: asString(liveStudio.executablePath, "", 1000),
+      detectAutomatically: asBool(liveStudio.detectAutomatically, true),
+      launchWithApp: asBool(liveStudio.launchWithApp, false),
+      preferForTikTokFeatures: asBool(liveStudio.preferForTikTokFeatures, true)
+    },
+    api: {
+      enabled: asBool(api.enabled, true),
+      provider: ["eulerstream", "connector"].includes(api.provider || oldProvider) ? (api.provider || oldProvider) : "eulerstream",
+      reconnect: asBool(api.reconnect, true),
+      reconnectMinMs: asInt(api.reconnectMinMs, 5000, 1000, 60000),
+      reconnectMaxMs: asInt(api.reconnectMaxMs, 60000, 5000, 300000),
+      rateLimitGuard: asBool(api.rateLimitGuard, true),
+      gifts: asBool(api.gifts ?? oldFlags.gifts, true),
+      chat: asBool(api.chat ?? oldFlags.chat, true),
+      follows: asBool(api.follows ?? oldFlags.follows, true),
+      shares: asBool(api.shares ?? oldFlags.shares, true),
+      likes: asBool(api.likes ?? oldFlags.likes, true),
+      joins: asBool(api.joins, true),
+      subscriptions: asBool(api.subscriptions, true),
+      moderation: asBool(api.moderation ?? oldFlags.moderation, true)
+    }
+  };
 }
 
 function normalizeState(value = {}) {
   const source = asObject(value);
   const profiles = asObject(source.deck?.profiles);
   const normalizedProfiles = {};
-
   for (const [rawName, rawProfile] of Object.entries(profiles).slice(0, 100)) {
     const name = asString(rawName, "Standard", 80) || "Standard";
-    const rows = Math.max(1, Math.min(10, Math.round(Number(rawProfile?.rows) || 3)));
-    const columns = Math.max(1, Math.min(10, Math.round(Number(rawProfile?.columns) || 5)));
+    const rows = asInt(rawProfile?.rows, 3, 1, 10);
+    const columns = asInt(rawProfile?.columns, 5, 1, 10);
     const pages = asObject(rawProfile?.pages);
     const safePages = Object.keys(pages).length ? clone(pages) : { root: [] };
     safePages.root ||= [];
     normalizedProfiles[name] = { rows, columns, pages: safePages };
   }
-
   if (!Object.keys(normalizedProfiles).length) normalizedProfiles.Standard = clone(DEFAULT_STATE.deck.profiles.Standard);
-  const activeProfile = normalizedProfiles[source.deck?.activeProfile]
-    ? source.deck.activeProfile
-    : Object.keys(normalizedProfiles)[0];
-
-  const selectedPlatform = ["tiktok", "twitch", "youtube", "cng", "custom", "recording"]
-    .includes(source.preferences?.platform)
-    ? source.preferences.platform
-    : "twitch";
+  const activeProfile = normalizedProfiles[source.deck?.activeProfile] ? source.deck.activeProfile : Object.keys(normalizedProfiles)[0];
+  const selectedPlatform = ["tiktok", "twitch", "youtube", "cng", "custom", "recording"].includes(source.preferences?.platform)
+    ? source.preferences.platform : "twitch";
 
   return {
-    version: 3,
+    version: 4,
     product: {
       language: asString(source.product?.language, "de-DE", 20) || "de-DE",
       startMinimized: asBool(source.product?.startMinimized, false),
       minimizeToTray: asBool(source.product?.minimizeToTray, false),
       checkForUpdates: asBool(source.product?.checkForUpdates, true),
-      diagnosticsEnabled: asBool(source.product?.diagnosticsEnabled, true)
+      diagnosticsEnabled: asBool(source.product?.diagnosticsEnabled, true),
+      launchHealthCheck: asBool(source.product?.launchHealthCheck, true)
     },
     obs: {
       host: normalizeLocalObsHost(source.obs?.host),
@@ -199,12 +242,12 @@ function normalizeState(value = {}) {
       password: "",
       autoConnect: asBool(source.obs?.autoConnect, true),
       reconnect: asBool(source.obs?.reconnect, true),
-      reconnectDelayMs: Math.max(1000, Math.min(30000, Math.round(Number(source.obs?.reconnectDelayMs) || 3000))),
+      reconnectDelayMs: asInt(source.obs?.reconnectDelayMs, 3000, 1000, 30000),
       sceneSync: asBool(source.obs?.sceneSync, true),
       browserOverlayAutoRefresh: asBool(source.obs?.browserOverlayAutoRefresh, true)
     },
     platforms: {
-      tiktok: normalizePlatformState(source.platforms?.tiktok, DEFAULT_STATE.platforms.tiktok),
+      tiktok: normalizeTikTok(source.platforms?.tiktok),
       twitch: normalizePlatformState(source.platforms?.twitch, DEFAULT_STATE.platforms.twitch),
       youtube: normalizePlatformState(source.platforms?.youtube, DEFAULT_STATE.platforms.youtube),
       cng: normalizePlatformState(source.platforms?.cng, DEFAULT_STATE.platforms.cng),
@@ -219,7 +262,7 @@ function normalizeState(value = {}) {
       filterBlockedWords: asBool(source.chat?.filterBlockedWords, false),
       ttsEnabled: asBool(source.chat?.ttsEnabled, false),
       ttsVolume: Math.max(0, Math.min(1, Number(source.chat?.ttsVolume ?? 1))),
-      maxMessages: Math.max(50, Math.min(5000, Math.round(Number(source.chat?.maxMessages) || 500)))
+      maxMessages: asInt(source.chat?.maxMessages, 500, 50, 5000)
     },
     moderation: {
       rightClickActions: asBool(source.moderation?.rightClickActions, true),
@@ -242,10 +285,7 @@ function normalizeState(value = {}) {
       monitoringEnabled: asBool(source.preferences?.monitoringEnabled, true),
       twitchHoloEnabled: asBool(source.preferences?.twitchHoloEnabled, true)
     },
-    deck: {
-      activeProfile,
-      profiles: normalizedProfiles
-    }
+    deck: { activeProfile, profiles: normalizedProfiles }
   };
 }
 
@@ -256,12 +296,10 @@ class SettingsStore {
     this.loaded = false;
     this.queue = Promise.resolve();
   }
-
   async load() {
     if (this.loaded) return clone(this.state);
-    try {
-      this.state = normalizeState(JSON.parse(await fs.readFile(this.filename, "utf8")));
-    } catch (error) {
+    try { this.state = normalizeState(JSON.parse(await fs.readFile(this.filename, "utf8"))); }
+    catch (error) {
       if (error.code !== "ENOENT") {
         const backup = `${this.filename}.invalid-${Date.now()}.json`;
         await fs.mkdir(path.dirname(this.filename), { recursive: true });
@@ -273,19 +311,13 @@ class SettingsStore {
     await this.persist().catch(() => {});
     return clone(this.state);
   }
-
   async persist() {
     await fs.mkdir(path.dirname(this.filename), { recursive: true });
     const temporary = `${this.filename}.${process.pid}.${Date.now()}.tmp`;
     await fs.writeFile(temporary, JSON.stringify(this.state, null, 2), { encoding: "utf8", mode: 0o600 });
     await fs.rename(temporary, this.filename);
   }
-
-  async get() {
-    await this.load();
-    return clone(this.state);
-  }
-
+  async get() { await this.load(); return clone(this.state); }
   async set(value) {
     await this.load();
     this.state = normalizeState(value);
@@ -293,7 +325,6 @@ class SettingsStore {
     await this.queue;
     return clone(this.state);
   }
-
   async patch(patch = {}) {
     const current = await this.get();
     return this.set({
@@ -304,7 +335,12 @@ class SettingsStore {
       platforms: {
         ...current.platforms,
         ...(patch.platforms || {}),
-        tiktok: { ...current.platforms.tiktok, ...(patch.platforms?.tiktok || {}) },
+        tiktok: {
+          ...current.platforms.tiktok,
+          ...(patch.platforms?.tiktok || {}),
+          liveStudio: { ...current.platforms.tiktok.liveStudio, ...(patch.platforms?.tiktok?.liveStudio || {}) },
+          api: { ...current.platforms.tiktok.api, ...(patch.platforms?.tiktok?.api || {}) }
+        },
         twitch: { ...current.platforms.twitch, ...(patch.platforms?.twitch || {}) },
         youtube: { ...current.platforms.youtube, ...(patch.platforms?.youtube || {}) },
         cng: { ...current.platforms.cng, ...(patch.platforms?.cng || {}) },
