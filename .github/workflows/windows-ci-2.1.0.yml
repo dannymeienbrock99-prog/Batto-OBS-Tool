@@ -1,0 +1,47 @@
+name: Batto OBS Tool 2.1.0 Windows CI
+
+on:
+  push:
+    branches:
+      - main
+      - product/2.1.0-commercial-settings
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-and-pack:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify production source
+        run: node scripts/verify-source-tree.cjs
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build unpacked Windows app
+        run: npm run pack:win
+
+      - name: Upload unpacked app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Batto-OBS-Tool-2.1.0-win-unpacked
+          path: desktop/dist/win-unpacked/**
+          if-no-files-found: error
+          retention-days: 7
