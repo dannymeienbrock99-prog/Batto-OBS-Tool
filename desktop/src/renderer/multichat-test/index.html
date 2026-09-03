@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BATTO MULTI-CHAT – Strukturtest</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <strong>BATTO MULTI-CHAT</strong>
+        <span>Twitch · CNG · TikTok · YouTube</span>
+      </div>
+      <div class="status"><i></i> Testmodus · keine Installation</div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar">
+        <button class="nav active" data-page="chat">Live-Chat</button>
+        <button class="nav" data-page="activity">Live-Aktivitäten</button>
+        <button class="nav" data-page="gifts">Geschenke</button>
+        <button class="nav" data-page="guests">Multi-Gast</button>
+        <div class="divider"></div>
+        <div class="section-label">Einstellungen</div>
+        <button class="nav" data-page="accounts">Konten & Verbindungen</button>
+        <button class="nav" data-page="moderation">Moderation</button>
+        <button class="nav" data-page="filters">Chatfilter</button>
+        <button class="nav" data-page="tts">TTS</button>
+        <button class="nav" data-page="obs">OBS & Overlay</button>
+        <button class="nav" data-page="privacy">Datenschutz & Sicherheit</button>
+        <button class="nav" data-page="diagnostics">Diagnose</button>
+      </aside>
+
+      <main class="content">
+        <section class="page active" id="page-chat">
+          <div class="page-head"><div><h1>BATTO MULTI-CHAT</h1><p>Bestehendes Chatfenster – nur gepflegter strukturiert.</p></div><button class="primary">Chat öffnen</button></div>
+          <div class="platform-row">
+            <span class="pill twitch">Twitch</span><span class="pill cng">CNG</span><span class="pill tiktok">TikTok</span><span class="pill youtube">YouTube</span>
+          </div>
+          <div class="chat-card">
+            <div class="message"><div class="avatar">CB</div><div><div class="meta"><b>@Crazy_Batto</b><span class="badge">Moderator</span><time>03:58</time></div><p>So bleibt die Chatdarstellung klar und kompakt.</p></div></div>
+            <div class="message"><div class="avatar">TT</div><div><div class="meta"><b>@TikTokUser</b><span class="badge sub">Subscriber</span><time>03:59</time></div><p>Rechtsklick öffnet später die Moderationsaktionen.</p></div></div>
+          </div>
+        </section>
+
+        <section class="page" id="page-accounts">
+          <div class="page-head"><div><h1>Konten & Verbindungen</h1><p>Anmeldungen wie bei einer normalen Desktop-App – keine Tokens im Hauptfenster.</p></div></div>
+          <div class="cards">
+            <article class="account-card"><div class="account-title"><b>TikTok</b><span class="dot off"></span></div><p>OAuth / QR-Code Anmeldung</p><button class="primary">TikTok verbinden</button></article>
+            <article class="account-card"><div class="account-title"><b>Twitch</b><span class="dot off"></span></div><p>OAuth Anmeldung</p><button>Twitch verbinden</button></article>
+            <article class="account-card"><div class="account-title"><b>YouTube</b><span class="dot off"></span></div><p>Google / YouTube Anmeldung</p><button>YouTube verbinden</button></article>
+            <article class="account-card"><div class="account-title"><b>CNG</b><span class="dot off"></span></div><p>Eigener Connector</p><button>CNG einrichten</button></article>
+          </div>
+        </section>
+
+        <section class="page" id="page-moderation">
+          <div class="page-head"><div><h1>Moderation</h1><p>Zentrale Verwaltung statt verstreuter Einzeloptionen.</p></div></div>
+          <div class="settings-grid">
+            <div class="setting"><b>Moderatoren</b><span>Rollen verwalten</span><button>Öffnen</button></div>
+            <div class="setting"><b>Gesperrte Nutzer</b><span>Ban-Liste</span><button>Öffnen</button></div>
+            <div class="setting"><b>Stummgeschaltete Nutzer</b><span>Mute-Liste</span><button>Öffnen</button></div>
+            <div class="setting"><b>Kommentare</b><span>Live-Kommentare global steuern</span><label><input type="checkbox" checked> Aktiv</label></div>
+          </div>
+        </section>
+
+        <section class="page" id="page-filters"><div class="page-head"><div><h1>Chatfilter</h1><p>Sensible Wörter, Plattformfilter und Rollenregeln.</p></div></div><div class="panel"><label>Sensible Wörter</label><textarea placeholder="Ein Wort pro Zeile"></textarea><button class="primary">Speichern</button></div></section>
+        <section class="page" id="page-activity"><div class="page-head"><div><h1>Live-Aktivitäten</h1><p>Gifts · Likes · Follows · Shares · Subs · Joins · Viewer · PK/Battle</p></div></div><div class="empty">Event-Feed ist im Strukturtest vorbereitet.</div></section>
+        <section class="page" id="page-gifts"><div class="page-head"><div><h1>Geschenke</h1><p>Gift-ID, Name, Bild, Diamanten und Combo/Streak.</p></div></div><div class="empty">Euler Gift-Katalog wird später hier angebunden.</div></section>
+        <section class="page" id="page-guests"><div class="page-head"><div><h1>Multi-Gast</h1><p>Eigener sauberer Bereich für Gast-Slots und OBS-Zuordnung.</p></div></div><div class="empty">Gast-Steuerung vorbereitet.</div></section>
+        <section class="page" id="page-tts"><div class="page-head"><div><h1>TTS</h1><p>Stimme, Lautstärke, Geschwindigkeit, Plattformen und Filter.</p></div></div><div class="empty">TTS-Einstellungen vorbereitet.</div></section>
+        <section class="page" id="page-obs"><div class="page-head"><div><h1>OBS & Overlay</h1><p>OBS-Verbindung, Chat-Overlay, Alerts und Hologramm.</p></div></div><div class="empty">OBS-Einstellungen vorbereitet.</div></section>
+        <section class="page" id="page-privacy"><div class="page-head"><div><h1>Datenschutz & Sicherheit</h1><p>Konten, Tokens, lokale Daten und Zurücksetzen.</p></div></div><div class="empty">Secrets bleiben später ausschließlich im Electron-Main-Prozess.</div></section>
+        <section class="page" id="page-diagnostics"><div class="page-head"><div><h1>Diagnose</h1><p>Technische Details gehören hierhin – nicht ins Chatfenster.</p></div></div><pre>TikTok Connector: nicht verbunden\nOAuth: nicht eingerichtet\nWebSocket: offline\nRoom ID: -\nEvents/min: 0</pre></section>
+      </main>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
