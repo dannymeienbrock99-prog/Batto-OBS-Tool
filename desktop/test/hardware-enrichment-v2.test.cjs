@@ -5,7 +5,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-const source = path.join(__dirname, "..", "src", "services", "hardware-enrichment-v2.cjs");
+const root = path.join(__dirname, "..");
+const source = path.join(root, "src", "services", "hardware-enrichment-v2.cjs");
 
 function load() {
   if (!fs.existsSync(source)) throw new Error("Hardware-Enrichment wurde nicht in die Produktionsquelle kopiert");
@@ -24,7 +25,10 @@ test("nvidia-smi parser reads full RTX VRAM instead of a 32-bit WMI value", () =
   assert.equal(rows[0].integrated, false);
 });
 
-test("hardware integration is called by the production main process", () => {
-  const main = fs.readFileSync(path.join(__dirname, "..", "src", "main.cjs"), "utf8");
-  assert.match(main, /enrichHardware\(await hardwareApi\.collectHardware\(\)\)/);
+test("production entrypoint wraps hardware collection with enrichment", () => {
+  const entry = fs.readFileSync(path.join(root, "src", "main-v2.cjs"), "utf8");
+  assert.match(entry, /hardwareApi\.collectHardware\s*=\s*async function collectEnrichedHardware/);
+  assert.match(entry, /enrichHardware\(await collectBaseHardware\(\)\)/);
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  assert.equal(pkg.main, "src/main-v2.cjs");
 });
