@@ -16,6 +16,13 @@ const { ObsWebSocketClient, normalizeLocalObsHost } = require("./services/obs-we
 const { TwitchHoloServer } = require("./services/twitch-holo-server.cjs");
 const { HybridRuntime } = require("./services/hybrid-runtime.cjs");
 
+const uiSmokeMode = process.argv.includes("--ui-smoke-test");
+if (uiSmokeMode) {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("disable-software-rasterizer");
+}
+
 app.setName("Batto OBS Tool");
 
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -89,7 +96,7 @@ async function stateSnapshot() {
   const state = await settingsStore.get();
   const obsSnapshot = await safeObsSnapshot();
   const platformSecrets = hybridRuntime ? await hybridRuntime.secretStatus() : {};
-  const connections = hybridRuntime ? await hybridRuntime.refresh().catch(() => ({})) : {};
+  const connections = hybridRuntime ? hybridRuntime.connections.statuses() : {};
   return {
     product: {
       name: "Batto OBS Tool",
@@ -135,18 +142,25 @@ function createMainWindow({ show = true, diagnostics = null } = {}) {
   });
 
   const window = mainWindow;
+  window.webContents.on("did-start-loading", () => diagnostics?.push?.("did-start-loading"));
+  window.webContents.on("dom-ready", () => diagnostics?.push?.("dom-ready"));
+  window.webContents.on("did-finish-load", () => diagnostics?.push?.("did-finish-load-event"));
+  window.webContents.on("did-stop-loading", () => diagnostics?.push?.("did-stop-loading"));
   window.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     diagnostics?.push?.(`did-fail-load ${code} ${description} ${url} main=${isMainFrame}`);
   });
   window.webContents.on("render-process-gone", (_event, details) => {
     diagnostics?.push?.(`render-process-gone ${details.reason || "unbekannt"}`);
   });
+  window.webContents.on("preload-error", (_event, preloadPath, error) => {
+    diagnostics?.push?.(`preload-error ${preloadPath}: ${String(error?.message || error)}`);
+  });
   window.webContents.on("console-message", (_event, level, message) => {
     if (level >= 2) diagnostics?.push?.(`console[${level}] ${message}`);
   });
 
   const loadPromise = window.loadFile(path.join(__dirname, "renderer", "index.html"));
-  loadPromise.then(() => diagnostics?.push?.("did-finish-load")).catch((error) => diagnostics?.push?.(`loadFile: ${String(error?.message || error)}`));
+  loadPromise.then(() => diagnostics?.push?.("loadFile-resolved")).catch((error) => diagnostics?.push?.(`loadFile: ${String(error?.message || error)}`));
   if (show) window.once("ready-to-show", () => window?.show());
   window.on("closed", () => { if (mainWindow === window) mainWindow = null; });
   return { window, loadPromise };
@@ -271,7 +285,11 @@ async function runUiSmokeTest() {
   registerIpc();
   const diagnostics = [];
   const { window, loadPromise } = createMainWindow({ show: false, diagnostics });
-  await withTimeout(loadPromise, 12000, "Renderer laden");
+  try {
+    await withTimeout(loadPromise, 12000, "Renderer laden");
+  } catch (error) {
+    throw new Error(`${error.message} Diagnose: ${diagnostics.join(" | ")} URL=${window.webContents.getURL()} loading=${window.webContents.isLoading()} mainLoading=${window.webContents.isLoadingMainFrame()}`);
+  }
 
   let readiness = null;
   const deadline = Date.now() + 12000;
