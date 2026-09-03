@@ -17,7 +17,6 @@ const required = [
   "src/services/plugin-registry.cjs",
   "src/services/store.cjs",
   "src/services/secret-store.cjs",
-  "src/services/hardware-enrichment-v2.cjs",
   "src/services/obs-websocket.cjs",
   "src/services/connection-manager.cjs",
   "src/services/hybrid-runtime.cjs",
@@ -32,6 +31,7 @@ const required = [
   "src/renderer/commercial-settings.js",
   "src/renderer/commercial-settings.css",
   "src/renderer/settings-compat.js",
+  "src/renderer/product-cleanup.js",
   "src/renderer/multi-chat.js",
   "src/renderer/multi-chat.css",
   "src/renderer/touch-deck-pro-v2.js",
@@ -55,17 +55,26 @@ for (const relative of syntaxFiles) {
 }
 
 const index = fs.readFileSync(path.join(root, "src", "renderer", "index.html"), "utf8");
-for (const marker of ["touch-deck-pro-v2.css", "touch-deck-pro-v2.js", "commercial-settings.css", "commercial-settings.js", "settings-compat.js"]) {
+for (const marker of ["touch-deck-pro-v2.css", "touch-deck-pro-v2.js", "commercial-settings.css", "commercial-settings.js", "settings-compat.js", "product-cleanup.js"]) {
   if (!index.includes(marker)) throw new Error(`Renderer-Einbindung fehlt: ${marker}`);
 }
 
 const preload = fs.readFileSync(path.join(root, "src", "preload.cjs"), "utf8");
 if (!preload.includes("SAFE_INVOKE_CHANNELS") || !preload.includes('"deck:execute-button"')) throw new Error("Touch-Deck IPC-Allowlist fehlt im Preload.");
 if (!preload.includes('ipcRenderer.invoke("chat:unified-clear"')) throw new Error("Multi-Chat-Clear ist nicht auf den registrierten IPC-Kanal verdrahtet.");
+for (const forbidden of ["hardware:scan", "diagnostics:cpu-load", "monitoring:status", "telemetry:update"]) {
+  if (preload.includes(forbidden)) throw new Error(`Entfernte Diagnose-IPC ist noch im Preload: ${forbidden}`);
+}
 
 const entry = fs.readFileSync(path.join(root, "src", "main-v2.cjs"), "utf8");
-for (const marker of ["stream-overlay-bootstrap.cjs", "deck-bootstrap.cjs", "chat-bootstrap.cjs", "hardware-enrichment-v2.cjs"]) {
+for (const marker of ["stream-overlay-bootstrap.cjs", "deck-bootstrap.cjs", "chat-bootstrap.cjs"]) {
   if (!entry.includes(marker)) throw new Error(`2.1-Einstieg lädt Runtime-Modul nicht: ${marker}`);
+}
+if (/hardware|enrichHardware|telemetry/i.test(entry)) throw new Error("2.1-Einstieg darf keine Hardwarediagnose laden.");
+
+const main = fs.readFileSync(path.join(root, "src", "main.cjs"), "utf8");
+for (const forbidden of ["collectHardware", "SystemTelemetrySampler", "MonitoringOverlayServer", "hardware:scan", "diagnostics:cpu-load", "monitoring:status"]) {
+  if (main.includes(forbidden)) throw new Error(`Hardware-/Monitoring-Runtime ist noch aktiv: ${forbidden}`);
 }
 
 const chat = fs.readFileSync(path.join(root, "src", "chat-bootstrap.cjs"), "utf8");
@@ -80,5 +89,9 @@ if (!twitch.includes("366") || !twitch.includes("Zeitüberschreitung beim Verbin
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 if (packageJson.main !== "src/main-v2.cjs") throw new Error("package.json muss src/main-v2.cjs als Programmeinstieg verwenden.");
 if (packageJson.version !== "2.1.0") throw new Error(`Unerwartete Version: ${packageJson.version}`);
+const files = JSON.stringify(packageJson.build?.files || []);
+for (const forbidden of ["hardware.cjs", "hardware-enrichment-v2.cjs", "telemetry.cjs", "recommendation.cjs", "encoder-monitoring-overlay"]) {
+  if (files.includes(`\"${forbidden}\"`) || (forbidden === "encoder-monitoring-overlay" && files.includes(forbidden))) throw new Error(`Diagnosebestandteil wird noch ausgeliefert: ${forbidden}`);
+}
 
-console.log(`Source-of-truth geprüft: ${required.length} Produktionsdateien, ${syntaxFiles.length} Syntaxprüfungen OK.`);
+console.log(`Diagnosefreier 2.1-Produktionsbaum geprüft: ${required.length} Dateien, ${syntaxFiles.length} Syntaxprüfungen OK.`);
