@@ -1,6 +1,6 @@
 "use strict";
 
-const mainRuntime = require("./main.cjs");
+const streamRuntime = require("./stream-overlay-bootstrap.cjs");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { app, BrowserWindow, clipboard, globalShortcut, ipcMain, safeStorage, shell } = require("electron");
@@ -14,6 +14,7 @@ const { normalizeCngConfig } = require("./services/cng-config.cjs");
 const { normalizeTtsConfig } = require("./services/tts-config.cjs");
 const { SecretStore } = require("./services/secret-store.cjs");
 const { SettingsStore } = require("./services/store.cjs");
+const { ObsWebSocketClient } = require("./services/obs-websocket.cjs");
 const { ensureObsChatOverlay, removeObsChatOverlay, toOverlayChatEvent } = require("./services/obs-chat-overlay.cjs");
 
 let core = null;
@@ -23,6 +24,7 @@ let ttsConfig = normalizeTtsConfig();
 let cngSecretStore = null;
 let platformSecretStore = null;
 let settingsStore = null;
+let chatObs = null;
 let mainWindowPoll = null;
 let overlaySettings = { sourceName: "Batto Multi-Chat", sceneName: "", width: 1920, height: 1080, autoInstall: false };
 
@@ -39,12 +41,20 @@ async function loadCngConfig() {
   return cngConfig;
 }
 function broadcast(channel, payload) { for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(channel, payload); }
-function overlayServer() { return mainRuntime.getStreamOverlayServer?.() || null; }
-function obsClient() { return mainRuntime.getObsClient?.() || null; }
+function overlayServer() { return streamRuntime.getStreamOverlayServer(); }
+function obsClient() { return chatObs; }
 function overlayStatus() {
-  const server = overlayServer();
-  const serverStatus = server?.status?.() || {};
-  return { ...overlaySettings, active: Boolean(serverStatus.active), url: serverStatus.chatOverlayUrl || "", obs: obsClient()?.status?.() || { connected: false } };
+  const serverStatus = streamRuntime.getStreamOverlayStatus();
+  return { ...overlaySettings, active: Boolean(serverStatus.active), url: serverStatus.chatOverlayUrl || "", obs: chatObs?.status?.() || { connected: false } };
+}
+
+async function ensureChatObs() {
+  if (chatObs?.status?.().connected) return chatObs;
+  const settings = await settingsStore.get();
+  const password = await platformSecretStore.get("obs-websocket-password");
+  if (!chatObs) chatObs = new ObsWebSocketClient();
+  await chatObs.connect({ host: settings.obs.host, port: settings.obs.port, password });
+  return chatObs;
 }
 
 async function secureChatConnect(platform, input = {}) {
@@ -63,7 +73,6 @@ async function secureChatConnect(platform, input = {}) {
   } else if (platform === "cng" && !Object.keys(config).length) {
     return core.connect(platform, await loadCngConfig());
   }
-
   return core.connect(platform, config);
 }
 
@@ -99,13 +108,18 @@ function registerChatIpc() {
     return url;
   });
   ipcMain.handle("chat:overlay-install", async (_event, input = {}) => {
-    const status = overlayStatus();
-    if (!status.url) throw new Error("Das lokale Chat-Overlay ist noch nicht gestartet.");
+    const server = await streamRuntime.startStreamOverlay();
+    const status = server.status();
+    if (!status.chatOverlayUrl) throw new Error("Das lokale Chat-Overlay ist noch nicht gestartet.");
     overlaySettings = { ...overlaySettings, ...input, autoInstall: input.autoInstall === true };
     await writeJson(overlaySettingsFile(), overlaySettings);
-    return ensureObsChatOverlay(obsClient(), { ...overlaySettings, url: status.url });
+    const client = await ensureChatObs();
+    return ensureObsChatOverlay(client, { ...overlaySettings, url: status.chatOverlayUrl });
   });
-  ipcMain.handle("chat:overlay-remove", async () => removeObsChatOverlay(obsClient(), overlaySettings.sourceName));
+  ipcMain.handle("chat:overlay-remove", async () => {
+    const client = await ensureChatObs();
+    return removeObsChatOverlay(client, overlaySettings.sourceName);
+  });
   ipcMain.handle("cng:save-config", async (_event, input = {}) => {
     const normalized = normalizeCngConfig(input);
     if (normalized.chat?.obsChatToken) await cngSecretStore.set("cng-obs-chat-token", normalized.chat.obsChatToken);
@@ -138,6 +152,7 @@ app.whenReady().then(async () => {
   await settingsStore.load();
   cngConfig = await loadCngConfig();
   ttsConfig = normalizeTtsConfig(await readJson(ttsConfigFile(), {}));
+  await streamRuntime.startStreamOverlay().catch(() => null);
 
   core = new ChatCore({ maxMessages: 500, flushMs: 60 });
   core.registerAdapter(new TwitchAdapter());
@@ -157,21 +172,18 @@ app.whenReady().then(async () => {
 
   const main = BrowserWindow.getAllWindows().find((win) => win.getTitle() === "Batto OBS Tool") || BrowserWindow.getAllWindows()[0] || null;
   overlaySettings = { ...overlaySettings, ...(await readJson(overlaySettingsFile(), {})) };
-  windows = new ChatWindowManager({
-    mainWindow: main,
-    userDataFile: path.join(app.getPath("userData"), "multi-chat-window.json"),
-    broadcast: (state) => broadcast("chat:window", state)
-  });
+  windows = new ChatWindowManager({ mainWindow: main, userDataFile: path.join(app.getPath("userData"), "multi-chat-window.json"), broadcast: (state) => broadcast("chat:window", state) });
   await windows.loadSettings();
   registerChatIpc();
   globalShortcut.register("CommandOrControl+Shift+C", () => windows.toggle());
 
-  obsClient()?.on?.("connected", () => {
-    if (overlaySettings.autoInstall) {
-      void ensureObsChatOverlay(obsClient(), { ...overlaySettings, url: overlayStatus().url })
+  if (overlaySettings.autoInstall) {
+    const status = overlayStatus();
+    if (status.url) {
+      void ensureChatObs().then((client) => ensureObsChatOverlay(client, { ...overlaySettings, url: status.url }))
         .catch((error) => console.error("OBS-Chatquelle konnte nicht automatisch aktualisiert werden:", error));
     }
-  });
+  }
 
   const wireMain = () => {
     const found = BrowserWindow.getAllWindows().find((win) => win.getTitle() === "Batto OBS Tool");
@@ -199,4 +211,5 @@ app.on("before-quit", () => {
   if (mainWindowPoll) clearInterval(mainWindowPoll);
   globalShortcut.unregister("CommandOrControl+Shift+C");
   void core?.stop();
+  void chatObs?.disconnect?.();
 });
