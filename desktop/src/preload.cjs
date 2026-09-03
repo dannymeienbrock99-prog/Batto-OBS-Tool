@@ -29,6 +29,15 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   copyHoloUrl: () => ipcRenderer.invoke("holo:copy-url"),
   executeDeckAction: (assignment) => ipcRenderer.invoke("deck:execute", assignment),
   saveReport: (report) => ipcRenderer.invoke("dialog:save-report", report),
+
+  hybridStatus: () => ipcRenderer.invoke("hybrid:status"),
+  runHealthCheck: () => ipcRenderer.invoke("hybrid:health-check"),
+  refreshConnections: () => ipcRenderer.invoke("hybrid:refresh"),
+  getPlatformSecretStatus: () => ipcRenderer.invoke("hybrid:secret-status"),
+  setPlatformSecret: (name, value) => ipcRenderer.invoke("hybrid:set-secret", name, value),
+  detectTikTokLiveStudio: () => ipcRenderer.invoke("tiktok-live-studio:status"),
+  launchTikTokLiveStudio: () => ipcRenderer.invoke("tiktok-live-studio:launch"),
+
   chatHistory: (options) => ipcRenderer.invoke("chat:history", options),
   chatStatuses: () => ipcRenderer.invoke("chat:statuses"),
   chatConnect: (platform, config) => ipcRenderer.invoke("chat:connect", platform, config),
@@ -41,9 +50,11 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   getCngConfig: () => ipcRenderer.invoke("cng:get-config"),
   getTtsConfig: () => ipcRenderer.invoke("tts:get-config"),
   saveTtsConfig: (value) => ipcRenderer.invoke("tts:save-config", value),
+
   onTelemetry: (callback) => on("telemetry:update", callback),
   onTelemetryError: (callback) => on("telemetry:error", callback),
   onObsStatusChanged: (callback) => on("obs:status-changed", callback),
+  onConnectionStatus: (callback) => on("connections:status", callback),
   onChatMessages: (callback) => on("chat:messages", callback),
   onChatStatus: (callback) => on("chat:status", callback),
   onChatCleared: (callback) => on("chat:cleared", callback),
