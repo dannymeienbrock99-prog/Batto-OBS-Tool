@@ -11,23 +11,23 @@ const cssTag = '<link rel="stylesheet" href="./commercial-settings.css">';
 const jsTag = '<script src="./commercial-settings.js"></script>';
 const compatTag = '<script src="./settings-compat.js"></script>';
 const cleanupTag = '<script src="./product-cleanup.js"></script>';
+const strip = (pattern) => { html = html.replace(new RegExp(pattern, "g"), ""); };
 
 for (const name of ["hardware", "internet", "recommendation", "loadtest", "monitoring"]) {
-  html = html.replace(new RegExp(`\\s*<button class="nav-button" data-view="${name}">[\\s\\S]*?<\\/button>`, "g"), "");
-  html = html.replace(new RegExp(`\\s*<section id="view-${name}" class="view(?: full-height-view)?">[\\s\\S]*?<\\/section>`, "g"), "");
+  strip(`\\s*<button class="nav-button" data-view="${name}">[\\s\\S]*?</button>`);
+  strip(`\\s*<section id="view-${name}" class="view(?: full-height-view)?">[\\s\\S]*?</section>`);
 }
 
-html = html
-  .replace(/\\s*<span id="scan-pill"[\\s\\S]*?<\\/span>/g, "")
-  .replace(/\\s*<button id="overview-scan"[\\s\\S]*?<\\/button>/g, "")
-  .replace(/\\s*<button data-jump="recommendation">[\\s\\S]*?<\\/button>/g, "")
-  .replace(/\\s*<button data-jump="monitoring">[\\s\\S]*?<\\/button>/g, "");
+strip('\\s*<span id="scan-pill"[\\s\\S]*?</span>');
+strip('\\s*<button id="overview-scan"[\\s\\S]*?</button>');
+strip('\\s*<button data-jump="recommendation">[\\s\\S]*?</button>');
+strip('\\s*<button data-jump="monitoring">[\\s\\S]*?</button>');
 
 for (const id of ["summary-cpu", "summary-gpu", "summary-ram", "summary-board", "summary-upload"]) {
-  html = html.replace(new RegExp(`\\s*<article class="summary-card">(?=[\\s\\S]*?id="${id}")[\\s\\S]*?<\\/article>`, "g"), "");
+  strip(`\\s*<article class="summary-card">(?=[\\s\\S]*?id="${id}")[\\s\\S]*?</article>`);
 }
+strip('\\s*<article class="panel">(?=[\\s\\S]*?LIVE-MONITORING)[\\s\\S]*?</article>');
 
-html = html.replace(/\\s*<article class="panel">(?=[\\s\\S]*?LIVE-MONITORING)[\\s\\S]*?<\\/article>/g, "");
 html = html
   .replace("Vom echten PC zur passenden OBS-Einstellung", "OBS, TikTok und Multi-Chat zentral steuern")
   .replace("Die Windows-Diagnose liest Hardware lokal aus. Werte, die Windows oder der Treiber nicht zuverlässig liefert, bleiben als „Nicht verfügbar“ gekennzeichnet.", "Keine Hardwarediagnose. Die Anwendung konzentriert sich auf OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck und Overlays.")
