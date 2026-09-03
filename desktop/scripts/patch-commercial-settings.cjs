@@ -30,7 +30,7 @@ strip('\\s*<article class="panel">(?=[\\s\\S]*?LIVE-MONITORING)[\\s\\S]*?</artic
 
 html = html
   .replace("Vom echten PC zur passenden OBS-Einstellung", "OBS, TikTok und Multi-Chat zentral steuern")
-  .replace("Die Windows-Diagnose liest Hardware lokal aus. Werte, die Windows oder der Treiber nicht zuverlässig liefert, bleiben als „Nicht verfügbar“ gekennzeichnet.", "Keine Hardwarediagnose. Die Anwendung konzentriert sich auf OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck und Overlays.")
+  .replace("Die Windows-Diagnose liest Hardware lokal aus. Werte, die Windows oder der Treiber nicht zuverlässig liefert, bleiben als „Nicht verfügbar“ gekennzeichnet.", "Die Anwendung konzentriert sich auf OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck und Overlays.")
   .replace("PC erkennen, OBS prüfen und passende Einstellungen ermitteln.", "OBS, TikTok, Multi-Chat, Touch-Deck und Overlays an einem Ort.");
 
 if (!html.includes(cssTag)) {
