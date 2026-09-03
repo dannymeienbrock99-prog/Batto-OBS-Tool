@@ -6,6 +6,7 @@
     <meta name="color-scheme" content="dark">
     <title>Batto OBS Tool</title>
     <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./multi-chat.css">
   </head>
   <body>
     <div class="app-shell">
@@ -17,13 +18,14 @@
         <nav aria-label="Hauptnavigation">
           <button class="nav-button active" data-view="overview"><span>⌂</span> Übersicht</button>
           <button class="nav-button" data-view="obs"><span>◉</span> OBS</button>
-          <button class="nav-button" data-view="holo"><span>✦</span> Twitch-Hologramm</button>
+          <button class="nav-button" data-view="chat"><span>✦</span> Multi-Chat</button>
           <button class="nav-button" data-view="deck-pro"><span>▦</span> Touch-Deck Pro</button>
+          <button class="nav-button" data-view="holo"><span>◇</span> Twitch-Hologramm</button>
           <button class="nav-button" data-view="settings"><span>☷</span> Einstellungen</button>
         </nav>
         <footer>
           <span id="version-label">Version 2.1.0</span>
-          <small>Windows-PC-Version</small>
+          <small>Windows x64</small>
         </footer>
       </aside>
 
@@ -44,7 +46,7 @@
               <div>
                 <span class="eyebrow">BATTO OBS TOOL 2.1.0</span>
                 <h2>OBS, TikTok und Multi-Chat zentral steuern</h2>
-                <p>Ein schlanker Produktionskern für OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck Pro und Browser-Overlays.</p>
+                <p>Produktionskern für OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck Pro und Browser-Overlays.</p>
                 <div class="button-row">
                   <button id="overview-connect-obs" class="primary">OBS verbinden</button>
                   <button data-jump="settings">Plattformen einrichten</button>
@@ -55,7 +57,7 @@
 
             <div class="summary-grid">
               <article class="summary-card"><span>OBS</span><strong id="summary-obs">Nicht verbunden</strong><small id="summary-obs-extra">WebSocket 5.x · Port 4455</small></article>
-              <article class="summary-card"><span>TikTok</span><strong>LIVE Studio + API</strong><small>Getrennte, fehlertolerante Verbindung</small></article>
+              <article class="summary-card"><span>TikTok</span><strong>LIVE Studio + API</strong><small>Lokaler Studio-Layer und Event-Reader</small></article>
               <article class="summary-card"><span>Multi-Chat</span><strong>TikTok · Twitch · YouTube · CNG</strong><small>Ein gemeinsamer Chat-Verlauf</small></article>
               <article class="summary-card"><span>Touch-Deck</span><strong>Profile · Ordner · Aktionen</strong><small>OBS und Creator-Werkzeuge</small></article>
             </div>
@@ -65,14 +67,14 @@
                 <header><div><span class="eyebrow">SCHNELLSTART</span><h3>Direkt öffnen</h3></div></header>
                 <div class="quick-grid">
                   <button data-jump="obs">OBS-Verbindung</button>
-                  <button data-jump="holo">Twitch-Hologramm</button>
+                  <button data-jump="chat">Multi-Chat</button>
                   <button data-jump="deck-pro">Touch-Deck Pro</button>
                   <button data-jump="settings">Einstellungen</button>
                 </div>
               </article>
               <article class="panel">
-                <header><div><span class="eyebrow">PRODUKTKERN</span><h3>Getrennte Module</h3></div></header>
-                <div class="result-copy">Ein Plattformfehler soll nicht die gesamte Anwendung blockieren. OBS, TikTok, Twitch, YouTube und CNG werden getrennt verwaltet.</div>
+                <header><div><span class="eyebrow">STATUS</span><h3>Getrennte Module</h3></div></header>
+                <div class="result-copy">Ein Plattformfehler blockiert nicht den gesamten Programmstart. Verbindungen können getrennt eingerichtet und geprüft werden.</div>
               </article>
             </div>
           </section>
@@ -102,7 +104,7 @@
               </article>
             </div>
             <article class="panel">
-              <header><div><h3>Direktsteuerung</h3><p>Aktionen werden erst aktiv, wenn OBS verbunden ist.</p></div></header>
+              <header><div><h3>Direktsteuerung</h3><p>Aktionen sind nur aktiv, wenn OBS verbunden ist.</p></div></header>
               <div class="control-grid">
                 <button data-obs-action="stream.start">Stream starten</button>
                 <button data-obs-action="stream.stop">Stream stoppen</button>
@@ -115,6 +117,12 @@
             </article>
           </section>
 
+          <section id="view-chat" class="view full-height-view">
+            <div id="multi-chat-root"></div>
+          </section>
+
+          <section id="view-deck-pro" class="view full-height-view" aria-label="Touch-Deck Pro"></section>
+
           <section id="view-holo" class="view full-height-view">
             <div class="section-heading compact">
               <div><span class="eyebrow">OBS-BROWSERQUELLE</span><h2>Twitch-Hologramm</h2><p>Namen und Chatfarben als Overlay gestalten.</p></div>
@@ -123,8 +131,6 @@
             <div class="url-bar"><span>OBS-Browserquelle</span><code id="holo-url">Wird gestartet …</code></div>
             <iframe id="holo-frame" class="module-frame" title="Twitch-Hologramm-Editor"></iframe>
           </section>
-
-          <section id="view-deck-pro" class="view full-height-view" aria-label="Touch-Deck Pro"></section>
 
           <section id="view-settings" class="view">
             <div class="section-heading">
@@ -137,5 +143,6 @@
 
     <div id="toast" class="toast" hidden></div>
     <script src="./app.js"></script>
+    <script src="./multi-chat.js"></script>
   </body>
 </html>
