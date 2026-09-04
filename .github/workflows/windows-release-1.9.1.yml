@@ -113,18 +113,14 @@ jobs:
             $allElectronProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
             throw "Single-Instance-Prüfung fehlgeschlagen. Hauptprozesse: $($mainProcesses.Count), Electron-Prozesse insgesamt: $($allElectronProcesses.Count)"
           }
-          if (-not $second.HasExited) {
-            Start-Sleep -Seconds 3
-          }
+          if (-not $second.HasExited) { Start-Sleep -Seconds 3 }
           $mainAfterSecondStart = @(Get-CimInstance Win32_Process | Where-Object {
             $_.ExecutablePath -eq $installedExe -and
             ([string]$_.CommandLine) -notmatch '(?:^|\s)--type=' -and
             ([string]$_.CommandLine) -notmatch '(?:^|\s)--utility-sub-type=' -and
             ([string]$_.CommandLine) -notmatch '(?:^|\s)--crashpad-handler'
           })
-          if ($mainAfterSecondStart.Count -ne 1) {
-            throw "Nach dem zweiten Start wurden $($mainAfterSecondStart.Count) Hauptinstanzen gefunden."
-          }
+          if ($mainAfterSecondStart.Count -ne 1) { throw "Nach dem zweiten Start wurden $($mainAfterSecondStart.Count) Hauptinstanzen gefunden." }
           @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $installedExe }) |
             ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
@@ -145,8 +141,8 @@ jobs:
           OBS WebSocket lokal unter 127.0.0.1:4455 aktivieren.
 
           Enthalten: Hardwarediagnose, OBS-Steuerung, Encoder-Empfehlung,
-          bestätigungspflichtige Tests, transparentes Monitoring,
-          Twitch-Hologramm und Touch-Deck. Keine Demo-Version.
+          bestätigungspflichtige Tests, transparentes Monitoring und
+          Twitch-Hologramm. Keine Demo-Version.
           "@ | Set-Content -Encoding UTF8 (Join-Path $release "INSTALLATION.txt")
           $hash = Get-FileHash (Join-Path $release $installer.Name) -Algorithm SHA256
           "$($hash.Hash.ToLower())  $($installer.Name)" | Set-Content -Encoding ASCII (Join-Path $release "SHA256.txt")
