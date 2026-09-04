@@ -129,20 +129,13 @@ class ObsWebSocketClient extends EventEmitter {
         }
         if (message.op === 0) {
           const authentication = message.d?.authentication;
-          const identify = {
-            rpcVersion: 1,
-            eventSubscriptions: 0
-          };
+          const identify = { rpcVersion: 1, eventSubscriptions: 0 };
           if (authentication) {
             if (!password) {
               fail(new Error("OBS verlangt ein WebSocket-Passwort."));
               return;
             }
-            identify.authentication = obsAuthentication(
-              String(password),
-              authentication.salt,
-              authentication.challenge
-            );
+            identify.authentication = obsAuthentication(String(password), authentication.salt, authentication.challenge);
           }
           socket.send(JSON.stringify({ op: 1, d: identify }));
           return;
@@ -218,10 +211,7 @@ class ObsWebSocketClient extends EventEmitter {
         reject(new Error(`Zeitüberschreitung bei OBS-Anfrage „${requestType}“.`));
       }, timeoutMs);
       this.pending.set(requestId, { resolve, reject, timer });
-      this.socket.send(JSON.stringify({
-        op: 6,
-        d: { requestType, requestId, requestData }
-      }), (error) => {
+      this.socket.send(JSON.stringify({ op: 6, d: { requestType, requestId, requestData } }), (error) => {
         if (!error) return;
         clearTimeout(timer);
         this.pending.delete(requestId);
@@ -244,23 +234,7 @@ class ObsWebSocketClient extends EventEmitter {
 
   async snapshot() {
     if (!this.connected) return { ...this.status(), available: false };
-    const [
-      version,
-      video,
-      stats,
-      stream,
-      record,
-      scenes,
-      profile,
-      streamService,
-      outputList,
-      outputMode,
-      simpleStreamEncoder,
-      simpleBitrate,
-      simplePreset,
-      advancedStreamEncoder,
-      advancedRecordEncoder
-    ] = await Promise.all([
+    const [version, video, stats, stream, record, scenes, profile, streamService, outputList, outputMode, simpleStreamEncoder, simpleBitrate, simplePreset, advancedStreamEncoder, advancedRecordEncoder] = await Promise.all([
       this.requestSafe("GetVersion"),
       this.requestSafe("GetVideoSettings"),
       this.requestSafe("GetStats"),
@@ -289,14 +263,7 @@ class ObsWebSocketClient extends EventEmitter {
       profile,
       streamService,
       outputList,
-      profileParameters: {
-        outputMode,
-        simpleStreamEncoder,
-        simpleBitrate,
-        simplePreset,
-        advancedStreamEncoder,
-        advancedRecordEncoder
-      }
+      profileParameters: { outputMode, simpleStreamEncoder, simpleBitrate, simplePreset, advancedStreamEncoder, advancedRecordEncoder }
     };
   }
 
@@ -315,60 +282,14 @@ class ObsWebSocketClient extends EventEmitter {
       "replay.save": ["SaveReplayBuffer", {}]
     };
     if (action === "scene.set") {
-      return this.request("SetCurrentProgramScene", {
-        sceneName: String(payload.sceneName || "")
-      });
+      return this.request("SetCurrentProgramScene", { sceneName: String(payload.sceneName || "") });
     }
     if (action === "input.mute") {
-      return this.request("SetInputMute", {
-        inputName: String(payload.inputName || ""),
-        inputMuted: Boolean(payload.inputMuted)
-      });
+      return this.request("SetInputMute", { inputName: String(payload.inputName || ""), inputMuted: Boolean(payload.inputMuted) });
     }
     const entry = mapping[action];
     if (!entry) throw new Error(`Unbekannte OBS-Aktion: ${action}`);
     return this.request(entry[0], entry[1]);
-  }
-
-  async runRecordingTest(durationSeconds = 15) {
-    const duration = Math.max(5, Math.min(60, Math.round(Number(durationSeconds) || 15)));
-    if (!this.connected) throw new Error("OBS ist nicht verbunden.");
-    const before = await this.request("GetRecordStatus");
-    if (before.outputActive) {
-      throw new Error("OBS nimmt bereits auf. Der Test wurde nicht gestartet.");
-    }
-    const stream = await this.requestSafe("GetStreamStatus");
-    if (stream.outputActive) {
-      throw new Error("Während eines laufenden Streams wird kein automatischer Aufnahmetest gestartet.");
-    }
-    const samples = [];
-    await this.request("StartRecord");
-    try {
-      for (let second = 0; second < duration; second += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        const stats = await this.requestSafe("GetStats");
-        const record = await this.requestSafe("GetRecordStatus");
-        samples.push({ second: second + 1, stats, record });
-      }
-    } finally {
-      await this.requestSafe("StopRecord");
-    }
-    const valid = samples.filter((sample) => !sample.stats?.__error);
-    const averageCpu = valid.length
-      ? valid.reduce((sum, sample) => sum + Number(sample.stats.cpuUsage || 0), 0) / valid.length
-      : null;
-    const renderMissed = valid.at(-1)?.stats?.renderSkippedFrames ?? null;
-    const outputSkipped = valid.at(-1)?.stats?.outputSkippedFrames ?? null;
-    return {
-      durationSeconds: duration,
-      samples,
-      summary: {
-        averageObsCpuPercent: averageCpu,
-        renderSkippedFrames: renderMissed,
-        outputSkippedFrames: outputSkipped,
-        stable: Number(renderMissed || 0) === 0 && Number(outputSkipped || 0) === 0
-      }
-    };
   }
 }
 
