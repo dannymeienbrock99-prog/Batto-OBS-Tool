@@ -32,6 +32,9 @@
   function currentProfile(){const list=state?.deck?.profiles||state?.profiles||[];return Array.isArray(list)?list.find(x=>(x.name||x.id)===activeProfile)||list[0]:null;}
   function loadFromState(){const p=currentProfile();if(p){const page=Array.isArray(p.pages)?(p.pages[p.activePageIndex||0]||p.pages[0]):p;pageName=page?.name||"Seite 1";keys=normalizeKeys(page?.keys||p.keys);}else keys=normalizeKeys([]);}
 
+  function showDeckView(){document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v===host));document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.view==="deck-0802"));const title=document.getElementById("page-title"),sub=document.getElementById("page-subtitle");if(title)title.textContent="Touch-Deck";if(sub)sub.textContent="Touch-Deck Stand 02.08.2026 · 5 × 3 Tasten · OBS-Aktionen.";}
+  document.addEventListener("click",event=>{const button=event.target.closest?.('[data-view="deck-0802"]');if(button){event.preventDefault();showDeckView();}});
+
   function render(){
     host.innerHTML=`<div class="touchdeck-0802">
       <section class="td-left">
