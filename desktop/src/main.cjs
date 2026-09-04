@@ -26,7 +26,6 @@ const { MonitoringOverlayServer } = require("../modules/encoder-monitoring-overl
 
 app.setName("Batto OBS Tool");
 
-// BATTO_1_9_1_HOTFIX
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) app.exit(0);
 app.on("second-instance", () => {
@@ -213,9 +212,7 @@ function registerIpc() {
     return internetResult;
   });
 
-  ipcMain.handle("diagnostics:cpu-load", (_event, options) => {
-    return runCpuLoadTest(options?.durationSeconds || 10);
-  });
+  ipcMain.handle("diagnostics:cpu-load", (_event, options) => runCpuLoadTest(options?.durationSeconds || 10));
 
   ipcMain.handle("obs:connect", async (_event, input = {}) => {
     const current = await settingsStore.get();
@@ -225,25 +222,14 @@ function registerIpc() {
     if (!password) password = await secretStore.get("obs-websocket-password");
     const result = await obs.connect({ host, port, password });
     await settingsStore.patch({ obs: { host, port, password: "" } });
-    if (input.rememberPassword && password) {
-      await secretStore.set("obs-websocket-password", password);
-    } else if (input.clearStoredPassword) {
-      await secretStore.delete("obs-websocket-password");
-    }
+    if (input.rememberPassword && password) await secretStore.set("obs-websocket-password", password);
+    else if (input.clearStoredPassword) await secretStore.delete("obs-websocket-password");
     await sampleTelemetry();
     return result;
   });
 
-  ipcMain.handle("obs:disconnect", async () => {
-    await obs.disconnect();
-    return obs.status();
-  });
-
-  ipcMain.handle("obs:forget-password", async () => {
-    await secretStore.delete("obs-websocket-password");
-    return { configured: false };
-  });
-
+  ipcMain.handle("obs:disconnect", async () => { await obs.disconnect(); return obs.status(); });
+  ipcMain.handle("obs:forget-password", async () => { await secretStore.delete("obs-websocket-password"); return { configured: false }; });
   ipcMain.handle("obs:snapshot", () => safeObsSnapshot());
   ipcMain.handle("obs:execute", (_event, action, payload) => obs.execute(action, payload));
   ipcMain.handle("obs:recording-test", (_event, options) => obs.runRecordingTest(options?.durationSeconds || 15));
@@ -303,12 +289,7 @@ function registerIpc() {
 }
 
 async function runSelfTest() {
-  const result = {
-    product: "Batto OBS Tool",
-    version: app.getVersion(),
-    platform: process.platform,
-    modules: {}
-  };
+  const result = { product: "Batto OBS Tool", version: app.getVersion(), platform: process.platform, modules: {} };
   const currentHardware = await collectHardware();
   result.hardware = {
     cpu: currentHardware.cpu?.name || "Nicht verfügbar",
@@ -320,10 +301,7 @@ async function runSelfTest() {
   await testMonitoring.start();
   result.modules.monitoring = testMonitoring.status().running;
   await testMonitoring.stop();
-  const testHolo = new TwitchHoloServer({
-    preferredPort: 18923,
-    webRoot: path.join(__dirname, "..", "modules", "twitch-holo-chat", "web")
-  });
+  const testHolo = new TwitchHoloServer({ preferredPort: 18923, webRoot: path.join(__dirname, "..", "modules", "twitch-holo-chat", "web") });
   await testHolo.start();
   result.modules.twitchHolo = testHolo.status().running;
   await testHolo.stop();
@@ -336,13 +314,8 @@ app.whenReady().then(async () => {
   await settingsStore.load();
 
   if (process.argv.includes("--self-test")) {
-    try {
-      await runSelfTest();
-      app.exit(0);
-    } catch (error) {
-      process.stderr.write(`${String(error?.stack || error)}\n`);
-      app.exit(1);
-    }
+    try { await runSelfTest(); app.exit(0); }
+    catch (error) { process.stderr.write(`${String(error?.stack || error)}\n`); app.exit(1); }
     return;
   }
 
@@ -369,3 +342,12 @@ app.on("before-quit", () => {
   void monitoringServer?.stop();
   void holoServer?.stop();
 });
+
+module.exports = {
+  getObsClient: () => obs,
+  getMainWindow: () => mainWindow,
+  getMonitoringServer: () => monitoringServer,
+  getTwitchHoloServer: () => holoServer,
+  getStreamOverlayServer: () => null,
+  getStateSnapshot: () => stateSnapshot()
+};
