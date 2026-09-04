@@ -1,6 +1,14 @@
 "use strict";
 
 (() => {
+  const injectedDock = document.getElementById("batto-multi-chat-dock");
+  if (window.__battoMultiChatRendererActive) {
+    injectedDock?.remove();
+    return;
+  }
+  window.__battoMultiChatRendererActive = true;
+  injectedDock?.remove();
+
   const api = window.batto;
   const root = document.getElementById("multi-chat-root");
   if (!api || !root) return;
