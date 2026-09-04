@@ -29,43 +29,11 @@ const DEFAULT_STATE = Object.freeze({
     targetFps: 60,
     monitoringEnabled: true,
     twitchHoloEnabled: true
-  },
-  deck: {
-    activeProfile: "Standard",
-    profiles: {
-      Standard: {
-        rows: 3,
-        columns: 5,
-        pages: {
-          root: Array.from({ length: 15 }, () => null)
-        }
-      }
-    }
   }
 });
 
 function normalizeState(value = {}) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const profiles = source.deck?.profiles && typeof source.deck.profiles === "object"
-    ? source.deck.profiles
-    : clone(DEFAULT_STATE.deck.profiles);
-  const normalizedProfiles = {};
-  for (const [rawName, rawProfile] of Object.entries(profiles).slice(0, 100)) {
-    const name = String(rawName || "Standard").trim().slice(0, 80) || "Standard";
-    const rows = Math.max(1, Math.min(10, Math.round(Number(rawProfile?.rows) || 3)));
-    const columns = Math.max(1, Math.min(10, Math.round(Number(rawProfile?.columns) || 5)));
-    const pages = rawProfile?.pages && typeof rawProfile.pages === "object"
-      ? clone(rawProfile.pages)
-      : { root: [] };
-    pages.root ||= [];
-    normalizedProfiles[name] = { rows, columns, pages };
-  }
-  if (!Object.keys(normalizedProfiles).length) {
-    normalizedProfiles.Standard = clone(DEFAULT_STATE.deck.profiles.Standard);
-  }
-  const activeProfile = normalizedProfiles[source.deck?.activeProfile]
-    ? source.deck.activeProfile
-    : Object.keys(normalizedProfiles)[0];
 
   return {
     version: 2,
@@ -84,10 +52,6 @@ function normalizeState(value = {}) {
         : 60,
       monitoringEnabled: source.preferences?.monitoringEnabled !== false,
       twitchHoloEnabled: source.preferences?.twitchHoloEnabled !== false
-    },
-    deck: {
-      activeProfile,
-      profiles: normalizedProfiles
     }
   };
 }
@@ -146,8 +110,7 @@ class SettingsStore {
       ...current,
       ...patch,
       obs: { ...current.obs, ...(patch.obs || {}) },
-      preferences: { ...current.preferences, ...(patch.preferences || {}) },
-      deck: { ...current.deck, ...(patch.deck || {}) }
+      preferences: { ...current.preferences, ...(patch.preferences || {}) }
     });
   }
 }
