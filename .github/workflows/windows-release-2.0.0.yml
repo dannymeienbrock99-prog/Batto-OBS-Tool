@@ -42,26 +42,26 @@ jobs:
           npm install --no-audit --no-fund --ignore-scripts=false
           if ($LASTEXITCODE -ne 0) { throw "npm install ist fehlgeschlagen." }
 
-      - name: Prepare integrated application
+      - name: Prepare V4 integrated application
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           npm run prepare:integrated
-          if ($LASTEXITCODE -ne 0) { throw "Produktionsquelle konnte nicht vorbereitet werden." }
+          if ($LASTEXITCODE -ne 0) { throw "V4-Produktionsquelle konnte nicht vorbereitet werden." }
 
-      - name: Validate source and required artwork
+      - name: Validate V4 source and required artwork
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           npm run check
-          if ($LASTEXITCODE -ne 0) { throw "Produktionsprüfung ist fehlgeschlagen." }
+          if ($LASTEXITCODE -ne 0) { throw "V4-Produktionsprüfung ist fehlgeschlagen." }
 
-      - name: Run Multi Chat moderation Chat Bot and module tests
+      - name: Run V4 Multi Chat moderation Chat Bot and module tests
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          node --test test/integrated-2.0.0.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs modules/twitch-holo-chat/test/*.test.cjs
-          if ($LASTEXITCODE -ne 0) { throw "Mindestens ein Test ist fehlgeschlagen." }
+          node --test test/integrated-2.0.0.test.cjs test/v4-phase1.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs modules/twitch-holo-chat/test/*.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw "Mindestens ein V4-Test ist fehlgeschlagen." }
 
       - name: Build Windows x64 NSIS installer with required desktop icon
         shell: pwsh
@@ -74,6 +74,7 @@ jobs:
           $installer = Get-ChildItem "dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
           if (-not $installer) { throw "Batto-OBS-Tool-Setup-2.0.0.exe fehlt." }
           if (-not (Test-Path "resources/desktop-icon.jpg")) { throw "Geliefertes Desktop-Icon wurde nicht für den Build erzeugt." }
+          if (-not (Test-Path "src/renderer/assets/HIntergund.png")) { throw "V4-Programm-Hintergrund wurde nicht erzeugt." }
 
       - name: Package artifact
         shell: pwsh
