@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { YouTubeAdapter, roleFor } = require("../src/services/platforms/youtube-adapter.cjs");
 const { TwitchAdapter } = require("../src/services/platforms/twitch-adapter.cjs");
+const { TikTokAdapter } = require("../src/services/platforms/tiktok-adapter.cjs");
 
 test("YouTube Rollen werden normalisiert", () => {
   assert.equal(roleFor({ isChatOwner: true }), "broadcaster");
@@ -66,4 +67,42 @@ test("Twitch PRIVMSG wird mit Badges und Benutzerfarbe normalisiert", () => {
   assert.equal(messages[0].role, "moderator");
   assert.equal(messages[0].color, "#12AB34");
   assert.equal(JSON.stringify(adapter.status()).includes("hidden"), false);
+});
+
+test("TikTok übergibt immer ein vollständiges Connector-Optionsobjekt", async () => {
+  const constructions = [];
+  class FakeConnector {
+    constructor(username, options) {
+      constructions.push({ username, options });
+    }
+    on() {}
+    async connect() { return { roomId: "123" }; }
+    async disconnect() {}
+  }
+
+  const adapter = new TikTokAdapter({ connectorFactory: FakeConnector });
+  const status = await adapter.connect({ username: "@crazy_batto" });
+
+  assert.equal(status.connected, true);
+  assert.equal(constructions.length, 1);
+  assert.equal(constructions[0].username, "crazy_batto");
+  assert.equal(constructions[0].options.processInitialData, false);
+  assert.equal(constructions[0].options.fetchRoomInfoOnConnect, true);
+  assert.equal(constructions[0].options.enableExtendedGiftInfo, true);
+  await adapter.disconnect();
+});
+
+test("TikTok-Verbindungsfehler werden kontrolliert zurückgegeben", async () => {
+  class BrokenConnector {
+    on() {}
+    async connect() { throw new TypeError("Cannot read properties of undefined (reading 'processInitialData')"); }
+    async disconnect() {}
+  }
+
+  const adapter = new TikTokAdapter({ connectorFactory: BrokenConnector });
+  await assert.rejects(
+    () => adapter.connect({ username: "crazy_batto" }),
+    /TikTok LIVE Verbindung fehlgeschlagen/
+  );
+  assert.equal(adapter.status().connected, false);
 });
