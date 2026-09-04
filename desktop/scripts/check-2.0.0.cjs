@@ -28,7 +28,7 @@ const required = [
   "src/stream-overlay/chat-overlay.html", "src/stream-overlay/chat-overlay.css", "src/stream-overlay/chat-overlay.js",
   "src/renderer/integrated.js", "src/renderer/integrated.css", "src/renderer/assets/team-alpha-logo.svg",
   "src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/obs-websocket.cjs", "src/services/obs-chat-overlay.cjs",
-  "src/services/common.cjs", "src/services/deck-store.cjs", "src/services/plugin-registry.cjs",
+  "src/services/common.cjs", "src/services/plugin-registry.cjs",
   "src/services/native-plugin-additions.cjs", "src/services/action-executor.cjs", "src/services/migration.cjs",
   "src/services/mobile-bridge.cjs", "src/services/multi-chat.cjs", "src/services/stream-overlay-server.cjs",
   "src/services/twitch-holo-server.cjs", "src/mobile/index.html", "src/mobile/styles.css", "src/mobile/app.js",
@@ -60,6 +60,7 @@ if (packageJson.build?.nsis?.runAfterFinish !== false) fail("Installer darf die 
 if (packageJson.build?.nsis?.include !== "build/installer.nsh") fail("Installer-Erweiterung fehlt.");
 if (!packageJson.dependencies?.ws || !packageJson.dependencies?.qrcode) fail("WebSocket- oder QR-Abhängigkeit fehlt.");
 if (!String(packageJson.scripts?.test || "").includes("integrated-2.0.0.test.cjs")) fail("2.0.0-Integrationstest ist nicht eingebunden.");
+if (String(packageJson.scripts?.test || "").toLowerCase().includes("touch-deck")) fail("Touch-Deck-Test ist noch in package.json eingebunden.");
 
 const main = read("src/main.cjs");
 const preload = read("src/preload.cjs");
@@ -73,7 +74,6 @@ const mobileJs = read("src/mobile/app.js");
 const pluginRegistry = read("src/services/plugin-registry.cjs");
 const pluginAdditions = read("src/services/native-plugin-additions.cjs");
 const actionExecutor = read("src/services/action-executor.cjs");
-const deckStore = read("src/services/deck-store.cjs");
 const migration = read("src/services/migration.cjs");
 const multiChat = read("src/services/multi-chat.cjs");
 const streamOverlayCss = read("src/stream-overlay/overlay.css");
@@ -90,6 +90,7 @@ requireText(main, 'sampler?.sample?.(hardware)', "Hardware wird nicht an die Tel
 requireText(main, 'gpu: preferredGpu()', "Encoder-Empfehlung verwendet nicht die bevorzugte GPU.");
 requireText(main, 'handle("obs:forget-password"', "Gespeichertes OBS-Passwort kann nicht gelöscht werden.");
 forbidText(main, /mobileBridge\s*=\s*null\s*;\s*\/\/.*deaktiv/i, "Handy-Brücke ist im Produktionscode deaktiviert.");
+forbidText(main, /DeckStore|deckStore|deck:create-profile|deck:execute-button|Touch-Deck/i, "Touch Deck ist noch im Hauptprozess enthalten.");
 
 requireText(obsClient, /ws:\/\/\$\{formatted\}:\$\{/, "OBS-WebSocket-Adresse wird nicht gültig formatiert.");
 requireText(obsClient, "127.0.0.1", "Lokaler OBS-Loopback fehlt.");
@@ -102,9 +103,13 @@ requireText(hardware, /score -= 1000/, "Integrierte GPU wird nicht abgewertet.")
 requireText(index, "Version 2.0.0", "Hauptfenster zeigt nicht Version 2.0.0.");
 requireText(index, "integrated.css", "Integrierte Styles werden nicht geladen.");
 requireText(index, "integrated.js", "Integrierte Oberfläche wird nicht geladen.");
-for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Touch-Deck Pro", "Handy verbinden", "Übernahme & Diagnose"]) {
+for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Handy verbinden", "Übernahme & Diagnose"]) {
   requireText(integratedJs, label, `Navigationsbereich fehlt: ${label}`);
 }
+forbidText(integratedJs, /Touch-Deck|Touch Deck|deck-pro|deckStore|DeckStore/i, "Touch Deck ist noch in der integrierten Oberfläche enthalten.");
+forbidText(index, /Touch-Deck|Touch Deck|data-view=["']deck/i, "Touch Deck ist noch im Hauptfenster enthalten.");
+forbidText(preload, /Touch-Deck|Touch Deck|deck:create-profile|deck:execute-button|deckStore|DeckStore/i, "Touch Deck ist noch in der Electron-Brücke enthalten.");
+forbidText(mobileHtml + "\n" + mobileJs, /Touch-Deck|Touch Deck|data-page=["']deck|deck-button/i, "Touch Deck ist noch in der Handy-Oberfläche enthalten.");
 requireText(integratedCss, "overflow-x: hidden", "Horizontaler Überlauf ist nicht abgesichert.");
 requireText(integratedCss, "@media (max-width: 980px)", "Schmale Fenster werden nicht responsiv behandelt.");
 
@@ -125,10 +130,6 @@ requireText(mobileBridge, "randomPin()", "Sechsstellige Handy-PIN fehlt.");
 requireText(mobileBridge, "QRCode.toDataURL", "QR-Code-Erzeugung fehlt.");
 requireText(mobileHtml, "Batto OBS Tool", "Mobile Oberfläche ist nicht umbenannt.");
 
-requireText(deckStore, "rows * columns", "Variables Touch-Deck-Raster fehlt.");
-requireText(deckStore, "moveButton", "Drag-and-drop-Datenoperation fehlt.");
-requireText(deckStore, "delayMs", "Mehrfachaktions-Verzögerung fehlt.");
-forbidText(deckStore, /buttons\s*=\s*buttons\.slice\(0,\s*capacity\)/, "Rasterverkleinerung würde Belegungen löschen.");
 requireText(migration, "copyDirectoryMissing", "Nicht überschreibende Altdatenmigration fehlt.");
 requireText(migration, "Creator Hub", "Legacy-Pfade werden nicht erkannt.");
 
