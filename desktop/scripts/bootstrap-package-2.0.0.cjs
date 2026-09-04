@@ -10,7 +10,7 @@ const packageJson = JSON.parse(fs.readFileSync(file, "utf8"));
 packageJson.name = "batto-obs-tool";
 packageJson.version = "2.0.0";
 packageJson.productName = "Batto OBS Tool";
-packageJson.description = "Lokales Windows-Tool für OBS, Hardwarediagnose, Encoder-Empfehlung, Overlays, Multi-Chat, Touch-Deck, Plugins und Handy-Steuerung.";
+packageJson.description = "Lokales Windows-Tool für OBS, Hardwarediagnose, Encoder-Empfehlung, Overlays, Multi-Chat, Plugins und Handy-Steuerung.";
 packageJson.main = "src/main.cjs";
 packageJson.author = packageJson.author || "Crazy_Batto / Team Alpha";
 packageJson.license = packageJson.license || "UNLICENSED";
@@ -28,7 +28,7 @@ packageJson.devDependencies = {
 packageJson.scripts = {
   ...(packageJson.scripts || {}),
   start: "electron .",
-  "prepare:release": "node scripts/prepare-2.0.0-release.cjs && node scripts/patch-2.0.0-runtime.cjs && node scripts/patch-2.0.0-deck-safety.cjs",
+  "prepare:release": "node scripts/prepare-2.0.0-release.cjs && node scripts/patch-2.0.0-runtime.cjs",
   "check:release": "node scripts/check-2.0.0.cjs",
   "test:release": "node --test test/*.test.cjs",
   "dist:release": "electron-builder --win nsis --x64"
