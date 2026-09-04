@@ -26,9 +26,11 @@ for (const forbidden of ["Hardwarediagnose", "PC vollständig scannen", "Encoder
   if (html.includes(forbidden)) throw new Error(`Unerwünschte Alt-UI im 2.1-Renderer: ${forbidden}`);
 }
 
-for (const required of ["view-overview", "view-obs", "multi-chat-root", "view-deck-pro", "view-holo", "view-settings"]) {
+for (const required of ["view-overview", "view-obs", "multi-chat-root", "view-deck-0802", "view-moderation", "view-cohost", "view-holo", "view-settings"]) {
   if (!html.includes(required)) throw new Error(`2.1-Rendererbereich fehlt: ${required}`);
 }
 
+if (html.includes("Touch-Deck Pro")) throw new Error("Touch-Deck Pro darf im neuen Renderer nicht mehr verwendet werden.");
+
 fs.writeFileSync(htmlFile, html, "utf8");
-console.log("Clean 2.1 renderer + commercial settings integrated.");
+console.log("Clean 2.1 renderer + user-specified Touch-Deck/moderation/co-host settings integrated.");
