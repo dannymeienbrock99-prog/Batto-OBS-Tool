@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { YouTubeAdapter, roleFor } = require("../src/services/platforms/youtube-adapter.cjs");
 const { TwitchAdapter } = require("../src/services/platforms/twitch-adapter.cjs");
-const { TikTokAdapter } = require("../src/services/platforms/tiktok-adapter.cjs");
+const { TikTokAdapter, isOfflineError } = require("../src/services/platforms/tiktok-adapter.cjs");
 
 test("YouTube Rollen werden normalisiert", () => {
   assert.equal(roleFor({ isChatOwner: true }), "broadcaster");
@@ -84,6 +84,7 @@ test("TikTok übergibt immer ein vollständiges Connector-Optionsobjekt", async 
   const status = await adapter.connect({ username: "@crazy_batto" });
 
   assert.equal(status.connected, true);
+  assert.equal(status.offline, false);
   assert.equal(constructions.length, 1);
   assert.equal(constructions[0].username, "crazy_batto");
   assert.equal(constructions[0].options.processInitialData, false);
@@ -92,7 +93,22 @@ test("TikTok übergibt immer ein vollständiges Connector-Optionsobjekt", async 
   await adapter.disconnect();
 });
 
-test("TikTok-Verbindungsfehler werden kontrolliert zurückgegeben", async () => {
+test("TikTok offline ist ein normaler Status und kein Remote-Method-Fehler", async () => {
+  class OfflineConnector {
+    on() {}
+    async connect() { throw new Error("The requested user isn't online :("); }
+    async disconnect() {}
+  }
+
+  const adapter = new TikTokAdapter({ connectorFactory: OfflineConnector });
+  const status = await adapter.connect({ username: "crazy_batto" });
+  assert.equal(status.connected, false);
+  assert.equal(status.offline, true);
+  assert.equal(status.configured, true);
+  assert.equal(isOfflineError("The requested user isn't online :("), true);
+});
+
+test("TikTok echte Verbindungsfehler werden kontrolliert zurückgegeben", async () => {
   class BrokenConnector {
     on() {}
     async connect() { throw new TypeError("Cannot read properties of undefined (reading 'processInitialData')"); }
@@ -105,4 +121,5 @@ test("TikTok-Verbindungsfehler werden kontrolliert zurückgegeben", async () => 
     /TikTok LIVE Verbindung fehlgeschlagen/
   );
   assert.equal(adapter.status().connected, false);
+  assert.equal(adapter.status().offline, false);
 });
