@@ -134,6 +134,8 @@ class TikTokHybridAdapter extends EventEmitter {
     this.offline = false;
     this.lastError = "";
 
+    if (config.directOnly === true) return this.connectDirect(config);
+
     // Dependency-injected direct connector is primarily used for deterministic
     // adapter tests and custom runtimes. Production still prefers TikFinity.
     if (this.preferInjectedDirect && (config.username || config.uniqueId)) {
