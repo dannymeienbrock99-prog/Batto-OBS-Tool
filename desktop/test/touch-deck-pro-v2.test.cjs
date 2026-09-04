@@ -13,8 +13,8 @@ const creatorScript = fs.readFileSync(path.join(root, "bootstrap-2.0/src/rendere
 const creatorCss = fs.readFileSync(path.join(root, "bootstrap-2.0/src/renderer/touch-deck-creatorhub.css"), "utf8");
 const prepare = fs.readFileSync(path.join(root, "scripts/prepare-touch-deck-pro-v2.cjs"), "utf8");
 const deckBootstrap = fs.readFileSync(path.join(root, "src/deck-bootstrap.cjs"), "utf8");
-const quickBootstrap = fs.readFileSync(path.join(root, "src/deck-creatorhub-bootstrap.cjs"), "utf8");
 const pluginRegistry = fs.readFileSync(path.join(root, "bootstrap-2.0/src/services/plugin-registry.cjs"), "utf8");
+const deckStore = fs.readFileSync(path.join(root, "bootstrap-2.0/src/services/deck-store.cjs"), "utf8");
 
 test("Touch-Deck-Pro-V2 JavaScript ist syntaktisch gültig", () => {
   assert.doesNotThrow(() => new vm.Script(script));
@@ -48,23 +48,29 @@ test("Rasteränderungen bewahren verdeckte Belegungen", () => {
   assert.match(script, /deck:update-folder/);
 });
 
-test("Produktionsvorbereitung lädt V2-Deck und Creator-Hub-Präsentation", () => {
+test("Produktionsvorbereitung lädt V2-Deck und 1.8.6-Präsentation", () => {
   for (const file of [
     "touch-deck-pro-v2.css", "touch-deck-pro-v2.js",
     "touch-deck-creatorhub.css", "touch-deck-creatorhub.js"
   ]) assert.match(prepare, new RegExp(file.replaceAll(".", "\\.")));
 });
 
-test("Creator-Hub-Deck startet als große Deck-Ansicht und schaltet Bearbeitung bewusst frei", () => {
-  for (const marker of ["Tasten belegen", "Vollbild", "creatorhub-editing", "deck:execute-button", "creatorhub-audio", "deck:quick-media"]) {
-    assert.match(creatorScript, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  }
+test("1.8.6 Touch-Deck startet mit 5x3 Raster und bewusster Bearbeitung", () => {
+  for (const marker of [
+    "PROFILE · ORDNER · PLUGIN-AKTIONEN",
+    "Touch-Deck",
+    "Tasten frei belegen",
+    "Tasten belegen",
+    "Vollbild",
+    "creatorhub-editing",
+    "deck:execute-button"
+  ]) assert.match(creatorScript, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(creatorScript, /creatorhub-audio/);
   assert.match(creatorCss, /132px/);
   assert.match(creatorCss, /creatorhub-deck:not\(\.creatorhub-editing\)/);
-  assert.match(quickBootstrap, /deck:quick-media/);
-  assert.match(quickBootstrap, /volumeup/);
-  assert.match(quickBootstrap, /volumedown/);
-  assert.match(quickBootstrap, /mute/);
+  assert.match(deckStore, /rows:\s*3,\s*columns:\s*5/);
+  assert.match(deckStore, /name:\s*"Standard"/);
+  assert.match(deckStore, /name:\s*"Hauptseite"/);
 });
 
 test("Creator-Hub- und Elgato-Pluginpfade bleiben als Importquelle erhalten", () => {
