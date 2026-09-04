@@ -22,9 +22,8 @@ const files = [
 
 for (const relative of files) {
   const filename = path.join(root, relative);
+  if (!fs.existsSync(filename)) continue;
   const source = fs.readFileSync(filename, "utf8");
   const normalized = source.replace(/\r\n/g, "\n");
   if (normalized !== source) fs.writeFileSync(filename, normalized, "utf8");
 }
-
-require("./apply-1.9.1-source-fixes-v4.cjs");
