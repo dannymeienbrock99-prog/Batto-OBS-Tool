@@ -5,6 +5,7 @@
   const byId = (id) => document.getElementById(id);
   const pageMeta = {
     overview: ["Übersicht", "Hardwarediagnose, OBS, Multi-Chat und Chat Bot."],
+    multichat: ["Multi-Chat", "Twitch, TikTok, CNG und YouTube mit Moderation in einem Chat."],
     hardware: ["Hardwarediagnose", "Tatsächlich verbaute Komponenten lokal erfassen."],
     internet: ["Internettest", "Upload, Download und Latenz messen."],
     obs: ["OBS-Verbindung", "OBS WebSocket 5 verbinden und steuern."],
