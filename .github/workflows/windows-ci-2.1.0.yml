@@ -24,6 +24,11 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
@@ -32,6 +37,15 @@ jobs:
 
       - name: Verify production source
         run: node scripts/verify-source-tree.cjs
+
+      - name: Verify original TouchDeck
+        shell: pwsh
+        run: |
+          $exe = "resources/touchdeck-0802/CreatorHub.TouchDeck.exe"
+          if (-not (Test-Path $exe)) { throw "Original 02.08.2026 TouchDeck missing: $exe" }
+          $source = Get-Content "resources/touchdeck-0802/SOURCE-COMMIT.txt" -Raw
+          if ($source.Trim() -ne "51be33d29c07f50323b19d58782804af391b8394") { throw "Wrong TouchDeck source commit: $source" }
+          Write-Host "Original TouchDeck verified from commit $($source.Trim())."
 
       - name: Run tests
         run: npm test
@@ -47,6 +61,15 @@ jobs:
           $item = Get-Item $exe
           if ($item.Length -lt 1MB) { throw "Windows executable is unexpectedly small: $($item.Length) bytes" }
           Write-Host "Windows executable verified: $($item.FullName) ($($item.Length) bytes)"
+
+      - name: Verify packaged original TouchDeck
+        shell: pwsh
+        run: |
+          $exe = "dist/win-unpacked/resources/touchdeck-0802/CreatorHub.TouchDeck.exe"
+          if (-not (Test-Path $exe)) { throw "Packaged original TouchDeck missing: $exe" }
+          $item = Get-Item $exe
+          if ($item.Length -lt 1MB) { throw "Packaged TouchDeck is unexpectedly small: $($item.Length) bytes" }
+          Write-Host "Packaged original TouchDeck verified: $($item.FullName) ($($item.Length) bytes)"
 
       - name: Run packaged self-test
         shell: pwsh
