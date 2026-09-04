@@ -70,10 +70,37 @@ async function secureChatConnect(platform, input = {}) {
     config.accessToken = String(config.accessToken || await platformSecretStore.get("youtube-oauth-token") || "").trim();
   } else if (platform === "tiktok") {
     config.username = String(config.username || settings.platforms?.tiktok?.username || "").trim();
+    config.signApiKey = String(config.signApiKey || await platformSecretStore.get("tiktok-euler-sign-api-key") || "").trim();
   } else if (platform === "cng" && !Object.keys(config).length) {
     return core.connect(platform, await loadCngConfig());
   }
   return core.connect(platform, config);
+}
+
+async function startConfiguredChats() {
+  const settings = await settingsStore.get();
+  const platforms = settings.platforms || {};
+  const selected = [];
+
+  if (platforms.tiktok?.enabled && platforms.tiktok?.autoConnect && platforms.tiktok?.api?.enabled !== false && platforms.tiktok?.api?.chat !== false) selected.push("tiktok");
+  if (platforms.twitch?.enabled && platforms.twitch?.autoConnect && platforms.twitch?.chat !== false) selected.push("twitch");
+  if (platforms.youtube?.enabled && platforms.youtube?.autoConnect && platforms.youtube?.chat !== false) selected.push("youtube");
+  if (platforms.cng?.enabled && platforms.cng?.autoConnect && platforms.cng?.chat !== false) selected.push("cng");
+
+  const results = await Promise.allSettled(selected.map(async (platform) => {
+    try {
+      const status = await secureChatConnect(platform, {});
+      broadcast("chat:status", { platform, ...status, autoConnect: true });
+      return status;
+    } catch (error) {
+      const message = String(error?.message || error || "Chat-Verbindung fehlgeschlagen");
+      broadcast("chat:status", { platform, connected: false, autoConnect: true, error: message });
+      console.error(`${platform}-Chat AutoConnect fehlgeschlagen:`, error);
+      throw error;
+    }
+  }));
+
+  return { selected, results };
 }
 
 function attachEmbeddedChat(main) {
@@ -176,6 +203,8 @@ app.whenReady().then(async () => {
   await windows.loadSettings();
   registerChatIpc();
   globalShortcut.register("CommandOrControl+Shift+C", () => windows.toggle());
+
+  void startConfiguredChats().catch((error) => console.error("Chat-AutoConnect konnte nicht vollständig gestartet werden:", error));
 
   if (overlaySettings.autoInstall) {
     const status = overlayStatus();
