@@ -3,6 +3,7 @@
 const path = require("node:path");
 const { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } = require("electron");
 require("./services/moderation-bootstrap.cjs");
+require("./services/v4-bootstrap.cjs");
 const { SettingsStore } = require("./services/store.cjs");
 const { SecretStore } = require("./services/secret-store.cjs");
 const { runInternetTest } = require("./services/internet-test.cjs");
@@ -63,10 +64,10 @@ function createMainWindow() {
     height: 940,
     minWidth: 1040,
     minHeight: 700,
-    backgroundColor: "#070b12",
+    backgroundColor: "#e9f7ff",
     autoHideMenuBar: true,
     show: false,
-    icon: path.join(__dirname, "renderer", "assets", "team-alpha-logo.svg"),
+    icon: path.join(__dirname, "..", "resources", "desktop-icon.jpg"),
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: false, webSecurity: true }
   });
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
