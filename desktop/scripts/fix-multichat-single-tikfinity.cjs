@@ -14,6 +14,10 @@ source = source.replace(
   'root.querySelector("#tikfinity-disconnect").onclick = () => disconnectTikfinity(false);',
   'root.querySelector("#tikfinity-disconnect").onclick = () => void disconnectTikfinityBackend();'
 );
+source = source.replace(
+  'api.chatConnect("tiktok", { username:val("cfg-tiktok-user") })',
+  'api.chatConnect("tiktok", { username:val("cfg-tiktok-user"), directOnly:true })'
+);
 
 const transportBlock = /  function scheduleTikfinityRetry\(\) \{[\s\S]*?\n  function bindListeners\(\) \{/;
 if (!transportBlock.test(source)) throw new Error("Alter Renderer-TikFinity-Transportblock wurde nicht gefunden.");
@@ -52,6 +56,7 @@ source = source.replace('  let tikfinity = null;\n  let tikfinityRetry = null;\n
 if (source.includes('new WebSocket(TIKFINITY_URL)')) throw new Error("Renderer öffnet weiterhin einen eigenen TikFinity-WebSocket.");
 if (!source.includes('connectTikfinityBackend')) throw new Error("Backend-TikFinity-Verbindung wurde nicht eingebaut.");
 if (!source.includes('directFallback:false')) throw new Error("TikFinity-Button ist nicht auf den lokalen Backend-Transport festgelegt.");
+if (!source.includes('directOnly:true')) throw new Error("Der explizite TikTok-Direkt-Button ist nicht als Direktverbindung markiert.");
 
 fs.writeFileSync(file, source, "utf8");
-console.log("Multi-Chat: TikFinity besitzt jetzt genau einen Transportweg über den Backend-Hybridadapter.");
+console.log("Multi-Chat: TikFinity besitzt genau einen Backend-Transport; explizite Direktverbindung bleibt separat.");
