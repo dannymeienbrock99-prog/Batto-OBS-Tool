@@ -2,7 +2,7 @@
 
 const { EventEmitter } = require("node:events");
 const WebSocket = require("ws");
-const { TikTokAdapter } = require("./tiktok-adapter.cjs");
+const { TikTokAdapter } = require("./tiktok-direct-adapter.cjs");
 
 function pick(obj, paths, fallback = "") {
   for (const path of paths) {
@@ -45,7 +45,6 @@ function normalizeTikFinityPayload(raw) {
     if (!text) return { event, data, message: null };
     return { event, data, message: { ...base, id: String(pick(data, ["msgId", "id"], "")), message: text } };
   }
-
   if (event === "gift") {
     const gift = String(pick(data, ["giftName", "gift.name", "gift.extendedName"], "Geschenk"));
     const count = Number(pick(data, ["repeatCount", "gift.repeatCount", "count"], 1)) || 1;
@@ -122,6 +121,7 @@ class TikTokHybridAdapter extends EventEmitter {
         this.connected = Boolean(status.connected);
         this.lastError = status.offline ? "TikTok ist aktuell nicht LIVE." : "";
         this.emitStatus({ fallback: true, offline: Boolean(status.offline) });
+        if (!this.connected) this.scheduleReconnect();
         return this.status();
       } catch (error) {
         this.connected = false;
