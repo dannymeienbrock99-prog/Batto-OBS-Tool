@@ -90,7 +90,10 @@ requireText(multiChatCss, "multi-chat-hero.jpg", "Verbindliches Multi-Chat-Bild 
 
 requireText(obsClient, "127.0.0.1", "Lokaler OBS-Loopback fehlt.");
 requireText(obsClient, "::1", "IPv6-Loopback fehlt.");
-requireText(obsClient, "authentication(password", "OBS-WebSocket-Authentifizierung fehlt.");
+requireText(obsClient, /function\s+obsAuthentication\s*\(password,\s*salt,\s*challenge\)/, "OBS-WebSocket-Authentifizierungsfunktion fehlt.");
+requireText(obsClient, /identify\.authentication\s*=\s*obsAuthentication\(/, "OBS-WebSocket-Authentifizierung wird beim Identify nicht verwendet.");
+requireText(obsClient, /authentication\.salt/, "OBS-WebSocket-Salt wird nicht ausgewertet.");
+requireText(obsClient, /authentication\.challenge/, "OBS-WebSocket-Challenge wird nicht ausgewertet.");
 requireText(hardware, "selectPreferredGpu", "Auswahl der dedizierten GPU fehlt.");
 requireText(index, "Batto OBS Tool", "Produktname fehlt im Hauptfenster.");
 requireText(preload, "contextBridge", "Sichere Electron-Brücke fehlt.");
