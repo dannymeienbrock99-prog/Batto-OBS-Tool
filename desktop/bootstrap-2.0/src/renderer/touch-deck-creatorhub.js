@@ -82,9 +82,6 @@
       row.prepend(edit);
     }
 
-    const oldAudio = shell.parentElement?.querySelector(".creatorhub-audio");
-    oldAudio?.remove();
-
     const grid = shell.querySelector("#tdp-grid");
     grid?.addEventListener("click", (event) => {
       if (shell.classList.contains("creatorhub-editing")) return;
