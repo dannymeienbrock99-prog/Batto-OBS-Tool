@@ -27,7 +27,6 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   getHoloStatus: () => ipcRenderer.invoke("holo:status"),
   openHoloEditor: () => ipcRenderer.invoke("holo:open-editor"),
   copyHoloUrl: () => ipcRenderer.invoke("holo:copy-url"),
-  executeDeckAction: (assignment) => ipcRenderer.invoke("deck:execute", assignment),
   saveReport: (report) => ipcRenderer.invoke("dialog:save-report", report),
   chatHistory: (options) => ipcRenderer.invoke("chat:history", options),
   chatStatuses: () => ipcRenderer.invoke("chat:statuses"),
