@@ -1,13 +1,15 @@
 "use strict";
 
 const mainRuntime = require("./main.cjs");
-require("./services/moderation-bootstrap.cjs");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { app, BrowserWindow, clipboard, globalShortcut, ipcMain, safeStorage, shell } = require("electron");
 const { ChatCore } = require("./services/chat-core.cjs");
 const { ChatBotService } = require("./services/chat-bot.cjs");
+const { ChatFilterService } = require("./services/chat-filter.cjs");
 const { ChatWindowManager } = require("./services/chat-window-manager.cjs");
+const { ensureModerationStore } = require("./services/moderation-bootstrap.cjs");
+const { ensureV4Stores } = require("./services/v4-bootstrap.cjs");
 const { TwitchAdapter } = require("./services/platforms/twitch-adapter.cjs");
 const { CngUnifiedAdapter } = require("./services/platforms/cng-adapter.cjs");
 const { TikTokAdapter } = require("./services/platforms/tiktok-adapter.cjs");
@@ -19,6 +21,7 @@ const { ensureObsChatOverlay, removeObsChatOverlay, toOverlayChatEvent } = requi
 
 let core = null;
 let chatBot = null;
+let chatFilter = null;
 let windows = null;
 let cngConfig = {};
 let ttsConfig = normalizeTtsConfig();
@@ -64,12 +67,16 @@ function attachEmbeddedChat(main) {
   const scriptPath = path.join(__dirname, "renderer", "multi-chat.js").replaceAll("\\", "/");
   const controlsPath = path.join(__dirname, "renderer", "chat-overlay-controls.js").replaceAll("\\", "/");
   const cssPath = path.join(__dirname, "renderer", "multi-chat.css").replaceAll("\\", "/");
-  const code = `(function(){if(document.getElementById('batto-multi-chat-dock'))return;const css=document.createElement('link');css.rel='stylesheet';css.href='file://${cssPath}';document.head.appendChild(css);const host=document.createElement('div');host.id='batto-multi-chat-dock';host.style='position:fixed;right:18px;bottom:18px;width:460px;height:700px;z-index:2147483000;box-shadow:0 22px 70px rgba(0,0,0,.55);border:1px solid #223044;border-radius:10px;overflow:hidden;background:#090d14;';const root=document.createElement('div');root.id='multi-chat-root';root.style='height:100%';host.appendChild(root);document.body.appendChild(host);const s=document.createElement('script');s.src='file://${scriptPath}';s.onload=function(){const controls=document.createElement('script');controls.src='file://${controlsPath}';document.body.appendChild(controls);};document.body.appendChild(s);window.batto.onChatWindow(function(state){host.hidden=!!state.undocked});})();`;
+  const code = `(function(){if(document.getElementById('multi-chat-root')||document.getElementById('batto-multi-chat-dock'))return;const css=document.createElement('link');css.rel='stylesheet';css.href='file://${cssPath}';document.head.appendChild(css);const host=document.createElement('div');host.id='batto-multi-chat-dock';host.style='position:fixed;right:18px;bottom:18px;width:460px;height:700px;z-index:2147483000;box-shadow:0 22px 70px rgba(0,0,0,.55);border:1px solid #223044;border-radius:10px;overflow:hidden;background:#090d14;';const root=document.createElement('div');root.id='multi-chat-root';root.style='height:100%';host.appendChild(root);document.body.appendChild(host);const s=document.createElement('script');s.src='file://${scriptPath}';s.onload=function(){const controls=document.createElement('script');controls.src='file://${controlsPath}';document.body.appendChild(controls);};document.body.appendChild(s);window.batto.onChatWindow(function(state){host.hidden=!!state.undocked});})();`;
   main.webContents.executeJavaScript(code).catch((error) => console.error("Multi-Chat-Einbettung fehlgeschlagen:", error));
 }
 
 function registerChatIpc() {
-  ipcMain.handle("chat:history", (_event, options) => core.history(options));
+  ipcMain.handle("chat:history", async (_event, options) => {
+    const history = core.history(options);
+    if (!chatFilter) return history;
+    return (await chatFilter.filterBatch(history, { apply: false })).visible;
+  });
   ipcMain.handle("chat:statuses", () => core.statuses());
   ipcMain.handle("chat:connect", (_event, platform, config) => core.connect(platform, config));
   ipcMain.handle("chat:disconnect", (_event, platform) => core.disconnect(platform));
@@ -78,6 +85,10 @@ function registerChatIpc() {
   ipcMain.handle("chat:toggle-window", () => windows.toggle());
   ipcMain.handle("chat:window-status", () => windows.status());
   ipcMain.handle("chat:window-always-on-top", (_event, value) => windows.setAlwaysOnTop(value));
+  ipcMain.handle("chat-filter:test", async (_event, input = {}) => {
+    if (!chatFilter) throw new Error("Chat-Filter ist noch nicht gestartet.");
+    return chatFilter.evaluate({ platform: input.platform || "twitch", username: input.username || "TestUser", message: input.message || "" }, { apply: false });
+  });
   ipcMain.handle("chat:overlay-status", () => overlayStatus());
   ipcMain.handle("chat:overlay-copy-url", () => { const url = overlayStatus().url; if (!url) throw new Error("Das lokale Chat-Overlay ist noch nicht gestartet."); clipboard.writeText(url); return url; });
   ipcMain.handle("chat:overlay-open", async () => { const url = overlayStatus().url; if (!url) throw new Error("Das lokale Chat-Overlay ist noch nicht gestartet."); await shell.openExternal(url); return url; });
@@ -132,6 +143,10 @@ app.whenReady().then(async () => {
   cngConfig = await loadCngConfig();
   ttsConfig = normalizeTtsConfig(await readJson(ttsConfigFile(), {}));
 
+  const { configStore, logStore } = await ensureV4Stores();
+  const moderationStore = await ensureModerationStore();
+  chatFilter = new ChatFilterService({ getConfig: (id) => configStore.get(id), moderationStore, logStore });
+
   core = new ChatCore({ maxMessages: 500, flushMs: 60 });
   core.registerAdapter(new TwitchAdapter());
   core.registerAdapter(new CngUnifiedAdapter());
@@ -150,12 +165,15 @@ app.whenReady().then(async () => {
   chatBot.on("overlay", (entry) => broadcast("chatbot:overlay", entry));
 
   core.on("messages", (batch) => {
-    const server = overlayServer();
-    for (const message of batch) {
-      server?.publishEvent(toOverlayChatEvent(message));
-      void chatBot.ingestChat(message).catch((error) => chatBot.log("error", `Command-Fehler: ${error.message}`));
-    }
-    broadcast("chat:messages", batch);
+    void (async () => {
+      const filtered = chatFilter ? await chatFilter.filterBatch(batch, { apply: true }) : { visible: batch };
+      const server = overlayServer();
+      for (const message of filtered.visible) {
+        server?.publishEvent(toOverlayChatEvent(message));
+        await chatBot.ingestChat(message).catch((error) => chatBot.log("error", `Command-Fehler: ${error.message}`));
+      }
+      if (filtered.visible.length) broadcast("chat:messages", filtered.visible);
+    })().catch((error) => console.error("Chat-Filter-Verarbeitung fehlgeschlagen:", error));
   });
   core.on("status", (status) => broadcast("chat:status", status));
   core.on("cleared", (platform) => { overlayServer()?.clearChat(platform); broadcast("chat:cleared", platform); });
