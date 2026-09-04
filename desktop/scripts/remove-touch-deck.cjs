@@ -33,13 +33,14 @@ function removeLineContaining(text, needles) {
     'new LegacyMigration({ userData: app.getPath("userData"), pluginRegistry })');
   text = removeLineContaining(text, ['await check("DeckStore"', 'check("DeckStore"']);
 
-  const mobileStart = '\nasync function executeMobilePayload(payload = {}) {\n  if (payload.kind === "deck-button") {';
-  const mobileNext = '\n  if (payload.kind === "action") {';
-  if (text.includes(mobileStart)) {
-    const start = text.indexOf(mobileStart);
-    const next = text.indexOf(mobileNext, start);
-    if (next < 0) throw new Error("Touch-Deck-Entfernung: Mobile-Aktionsmarker fehlt.");
-    text = text.slice(0, start) + '\nasync function executeMobilePayload(payload = {}) {' + text.slice(next);
+  const mobileFunctionStart = '\nasync function executeMobilePayload(payload = {}) {';
+  const connectObsStart = '\nasync function connectObs(';
+  if (text.includes(mobileFunctionStart)) {
+    const start = text.indexOf(mobileFunctionStart);
+    const next = text.indexOf(connectObsStart, start);
+    if (next < 0) throw new Error("Touch-Deck-Entfernung: connectObs-Marker fehlt.");
+    const replacement = '\nasync function executeMobilePayload(payload = {}) {\n  if (payload.kind === "action" && payload.action) return actionExecutor.execute(payload.action, { source: "mobile" });\n  throw new Error("Unbekannte Handy-Aktion.");\n}\n';
+    text = text.slice(0, start) + replacement + text.slice(next);
   }
 
   const deckIpcStart = '\n  handle("deck:create-profile"';
