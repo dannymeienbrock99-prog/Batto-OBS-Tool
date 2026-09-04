@@ -11,7 +11,6 @@ function on(channel, callback) {
 contextBridge.exposeInMainWorld("batto", Object.freeze({
   getState: () => ipcRenderer.invoke("app:get-state"),
   saveSettings: (value) => ipcRenderer.invoke("settings:save", value),
-  scanHardware: () => ipcRenderer.invoke("hardware:scan"),
   runInternetTest: () => ipcRenderer.invoke("internet:test"),
   connectObs: (options) => ipcRenderer.invoke("obs:connect", options),
   disconnectObs: () => ipcRenderer.invoke("obs:disconnect"),
@@ -21,7 +20,6 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   getHoloStatus: () => ipcRenderer.invoke("holo:status"),
   openHoloEditor: () => ipcRenderer.invoke("holo:open-editor"),
   copyHoloUrl: () => ipcRenderer.invoke("holo:copy-url"),
-  saveReport: (report) => ipcRenderer.invoke("dialog:save-report", report),
 
   chatHistory: (options) => ipcRenderer.invoke("chat:history", options),
   chatStatuses: () => ipcRenderer.invoke("chat:statuses"),
