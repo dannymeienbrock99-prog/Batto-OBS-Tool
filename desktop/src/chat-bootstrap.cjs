@@ -1,6 +1,7 @@
 "use strict";
 
 const mainRuntime = require("./main.cjs");
+require("./services/moderation-bootstrap.cjs");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { app, BrowserWindow, clipboard, globalShortcut, ipcMain, safeStorage, shell } = require("electron");
