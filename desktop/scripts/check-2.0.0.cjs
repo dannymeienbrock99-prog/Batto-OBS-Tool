@@ -23,7 +23,7 @@ const required = [
   "src/renderer/multi-chat.js", "src/renderer/multi-chat.css", "src/renderer/chat-bot.js", "src/renderer/chat-bot.css",
   "src/renderer/assets/multi-chat-hero.jpg",
   "src/services/chat-core.cjs", "src/services/chat-bot.cjs", "src/services/moderation-store.cjs", "src/services/moderation-bootstrap.cjs",
-  "src/services/platforms/twitch-adapter.cjs", "src/services/hardware.cjs", "src/services/obs-websocket.cjs",
+  "src/services/platforms/twitch-adapter.cjs", "src/services/internet-test.cjs", "src/services/obs-websocket.cjs",
   "src/services/secret-store.cjs", "src/services/store.cjs", "src/services/twitch-holo-server.cjs",
   "test/chat-bot.test.cjs", "test/multi-chat.test.cjs", "modules/twitch-holo-chat/web/overlay.html", "modules/twitch-holo-chat/web/overlay.js",
   "build/installer.nsh", "build/license.txt", "package.json"
@@ -34,6 +34,10 @@ const syntaxFiles = required.filter((relative) => /\.(?:cjs|js)$/.test(relative)
 for (const relative of syntaxFiles) {
   const result = spawnSync(process.execPath, ["--check", path.join(root, relative)], { encoding: "utf8" });
   if (result.status !== 0) fail(`Syntaxfehler in ${relative}:\n${result.stderr || result.stdout}`);
+}
+
+for (const forbiddenPath of ["src/services/hardware.cjs", "src/services/recommendation.cjs", "src/services/telemetry.cjs", "modules/encoder-monitoring-overlay"]) {
+  if (fs.existsSync(path.join(root, forbiddenPath))) fail(`Entfernter Bereich ist wieder vorhanden: ${forbiddenPath}`);
 }
 
 let packageJson = {};
@@ -66,16 +70,16 @@ requireText(main, /new TwitchHoloServer\(/, "Twitch-Hologramm wird nicht gestart
 requireText(main, 'handle("obs:forget-password"', "Gespeichertes OBS-Passwort kann nicht gelöscht werden.");
 requireText(main, "getObsClient", "Multi-Chat/Chat-Bot erhält keinen OBS-Laufzeitzugriff.");
 forbidText(main, /nodeIntegration:\s*true/, "Node-Integration ist im Renderer aktiviert.");
-forbidText(main, /MonitoringOverlayServer|recommendation:build|diagnostics:cpu-load|obs:recording-test/, "Entfernte Monitoring-/Empfehlungs-/Belastungstest-Funktion ist im Hauptprozess zurückgekehrt.");
+forbidText(main, /collectHardware|hardware:scan|MonitoringOverlayServer|recommendation:build|diagnostics:cpu-load|obs:recording-test/, "Entfernte Hardwarediagnose-/Monitoring-/Empfehlungs-/Belastungstest-Funktion ist im Hauptprozess zurückgekehrt.");
+forbidText(preload, /scanHardware|saveReport|hardware:scan|dialog:save-report/, "Hardwarediagnose-Bridge ist wieder vorhanden.");
 
 requireText(bootstrap, /new ChatCore\(/, "Multi-Chat wird nicht gestartet.");
 requireText(bootstrap, /new ChatBotService\(/, "Chat Bot wird nicht gestartet.");
 requireText(bootstrap, 'ipcMain.handle("chatbot:get-state"', "Chat-Bot-IPC fehlt.");
 requireText(bootstrap, "chatBot.ingestChat", "Chat-Nachrichten werden nicht an Commands übergeben.");
-requireText(bootstrap, "moderation-bootstrap.cjs", "Moderationsdienst wird nicht eingebunden.");
+requireText(main, "moderation-bootstrap.cjs", "Moderationsdienst wird nicht eingebunden.");
 requireText(preload, "getChatBotState", "Chat-Bot-Bridge fehlt.");
 requireText(preload, "getModerationState", "Moderations-Bridge fehlt.");
-requireText(preload, "applyModeration", "Moderations-Aktionsbridge fehlt.");
 requireText(index, 'data-view="multichat"', "Multi-Chat-Menüpunkt fehlt im Hauptfenster.");
 requireText(index, 'id="view-multichat"', "Multi-Chat-Hauptansicht fehlt.");
 requireText(multiChatJs, "contextmenu", "Rechtsklick-Moderationsmenü fehlt.");
@@ -83,7 +87,7 @@ requireText(multiChatJs, "Als Moderator hinzufügen", "Moderator-hinzufügen-Akt
 requireText(multiChatJs, "Als Moderator entfernen", "Moderator-entfernen-Aktion fehlt.");
 requireText(multiChatJs, "Stummschalten", "Stummschalten-Aktion fehlt.");
 requireText(multiChatJs, "Blockieren", "Blockieren-Aktion fehlt.");
-requireText(multiChatJs, "state.history", "Moderationsverlauf fehlt.");
+requireText(multiChatJs, "moderation-history", "Moderationsverlauf fehlt.");
 requireText(moderationStore, "moderators", "Moderatorliste fehlt im persistenten Moderationsspeicher.");
 requireText(moderationStore, "muted", "Stummgeschaltete Liste fehlt im persistenten Moderationsspeicher.");
 requireText(moderationStore, "blocked", "Blockierte Liste fehlt im persistenten Moderationsspeicher.");
@@ -98,7 +102,7 @@ requireText(obsClient, "::1", "IPv6-Loopback fehlt.");
 requireText(obsClient, /function\s+obsAuthentication\s*\(password,\s*salt,\s*challenge\)/, "OBS-WebSocket-Authentifizierungsfunktion fehlt.");
 requireText(obsClient, /identify\.authentication\s*=\s*obsAuthentication\(/, "OBS-WebSocket-Authentifizierung wird beim Identify nicht verwendet.");
 forbidText([index, appJs, chatBotJs].join("\n"), /Creator Hub/i, "Alte Produktbezeichnung ist in der Oberfläche enthalten.");
-forbidText([index, appJs, preload, main].join("\n"), /Encoder-Empfehlung|Realer Belastungs|Encoder- und Hardware-Monitoring|Monitoring-Overlay/i, "Entfernte Encoder-/Monitoring-/Belastungstest-Oberfläche ist wieder enthalten.");
+forbidText([index, appJs, preload, main].join("\n"), /Hardwarediagnose|Hardware vollständig erfassen|PC vollständig scannen|PC jetzt scannen|Hardware-Scan|Windows-Diagnose|Encoder-Empfehlung|Realer Belastungs|Encoder- und Hardware-Monitoring|Monitoring-Overlay/i, "Entfernter Hardware-/Encoder-/Monitoring-/Belastungstest-Bereich ist wieder enthalten.");
 
 if (errors.length) {
   console.error(`Batto OBS Tool 2.0.0 – ${errors.length} Prüfung(en) fehlgeschlagen:`);
