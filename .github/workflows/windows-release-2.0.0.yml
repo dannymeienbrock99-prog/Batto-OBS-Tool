@@ -42,37 +42,38 @@ jobs:
           npm install --no-audit --no-fund --ignore-scripts=false
           if ($LASTEXITCODE -ne 0) { throw "npm install ist fehlgeschlagen." }
 
-      - name: Prepare application
+      - name: Prepare integrated application
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          node scripts/prepare-2.0.0-integrated.cjs
+          npm run prepare:integrated
           if ($LASTEXITCODE -ne 0) { throw "Produktionsquelle konnte nicht vorbereitet werden." }
 
-      - name: Validate source
+      - name: Validate source and required artwork
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           npm run check
           if ($LASTEXITCODE -ne 0) { throw "Produktionsprüfung ist fehlgeschlagen." }
 
-      - name: Run tests
+      - name: Run integrated Chat Bot Multi Chat and module tests
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          node --test test/integrated-2.0.0.test.cjs test/store.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs
+          node --test test/integrated-2.0.0.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs
           if ($LASTEXITCODE -ne 0) { throw "Mindestens ein Test ist fehlgeschlagen." }
 
-      - name: Build Windows x64 NSIS installer
+      - name: Build Windows x64 NSIS installer with required desktop icon
         shell: pwsh
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
           $ErrorActionPreference = "Stop"
-          npx electron-builder --win nsis --x64 --publish never
+          npm run dist:win
           if ($LASTEXITCODE -ne 0) { throw "Windows-Installer konnte nicht gebaut werden." }
           $installer = Get-ChildItem "dist" -Filter "Batto-OBS-Tool-Setup-2.0.0.exe" -File | Select-Object -First 1
           if (-not $installer) { throw "Batto-OBS-Tool-Setup-2.0.0.exe fehlt." }
+          if (-not (Test-Path "resources/desktop-icon.jpg")) { throw "Geliefertes Desktop-Icon wurde nicht für den Build erzeugt." }
 
       - name: Package artifact
         shell: pwsh
