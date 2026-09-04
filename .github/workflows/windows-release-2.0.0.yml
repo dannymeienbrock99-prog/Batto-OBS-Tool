@@ -42,25 +42,25 @@ jobs:
           npm install --no-audit --no-fund --ignore-scripts=false
           if ($LASTEXITCODE -ne 0) { throw "npm install ist fehlgeschlagen." }
 
-      - name: Prepare V4 integrated application
+      - name: Prepare complete V4 application
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           npm run prepare:integrated
           if ($LASTEXITCODE -ne 0) { throw "V4-Produktionsquelle konnte nicht vorbereitet werden." }
 
-      - name: Validate V4 source and required artwork
+      - name: Validate complete V4 source and required artwork
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           npm run check
           if ($LASTEXITCODE -ne 0) { throw "V4-Produktionsprüfung ist fehlgeschlagen." }
 
-      - name: Run V4 Multi Chat moderation Chat Bot and module tests
+      - name: Run complete V4 Multi Chat moderation Chat Bot and module tests
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          node --test test/integrated-2.0.0.test.cjs test/v4-phase1.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs modules/twitch-holo-chat/test/*.test.cjs
+          node --test test/integrated-2.0.0.test.cjs test/v4-phase1.test.cjs test/v4-completion.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs modules/twitch-holo-chat/test/*.test.cjs
           if ($LASTEXITCODE -ne 0) { throw "Mindestens ein V4-Test ist fehlgeschlagen." }
 
       - name: Build Windows x64 NSIS installer with required desktop icon
@@ -75,6 +75,8 @@ jobs:
           if (-not $installer) { throw "Batto-OBS-Tool-Setup-2.0.0.exe fehlt." }
           if (-not (Test-Path "resources/desktop-icon.jpg")) { throw "Geliefertes Desktop-Icon wurde nicht für den Build erzeugt." }
           if (-not (Test-Path "src/renderer/assets/HIntergund.png")) { throw "V4-Programm-Hintergrund wurde nicht erzeugt." }
+          if (Test-Path "src/services/hardware.cjs") { throw "Entfernte Hardware-Vollanalyse ist wieder vorhanden." }
+          if (Test-Path "modules/encoder-monitoring-overlay") { throw "Entferntes Encoder-Monitoring ist wieder vorhanden." }
 
       - name: Package artifact
         shell: pwsh
