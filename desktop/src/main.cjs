@@ -110,12 +110,11 @@ async function sampleTelemetry() {
     const currentHardware = await ensureHardware().catch(() => hardware);
     const system = await sampler.sample(currentHardware);
     const obsSnapshot = await safeObsSnapshot();
-    const state = await settingsStore.get();
     latestTelemetry = composeTelemetry({
       hardware: currentHardware,
       system,
       obsSnapshot,
-      profileName: state.deck.activeProfile || "Standard"
+      profileName: "Standard"
     });
     monitoringServer?.updateTelemetry(latestTelemetry);
     mainWindow?.webContents.send("telemetry:update", latestTelemetry);
@@ -199,8 +198,7 @@ function registerIpc() {
         ...(payload.obs || {}),
         password: ""
       },
-      preferences: { ...current.preferences, ...(payload.preferences || {}) },
-      deck: { ...current.deck, ...(payload.deck || {}) }
+      preferences: { ...current.preferences, ...(payload.preferences || {}) }
     });
   });
 
@@ -289,25 +287,6 @@ function registerIpc() {
     if (!status?.overlayUrl) throw new Error("Hologramm-Overlay ist nicht gestartet.");
     clipboard.writeText(status.overlayUrl);
     return status.overlayUrl;
-  });
-
-  ipcMain.handle("deck:execute", async (_event, assignment = {}) => {
-    if (assignment.type === "obs") {
-      return obs.execute(assignment.action, assignment.payload || {});
-    }
-    if (assignment.type === "url") {
-      const url = String(assignment.url || "");
-      if (!/^https?:\/\//i.test(url)) throw new Error("Nur HTTP- oder HTTPS-Adressen sind erlaubt.");
-      await shell.openExternal(url);
-      return { opened: true };
-    }
-    if (assignment.type === "monitoring-editor") {
-      return ipcMain.emit ? shell.openExternal(monitoringServer.status().editorUrl) : null;
-    }
-    if (assignment.type === "holo-editor") {
-      return shell.openExternal(holoServer.status().editorUrl);
-    }
-    throw new Error("Diese Touch-Deck-Aktion ist nicht eingerichtet.");
   });
 
   ipcMain.handle("dialog:save-report", async (_event, report) => {
