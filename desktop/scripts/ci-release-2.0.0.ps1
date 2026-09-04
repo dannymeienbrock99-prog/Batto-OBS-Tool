@@ -51,7 +51,6 @@ if (-not (Test-Path "node_modules/electron-builder/out/cli/cli.js")) { throw "el
 Write-Host "[3/10] Eine saubere integrierte Produktionsquelle erstellen"
 Invoke-Checked -FilePath "node" -ArgumentList @("scripts/prepare-2.0.0-release.cjs") -FailureMessage "Integrierte Quelle konnte nicht erstellt werden"
 Invoke-Checked -FilePath "node" -ArgumentList @("scripts/patch-2.0.0-runtime.cjs") -FailureMessage "Laufzeit-Patches fehlgeschlagen"
-Invoke-Checked -FilePath "node" -ArgumentList @("scripts/patch-2.0.0-deck-safety.cjs") -FailureMessage "Touch-Deck-Sicherheits-Patch fehlgeschlagen"
 Invoke-Checked -FilePath "node" -ArgumentList @("scripts/patch-2.0.0-chat.cjs") -FailureMessage "Multi-Chat-Patch fehlgeschlagen"
 
 Write-Host "[4/10] Produktionsregeln und Syntax prüfen"
@@ -163,10 +162,8 @@ Enthalten:
 - Twitch-Hologramm
 - Multi-Chat für Twitch, YouTube und lokale TikTok-/TikFinity-/Tiktory-Webhooks
 - OBS-Gastquellen
-- variables Touch-Deck mit Profilen, Ordnern und Mehrfachaktionen
 - Plugin-Erkennung und native Kompatibilitätsaktionen
 - lokale Handy-Kopplung über QR-Code und PIN
-- sichere Alt-Datenmigration ohne Überschreiben neuer Profile
 
 OBS WebSocket lokal unter 127.0.0.1:4455 aktivieren.
 Handy und PC müssen sich im selben lokalen Netzwerk befinden.
