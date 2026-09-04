@@ -55,11 +55,14 @@ const required = [
   "src/renderer/chat-bot.css",
   "src/services/chat-bot.cjs",
   "src/services/chat-core.cjs",
+  "src/services/chat-filter.cjs",
   "src/services/moderation-store.cjs",
   "src/services/moderation-bootstrap.cjs",
   "src/services/v4-config-store.cjs",
   "src/services/v4-log-store.cjs",
+  "src/services/v4-operations.cjs",
   "src/services/v4-bootstrap.cjs",
+  "src/services/stream-status.cjs",
   "src/services/internet-test.cjs",
   "src/services/obs-websocket.cjs",
   "src/services/obs-chat-overlay.cjs",
@@ -77,15 +80,17 @@ const forbiddenPaths = [
   "src/services/hardware.cjs",
   "src/services/recommendation.cjs",
   "src/services/telemetry.cjs",
-  "modules/encoder-monitoring-overlay"
+  "modules/encoder-monitoring-overlay",
+  "../.github/workflows/encoder-monitoring-overlay.yml"
 ];
 for (const relative of forbiddenPaths) {
-  if (fs.existsSync(path.join(root, relative))) throw new Error(`Entfernter Bereich ist wieder vorhanden: ${relative}`);
+  if (fs.existsSync(path.resolve(root, relative))) throw new Error(`Entfernter Bereich ist wieder vorhanden: ${relative}`);
 }
 
 const visible = ["src/renderer/index.html", "src/renderer/app.js", "src/preload.cjs", "src/main.cjs", "src/renderer/multi-chat.css"]
   .map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
 if (/Hardwarediagnose|Hardware vollständig erfassen|PC vollständig scannen|PC jetzt scannen|Hardware-Scan|hardware:scan|scanHardware|collectHardware/i.test(visible)) throw new Error("Hardwarediagnose ist wieder im Produkt enthalten.");
 if (/multi-chat-hero/i.test(visible)) throw new Error("Das laut V4 verbotene alte Multi-Chat-Bild ist wieder eingebunden.");
+if (/Touch[ -]?Deck|Stream[ -]?Deck|deck-pro|deckStore|DeckStore|deck:/i.test(visible)) throw new Error("Eine verbotene Deck-Funktion ist wieder im produktiven Code enthalten.");
 
-console.log(`Batto OBS Tool 2.0.0: ${required.length} V4-Kernbestandteile geprüft; Programm-Hintergrund erzeugt, altes Multi-Chat-Bild und Hardware-Vollanalyse entfernt.`);
+console.log(`Batto OBS Tool 2.0.0: ${required.length} V4-Kernbestandteile geprüft; V4-Funktionen vollständig vorbereitet und entfernte Altbereiche ausgeschlossen.`);
