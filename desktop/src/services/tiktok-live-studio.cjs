@@ -2,15 +2,20 @@
 
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const { execFile } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const { promisify } = require("node:util");
 
 const execFileAsync = promisify(execFile);
 
+const INSTALL_ROOTS = [
+  "%LOCALAPPDATA%\\TikTok LIVE Studio",
+  "%PROGRAMFILES%\\TikTok LIVE Studio",
+  "%PROGRAMFILES(X86)%\\TikTok LIVE Studio"
+];
+
 const DEFAULT_CANDIDATES = [
-  "%LOCALAPPDATA%\\TikTok LIVE Studio\\TikTok LIVE Studio.exe",
-  "%PROGRAMFILES%\\TikTok LIVE Studio\\TikTok LIVE Studio.exe",
-  "%PROGRAMFILES(X86)%\\TikTok LIVE Studio\\TikTok LIVE Studio.exe"
+  ...INSTALL_ROOTS.map((root) => `${root}\\TikTok LIVE Studio.exe`),
+  ...INSTALL_ROOTS.map((root) => `${root}\\TikTok LIVE Studio Launcher.exe`)
 ];
 
 function expandEnvironment(input) {
@@ -26,6 +31,48 @@ async function exists(filename) {
   }
 }
 
+function versionParts(value) {
+  return String(value || "")
+    .split(/[^0-9]+/)
+    .filter(Boolean)
+    .map((part) => Number(part));
+}
+
+function compareVersionLikeDesc(a, b) {
+  const av = versionParts(a);
+  const bv = versionParts(b);
+  const length = Math.max(av.length, bv.length);
+  for (let index = 0; index < length; index += 1) {
+    const diff = (bv[index] || 0) - (av[index] || 0);
+    if (diff) return diff;
+  }
+  return String(b).localeCompare(String(a));
+}
+
+async function findVersionedExecutable(root) {
+  if (!root) return "";
+  let entries;
+  try {
+    entries = await fs.readdir(root, { withFileTypes: true });
+  } catch {
+    return "";
+  }
+
+  const directories = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort(compareVersionLikeDesc);
+
+  const executableNames = ["TikTok LIVE Studio.exe", "TikTok LIVE Studio Launcher.exe"];
+  for (const directory of directories) {
+    for (const executableName of executableNames) {
+      const candidate = path.join(root, directory, executableName);
+      if (await exists(candidate)) return candidate;
+    }
+  }
+  return "";
+}
+
 class TikTokLiveStudioService {
   constructor(options = {}) {
     this.configuredPath = String(options.executablePath || "").trim();
@@ -39,7 +86,7 @@ class TikTokLiveStudioService {
 
   async detectExecutable() {
     const candidates = [];
-    if (this.configuredPath) candidates.push(this.configuredPath);
+    if (this.configuredPath) candidates.push(expandEnvironment(this.configuredPath));
     candidates.push(...DEFAULT_CANDIDATES.map(expandEnvironment));
 
     for (const candidate of [...new Set(candidates.filter(Boolean))]) {
@@ -48,25 +95,49 @@ class TikTokLiveStudioService {
         return this.lastDetectedPath;
       }
     }
+
+    for (const rawRoot of INSTALL_ROOTS) {
+      const root = expandEnvironment(rawRoot);
+      const nested = await findVersionedExecutable(root);
+      if (nested) {
+        this.lastDetectedPath = path.resolve(nested);
+        return this.lastDetectedPath;
+      }
+    }
+
     this.lastDetectedPath = "";
     return "";
   }
 
   async isRunning() {
     if (process.platform !== "win32") {
-      this.lastProcessCheck = { running: false, supported: false };
+      this.lastProcessCheck = { running: false, supported: false, checkedAt: Date.now() };
       return false;
     }
+
     try {
-      const { stdout } = await execFileAsync("tasklist.exe", ["/FI", "IMAGENAME eq TikTok LIVE Studio.exe", "/FO", "CSV", "/NH"], {
+      const { stdout } = await execFileAsync("tasklist.exe", ["/FO", "CSV", "/NH"], {
         windowsHide: true,
-        timeout: 5000
+        timeout: 5000,
+        maxBuffer: 4 * 1024 * 1024
       });
-      const running = /TikTok LIVE Studio\.exe/i.test(stdout || "");
-      this.lastProcessCheck = { running, supported: true, checkedAt: Date.now() };
+      const output = String(stdout || "");
+      const running = /"TikTok LIVE Studio\.exe"/i.test(output);
+      const launcherRunning = /"TikTok LIVE Studio Launcher\.exe"/i.test(output);
+      this.lastProcessCheck = {
+        running,
+        launcherRunning,
+        supported: true,
+        checkedAt: Date.now()
+      };
       return running;
     } catch (error) {
-      this.lastProcessCheck = { running: false, supported: true, checkedAt: Date.now(), error: String(error?.message || error) };
+      this.lastProcessCheck = {
+        running: false,
+        supported: true,
+        checkedAt: Date.now(),
+        error: String(error?.message || error)
+      };
       return false;
     }
   }
@@ -87,14 +158,27 @@ class TikTokLiveStudioService {
   async launch() {
     const executablePath = await this.detectExecutable();
     if (!executablePath) throw new Error("TikTok LIVE Studio wurde nicht gefunden. Installationspfad in den Einstellungen prüfen.");
-    const child = require("node:child_process").spawn(executablePath, [], {
+
+    if (await this.isRunning()) {
+      return { launched: false, alreadyRunning: true, executablePath };
+    }
+
+    const child = spawn(executablePath, [], {
+      cwd: path.dirname(executablePath),
       detached: true,
       stdio: "ignore",
       windowsHide: false
     });
     child.unref();
-    return { launched: true, executablePath };
+    return { launched: true, alreadyRunning: false, executablePath };
   }
 }
 
-module.exports = { TikTokLiveStudioService, DEFAULT_CANDIDATES, expandEnvironment };
+module.exports = {
+  TikTokLiveStudioService,
+  DEFAULT_CANDIDATES,
+  INSTALL_ROOTS,
+  expandEnvironment,
+  findVersionedExecutable,
+  compareVersionLikeDesc
+};
