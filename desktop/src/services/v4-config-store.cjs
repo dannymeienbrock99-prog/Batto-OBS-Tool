@@ -14,7 +14,7 @@ const MODULES = [
   ["logs", "Logs"], ["backup", "Backup"], ["advanced", "Erweitert"]
 ];
 
-const IMPLEMENTED = new Set(["general", "appearance", "multichat", "moderation", "platforms", "chatbot", "autoBroadcast", "commands", "hotkeys", "events", "tts", "obsHttp", "overlays", "discord", "logs"]);
+const IMPLEMENTED = new Set(["general", "appearance", "multichat", "moderation", "platforms", "chatbot", "autoBroadcast", "commands", "hotkeys", "events", "tts", "obsHttp", "overlays", "discord", "statusbar", "logs"]);
 
 function defaults() {
   const modules = {};
@@ -46,7 +46,7 @@ function defaults() {
   modules.obsHttp.config = { enabled: true, host: "127.0.0.1", port: 8787, autoStart: true, portConflict: "next", websocket: true, heartbeatSeconds: 15, reconnect: true };
   modules.overlays.config = { width: 1920, height: 1080, durationSeconds: 8, fadeInMs: 300, fadeOutMs: 500, queue: true, maxQueue: 50, priority: true, newAlertMode: "queue", completeVideo: true };
   modules.discord.config = { enabled: false, mode: "embed", startDelaySeconds: 10, oncePerStream: true, offlineMessage: false };
-  modules.statusbar.config = { enabled: false, metrics: ["cpu","memory","upload","framedrops","bitrate","fps"], refreshSeconds: 1, position: "bottom", fpsWarningBelow: 50, frameDropWarningAbove: 10, bitrateWarningBelow: 3000 };
+  modules.statusbar.config = { enabled: true, metrics: ["cpu","memory","upload","framedrops","bitrate","fps"], refreshSeconds: 1, position: "bottom", fpsWarningBelow: 50, frameDropWarningAbove: 10, bitrateWarningBelow: 3000 };
   modules.logs.config = { retentionDays: 30, maxFileMb: 25, categories: ["chat","moderation","chat-filter","commands","events","media","obs","cohost","error"] };
   modules.backup.config = { enabled: false, automatic: true, keepVersions: 10 };
   return { version: 4, updatedAt: new Date().toISOString(), modules };
