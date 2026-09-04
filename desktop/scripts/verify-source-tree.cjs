@@ -32,13 +32,19 @@ const required = [
   "src/renderer/commercial-settings.css",
   "src/renderer/multi-chat.js",
   "src/renderer/multi-chat.css",
-  "src/renderer/touch-deck-pro-v2.js",
-  "src/renderer/touch-deck-pro-v2.css",
+  "src/renderer/touch-deck-20260802.js",
+  "src/renderer/touch-deck-20260802.css",
+  "src/renderer/integration-20260904.js",
+  "src/renderer/integration-20260904.css",
   "src/stream-overlay/chat-overlay.html",
   "src/stream-overlay/chat-overlay.css",
   "src/stream-overlay/chat-overlay.js",
   "src/stream-overlay/editor.html",
-  "src/stream-overlay/overlay.html"
+  "src/stream-overlay/overlay.html",
+  "src/stream-overlay/cohost-tiktok.html",
+  "src/stream-overlay/cohost-twitch.html",
+  "modules/twitch-holo-chat/web/font-editor-addon.js",
+  "modules/twitch-holo-chat/web/font-overlay-addon.js"
 ];
 
 for (const relative of required) {
@@ -54,15 +60,16 @@ for (const relative of syntaxFiles) {
 
 const index = fs.readFileSync(path.join(root, "src", "renderer", "index.html"), "utf8");
 for (const marker of [
-  "touch-deck-pro-v2.css", "touch-deck-pro-v2.js",
+  "touch-deck-20260802.css", "touch-deck-20260802.js",
+  "integration-20260904.css", "integration-20260904.js",
   "commercial-settings.css", "commercial-settings.js",
   "multi-chat.css", "multi-chat.js",
-  "view-overview", "view-obs", "multi-chat-root", "view-deck-pro", "view-holo", "view-settings"
+  "view-overview", "view-obs", "multi-chat-root", "view-deck-0802", "view-moderation", "view-cohost", "view-holo", "view-settings"
 ]) {
   if (!index.includes(marker)) throw new Error(`Renderer-Einbindung fehlt: ${marker}`);
 }
-for (const forbidden of ["Hardwarediagnose", "Encoder- und Hardware-Monitoring", "settings-compat.js", "product-cleanup.js"]) {
-  if (index.includes(forbidden)) throw new Error(`Alt-/Diagnose-UI ist noch eingebunden: ${forbidden}`);
+for (const forbidden of ["Hardwarediagnose", "Encoder- und Hardware-Monitoring", "settings-compat.js", "product-cleanup.js", "Touch-Deck Pro", "view-deck-pro", "touch-deck-pro-v2.js", "touch-deck-pro-v2.css"]) {
+  if (index.includes(forbidden)) throw new Error(`Unerwünschte Alt-/Pro-UI ist noch eingebunden: ${forbidden}`);
 }
 
 const preload = fs.readFileSync(path.join(root, "src", "preload.cjs"), "utf8");
@@ -92,9 +99,16 @@ if (!youtube.includes("youtube/v3/liveChat/messages") || !youtube.includes("poll
 const twitch = fs.readFileSync(path.join(root, "src", "services", "platforms", "twitch-adapter.cjs"), "utf8");
 if (!twitch.includes("366") || !twitch.includes("Zeitüberschreitung beim Verbinden")) throw new Error("Twitch-Kanalbeitritt/Timeout ist nicht robust verdrahtet.");
 
+const integration = fs.readFileSync(path.join(root, "src", "renderer", "integration-20260904.js"), "utf8");
+for (const marker of ["ws://127.0.0.1:21213/", "Als Moderator hinzufügen", "Als Moderator entfernen", "Stummen", "Blockieren", "Entstummen", "Entblocken", "cohost-tiktok.html", "cohost-twitch.html"]) {
+  if (!integration.includes(marker)) throw new Error(`Neue Produktfunktion fehlt: ${marker}`);
+}
+
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 if (packageJson.main !== "src/main-v2.cjs") throw new Error("package.json muss src/main-v2.cjs als Programmeinstieg verwenden.");
 if (packageJson.version !== "2.1.0") throw new Error(`Unerwartete Version: ${packageJson.version}`);
+const prepareScript = String(packageJson.scripts?.["prepare:integrated"] || "");
+if (prepareScript.includes("prepare-touch-deck-pro-v2")) throw new Error("Touch-Deck Pro wird noch beim Build injiziert.");
 const files = JSON.stringify(packageJson.build?.files || []);
 if (files.includes("encoder-monitoring-overlay")) throw new Error("Encoder-Monitoring wird noch ausgeliefert.");
 
