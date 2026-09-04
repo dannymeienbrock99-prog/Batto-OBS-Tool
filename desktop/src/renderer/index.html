@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="./styles.css">
     <link rel="stylesheet" href="./overview-hero.css">
     <link rel="stylesheet" href="./multi-chat.css">
+    <link rel="stylesheet" href="./touch-deck-20260802.css">
+    <link rel="stylesheet" href="./integration-20260904.css">
   </head>
   <body>
     <div class="app-shell">
@@ -20,7 +22,9 @@
           <button class="nav-button active" data-view="overview"><span>⌂</span> Übersicht</button>
           <button class="nav-button" data-view="obs"><span>◉</span> OBS</button>
           <button class="nav-button" data-view="chat"><span>✦</span> Multi-Chat</button>
-          <button class="nav-button" data-view="deck-pro"><span>▦</span> Touch-Deck Pro</button>
+          <button class="nav-button" data-custom-view="moderation"><span>🛡</span> Moderation</button>
+          <button class="nav-button" data-custom-view="cohost"><span>▣</span> Co-Host</button>
+          <button class="nav-button" data-view="deck-0802"><span>▦</span> Touch-Deck</button>
           <button class="nav-button" data-view="holo"><span>◇</span> Twitch-Hologramm</button>
           <button class="nav-button" data-view="settings"><span>☷</span> Einstellungen</button>
         </nav>
@@ -51,7 +55,7 @@
                 <h2 class="overview-title">Crazy_Batto Multi Chat</h2>
                 <span class="eyebrow overview-version">BATTO OBS TOOL 2.1.0</span>
                 <h3>OBS, TikTok und Multi-Chat zentral steuern</h3>
-                <p>Produktionskern für OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck Pro und Browser-Overlays.</p>
+                <p>Produktionskern für OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck und Browser-Overlays.</p>
                 <div class="button-row">
                   <button id="overview-connect-obs" class="primary">OBS verbinden</button>
                   <button data-jump="settings">Plattformen einrichten</button>
@@ -61,9 +65,9 @@
 
             <div class="summary-grid">
               <article class="summary-card"><span>OBS</span><strong id="summary-obs">Nicht verbunden</strong><small id="summary-obs-extra">WebSocket 5.x · Port 4455</small></article>
-              <article class="summary-card"><span>TikTok</span><strong id="summary-tiktok-studio">LIVE Studio wird geprüft</strong><small id="summary-tiktok-extra">LIVE Studio + API</small></article>
+              <article class="summary-card"><span>TikTok</span><strong id="summary-tiktok-studio">LIVE Studio wird geprüft</strong><small id="summary-tiktok-extra">LIVE Studio + TikFinity lokal</small></article>
               <article class="summary-card"><span>Multi-Chat</span><strong>TikTok · Twitch · YouTube · CNG</strong><small>Ein gemeinsamer Chat-Verlauf</small></article>
-              <article class="summary-card"><span>Touch-Deck</span><strong>Profile · Ordner · Aktionen</strong><small>OBS und Creator-Werkzeuge</small></article>
+              <article class="summary-card"><span>Touch-Deck</span><strong>Stand 02.08.2026 · 5 × 3</strong><small>15 Tasten · OBS-Aktionen</small></article>
             </div>
 
             <div class="two-column-cards">
@@ -72,7 +76,7 @@
                 <div class="quick-grid">
                   <button data-jump="obs">OBS-Verbindung</button>
                   <button data-jump="chat">Multi-Chat</button>
-                  <button data-jump="deck-pro">Touch-Deck Pro</button>
+                  <button data-view="deck-0802" class="nav-jump-deck">Touch-Deck</button>
                   <button data-jump="settings">Einstellungen</button>
                 </div>
               </article>
@@ -121,15 +125,14 @@
             </article>
           </section>
 
-          <section id="view-chat" class="view full-height-view">
-            <div id="multi-chat-root"></div>
-          </section>
-
-          <section id="view-deck-pro" class="view full-height-view" aria-label="Touch-Deck Pro"></section>
+          <section id="view-chat" class="view full-height-view"><div id="multi-chat-root"></div></section>
+          <section id="view-moderation" class="view"></section>
+          <section id="view-cohost" class="view"></section>
+          <section id="view-deck-0802" class="view full-height-view" aria-label="Touch-Deck vom 02.08.2026"></section>
 
           <section id="view-holo" class="view full-height-view">
             <div class="section-heading compact">
-              <div><span class="eyebrow">OBS-BROWSERQUELLE</span><h2>Twitch-Hologramm</h2><p>Namen und Chatfarben als Overlay gestalten.</p></div>
+              <div><span class="eyebrow">OBS-BROWSERQUELLE</span><h2>Twitch-Hologramm</h2><p>Namen, Chatfarben und Schriftart als Overlay gestalten.</p></div>
               <div class="button-row"><button id="holo-copy">OBS-Adresse kopieren</button><button id="holo-external">In Browser öffnen</button></div>
             </div>
             <div class="url-bar"><span>OBS-Browserquelle</span><code id="holo-url">Wird gestartet …</code></div>
@@ -137,9 +140,7 @@
           </section>
 
           <section id="view-settings" class="view">
-            <div class="section-heading">
-              <div><span class="eyebrow">EINSTELLUNGEN</span><h2>Produkt-Einstellungen</h2><p>Die 2.1-Einstellungen werden geladen …</p></div>
-            </div>
+            <div class="section-heading"><div><span class="eyebrow">EINSTELLUNGEN</span><h2>Produkt-Einstellungen</h2><p>Die 2.1-Einstellungen werden geladen …</p></div></div>
           </section>
         </main>
       </section>
@@ -148,5 +149,7 @@
     <div id="toast" class="toast" hidden></div>
     <script src="./app.js"></script>
     <script src="./multi-chat.js"></script>
+    <script src="./touch-deck-20260802.js"></script>
+    <script src="./integration-20260904.js"></script>
   </body>
 </html>
