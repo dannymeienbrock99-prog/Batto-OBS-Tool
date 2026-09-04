@@ -5,7 +5,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { obsAuthentication, normalizeLocalObsHost, buildObsWebSocketUrl } = require("../src/services/obs-websocket.cjs");
-const { selectPreferredGpu } = require("../src/services/hardware.cjs");
 const { normalizeState } = require("../src/services/store.cjs");
 
 test("OBS connection is local, authenticated and IPv6-safe", () => {
@@ -15,14 +14,6 @@ test("OBS connection is local, authenticated and IPv6-safe", () => {
   assert.equal(buildObsWebSocketUrl("::1", 4455), "ws://[::1]:4455");
   assert.equal(buildObsWebSocketUrl("127.0.0.1", 4455), "ws://127.0.0.1:4455");
   assert.equal(obsAuthentication("pass", "salt", "challenge"), "EabUNw4z9EKKpEOC0yvqBO8dJPSIcTb82eo+adWKOvk=");
-});
-
-test("dedicated GPU is preferred for hardware diagnostics", () => {
-  const gpu = selectPreferredGpu([
-    { name: "AMD Radeon(TM) Graphics", adapterRamBytes: 512 * 1024 * 1024 },
-    { name: "NVIDIA GeForce RTX 5080", adapterRamBytes: 16 * 1024 ** 3 }
-  ]);
-  assert.equal(gpu.name, "NVIDIA GeForce RTX 5080");
 });
 
 test("settings normalization keeps supported application preferences", () => {
@@ -40,7 +31,8 @@ test("production UI uses Batto branding and removed areas stay absent", () => {
   const visible = ["src/renderer/index.html", "src/renderer/app.js", "src/renderer/chat-bot.js"]
     .map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
   assert.doesNotMatch(visible, /Creator Hub/i);
-  assert.doesNotMatch(visible, /Encoder-Empfehlung|Belastungstest|Monitoring-Overlay|Encoder- und Hardware-Monitoring|Realer Belastungs- und OBS-Aufnahmetest/i);
+  assert.doesNotMatch(visible, /Hardwarediagnose|Hardware vollständig erfassen|PC vollständig scannen|PC jetzt scannen|Hardware-Scan|Windows-Diagnose|Encoder-Empfehlung|Belastungstest|Monitoring-Overlay|Encoder- und Hardware-Monitoring|Realer Belastungs- und OBS-Aufnahmetest/i);
   assert.match(visible, /Batto OBS Tool/i);
   assert.match(visible, /BATTO CHAT BOT/i);
+  assert.match(visible, /BATTO MULTI-CHAT/i);
 });
