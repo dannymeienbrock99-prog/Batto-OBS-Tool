@@ -74,7 +74,8 @@ requireText(bootstrap, 'ipcMain.handle("chatbot:get-state"', "Chat-Bot-IPC fehlt
 requireText(bootstrap, "chatBot.ingestChat", "Chat-Nachrichten werden nicht an Commands übergeben.");
 requireText(bootstrap, "moderation-bootstrap.cjs", "Moderationsdienst wird nicht eingebunden.");
 requireText(preload, "getChatBotState", "Chat-Bot-Bridge fehlt.");
-requireText(preload, "moderationGetState", "Moderations-Bridge fehlt.");
+requireText(preload, "getModerationState", "Moderations-Bridge fehlt.");
+requireText(preload, "applyModeration", "Moderations-Aktionsbridge fehlt.");
 requireText(index, 'data-view="multichat"', "Multi-Chat-Menüpunkt fehlt im Hauptfenster.");
 requireText(index, 'id="view-multichat"', "Multi-Chat-Hauptansicht fehlt.");
 requireText(multiChatJs, "contextmenu", "Rechtsklick-Moderationsmenü fehlt.");
@@ -82,7 +83,7 @@ requireText(multiChatJs, "Als Moderator hinzufügen", "Moderator-hinzufügen-Akt
 requireText(multiChatJs, "Als Moderator entfernen", "Moderator-entfernen-Aktion fehlt.");
 requireText(multiChatJs, "Stummschalten", "Stummschalten-Aktion fehlt.");
 requireText(multiChatJs, "Blockieren", "Blockieren-Aktion fehlt.");
-requireText(multiChatJs, "Moderationsverlauf", "Moderationsverlauf fehlt.");
+requireText(multiChatJs, "state.history", "Moderationsverlauf fehlt.");
 requireText(moderationStore, "moderators", "Moderatorliste fehlt im persistenten Moderationsspeicher.");
 requireText(moderationStore, "muted", "Stummgeschaltete Liste fehlt im persistenten Moderationsspeicher.");
 requireText(moderationStore, "blocked", "Blockierte Liste fehlt im persistenten Moderationsspeicher.");
