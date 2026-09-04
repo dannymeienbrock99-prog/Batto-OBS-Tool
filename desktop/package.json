@@ -32,6 +32,8 @@
       {"from": "build/license.txt", "to": "Nutzungs-und-Lizenzbedingungen.txt"},
       {"from": "resources/team-logo.png", "to": "resources/team-logo.png"},
       {"from": "resources/team-logo.svg", "to": "resources/team-logo.svg"},
+      {"from": "resources/desktop-icon.jpg", "to": "resources/desktop-icon.jpg"},
+      {"from": "src/renderer/assets/multi-chat-hero.jpg", "to": "resources/multi-chat-hero.jpg"},
       {"from": "resources/cng-chat-config.example.json", "to": "resources/cng-chat-config.example.json"}
     ],
     "directories": {"output": "dist", "buildResources": "build"},
