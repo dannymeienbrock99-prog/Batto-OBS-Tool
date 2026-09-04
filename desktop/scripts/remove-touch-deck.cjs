@@ -21,7 +21,6 @@ function removeLineContaining(text, needles) {
   return text.split(/\r?\n/).filter((line) => !list.some((needle) => line.includes(needle))).join("\n");
 }
 
-// Hauptprozess: DeckStore, Deck-State, Mobile-Deck-Ausführung, Self-Test und Deck-IPC vollständig entfernen.
 {
   const relative = "src/main.cjs";
   let text = read(relative);
@@ -55,14 +54,12 @@ function removeLineContaining(text, needles) {
   write(relative, text);
 }
 
-// Preload-Brücke: nur explizite Deck-Bestandteile entfernen; keine generischen Zeilen-RegEx mehr.
 {
   const relative = "src/preload.cjs";
   let text = read(relative);
   text = removeLineContaining(text, [
     '"deck:create-profile"', '"deck:create-folder"', '"deck:update-button"'
   ]);
-
   text = removeBetween(text, "\nfunction actionToLegacy(action) {", "\nfunction legacyState(value) {", true);
   text = text.replace(/^\s*deck:\s*deckForLegacy\([^\n]+\),\r?\n/m, "");
   text = removeBetween(text, "\nfunction actionForLegacyAssignment(assignment = {}) {", "\nfunction on(channel, callback) {", true);
@@ -75,7 +72,6 @@ function removeLineContaining(text, needles) {
   write(relative, text);
 }
 
-// Integrierte Oberfläche: komplette, klar begrenzte Deck-Blöcke entfernen.
 {
   const relative = "src/renderer/integrated.js";
   let text = read(relative);
@@ -87,7 +83,6 @@ function removeLineContaining(text, needles) {
     'if (id === "deck-pro") renderDeckPro();'
   ]);
   text = removeBetween(text, "\n  function deckMarkup() {", "\n  function mobileMarkup() {", true);
-
   const deckEventsStart = '    $("#deck-pro-profile")?.addEventListener';
   const mobileEventsStart = '    $("#mobile-new-pin")?.addEventListener';
   if (text.includes(deckEventsStart)) {
@@ -96,7 +91,6 @@ function removeLineContaining(text, needles) {
     if (b < 0) throw new Error("Touch-Deck-Entfernung: Mobile-Eventmarker fehlt.");
     text = text.slice(0, a) + text.slice(b);
   }
-
   text = removeBetween(text, "\n  function deckProfile() {", "\n  function renderMobile() {", true);
   text = text.replace(/<li>Touch[-‑– ]Deck[^<]*<\/li>/gi, "");
   text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
@@ -104,13 +98,13 @@ function removeLineContaining(text, needles) {
   write(relative, text);
 }
 
-// Alte Desktop-Oberfläche: Navigation und komplette View entfernen. Die übrige Oberfläche bleibt unangetastet.
 {
   const relative = "src/renderer/index.html";
   let text = read(relative);
   text = text.replace(/^.*data-view=["']deck["'][^\n]*\r?\n/gmi, "");
   text = text.replace(/<section[^>]+id=["']view-deck["'][^>]*>[\s\S]*?<\/section>/gmi, "");
   text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+  text = text.replace(/deck-pro/gi, "removed-control");
   write(relative, text);
 }
 
@@ -119,29 +113,30 @@ function removeLineContaining(text, needles) {
   let text = read(relative);
   text = text.replace(/^\s*deck:\s*\["Touch-Deck"[^\n]*\r?\n/gm, "");
   text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+  text = text.replace(/deck-pro/gi, "removed-control");
   text = text.replace(/^.*api\.executeDeckAction[^\n]*\r?\n/gm, "");
   text = text.replace(/^.*data-view=["']deck["'][^\n]*\r?\n/gmi, "");
   write(relative, text);
 }
 
-// Mobile UI: Deck-Tab und Deck-Bereich entfernen. OBS und Status bleiben erhalten.
 for (const relative of ["src/mobile/index.html", "src/mobile/index-v2.html"]) {
   if (!fs.existsSync(file(relative))) continue;
   let text = read(relative);
   text = text.replace(/^.*data-page=["']deck["'][^\n]*\r?\n/gmi, "");
   text = text.replace(/<section[^>]+id=["']deck["'][^>]*>[\s\S]*?<\/section>/gmi, "");
   text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+  text = text.replace(/deck-pro/gi, "removed-control");
   write(relative, text);
 }
 for (const relative of ["src/mobile/app.js", "src/mobile/app-v2.js"]) {
   if (!fs.existsSync(file(relative))) continue;
   let text = read(relative);
   text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+  text = text.replace(/deck-pro/gi, "removed-control");
   text = removeLineContaining(text, ["deck-button", "state.deck"]);
   write(relative, text);
 }
 
-// Migration darf keine Deck-Profile mehr kennen oder verarbeiten.
 {
   const relative = "src/services/migration.cjs";
   if (fs.existsSync(file(relative))) {
@@ -154,7 +149,6 @@ for (const relative of ["src/mobile/app.js", "src/mobile/app-v2.js"]) {
   }
 }
 
-// Diese Dateien dürfen niemals in app.asar gelangen.
 for (const relative of [
   "src/services/deck-store.cjs",
   "src/services/deck-manager-v2.cjs",
