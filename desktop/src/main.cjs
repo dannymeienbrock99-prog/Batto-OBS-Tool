@@ -12,43 +12,36 @@ const {
 } = require("electron");
 const { SettingsStore } = require("./services/store.cjs");
 const { SecretStore } = require("./services/secret-store.cjs");
-const {
-  SystemTelemetrySampler,
-  collectHardware,
-  runCpuLoadTest,
-  runInternetTest
-} = require("./services/hardware.cjs");
 const { ObsWebSocketClient, normalizeLocalObsHost } = require("./services/obs-websocket.cjs");
-const { buildRecommendation } = require("./services/recommendation.cjs");
-const { composeTelemetry } = require("./services/telemetry.cjs");
 const { TwitchHoloServer } = require("./services/twitch-holo-server.cjs");
-const { MonitoringOverlayServer } = require("../modules/encoder-monitoring-overlay/src/server.cjs");
+const { HybridRuntime } = require("./services/hybrid-runtime.cjs");
+
+const uiSmokeMode = process.argv.includes("--ui-smoke-test");
+if (uiSmokeMode) {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("disable-software-rasterizer");
+}
 
 app.setName("Batto OBS Tool");
 
-// BATTO_1_9_1_HOTFIX
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) app.exit(0);
+
+let mainWindow = null;
+let settingsStore = null;
+let secretStore = null;
+let hybridRuntime = null;
+let holoServer = null;
+let moduleErrors = {};
+const obs = new ObsWebSocketClient();
+
 app.on("second-instance", () => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
 });
-
-let mainWindow = null;
-let settingsStore = null;
-let secretStore = null;
-let monitoringServer = null;
-let holoServer = null;
-let hardware = null;
-let internetResult = null;
-let recommendation = null;
-let telemetryTimer = null;
-let latestTelemetry = null;
-let moduleErrors = {};
-const obs = new ObsWebSocketClient();
-const sampler = new SystemTelemetrySampler();
 
 function userDataFile(name) {
   return path.join(app.getPath("userData"), name);
@@ -62,6 +55,20 @@ function errorPayload(error) {
   };
 }
 
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function withTimeout(promise, milliseconds, label) {
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} nach ${milliseconds} ms abgebrochen.`)), milliseconds);
+    })
+  ]);
+}
+
 async function safeObsSnapshot() {
   try {
     return await obs.snapshot();
@@ -70,28 +77,8 @@ async function safeObsSnapshot() {
   }
 }
 
-async function ensureHardware() {
-  if (!hardware) hardware = await collectHardware();
-  return hardware;
-}
-
 async function startLocalModules() {
   moduleErrors = {};
-  const monitoringRoot = path.join(__dirname, "..", "modules", "encoder-monitoring-overlay", "web");
-  try {
-    monitoringServer = new MonitoringOverlayServer({
-      port: 17822,
-      webRoot: monitoringRoot,
-      configFile: userDataFile("encoder-monitoring-layouts.json"),
-      historySize: 600
-    });
-    await monitoringServer.start();
-  } catch (error) {
-    moduleErrors.monitoring = errorPayload(error);
-    monitoringServer = null;
-    console.error("Monitoring-Overlay konnte nicht starten:", error);
-  }
-
   try {
     holoServer = new TwitchHoloServer({
       preferredPort: 17823,
@@ -105,36 +92,11 @@ async function startLocalModules() {
   }
 }
 
-async function sampleTelemetry() {
-  try {
-    const currentHardware = await ensureHardware().catch(() => hardware);
-    const system = await sampler.sample(currentHardware);
-    const obsSnapshot = await safeObsSnapshot();
-    const state = await settingsStore.get();
-    latestTelemetry = composeTelemetry({
-      hardware: currentHardware,
-      system,
-      obsSnapshot,
-      profileName: state.deck.activeProfile || "Standard"
-    });
-    monitoringServer?.updateTelemetry(latestTelemetry);
-    mainWindow?.webContents.send("telemetry:update", latestTelemetry);
-    mainWindow?.webContents.send("obs:status-changed", obs.status());
-  } catch (error) {
-    mainWindow?.webContents.send("telemetry:error", errorPayload(error));
-  }
-}
-
-function startTelemetryLoop() {
-  clearInterval(telemetryTimer);
-  telemetryTimer = setInterval(() => void sampleTelemetry(), 1000);
-  telemetryTimer.unref?.();
-  void sampleTelemetry();
-}
-
 async function stateSnapshot() {
   const state = await settingsStore.get();
   const obsSnapshot = await safeObsSnapshot();
+  const platformSecrets = hybridRuntime ? await hybridRuntime.secretStatus() : {};
+  const connections = hybridRuntime ? hybridRuntime.connections.statuses() : {};
   return {
     product: {
       name: "Batto OBS Tool",
@@ -145,23 +107,20 @@ async function stateSnapshot() {
     settings: {
       ...state,
       obs: {
-        host: state.obs.host,
-        port: state.obs.port,
+        ...state.obs,
+        password: "",
         passwordConfigured: await secretStore.has("obs-websocket-password")
       }
     },
-    hardware,
-    internetResult,
-    recommendation,
+    platformSecrets,
+    connections,
     obs: obsSnapshot,
-    telemetry: latestTelemetry,
-    monitoring: monitoringServer?.status() || { running: false },
     twitchHolo: holoServer?.status() || { running: false },
     moduleErrors: { ...moduleErrors }
   };
 }
 
-function createMainWindow() {
+function createMainWindow({ show = true, diagnostics = null } = {}) {
   mainWindow = new BrowserWindow({
     title: "Batto OBS Tool",
     width: 1500,
@@ -177,47 +136,54 @@ function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      webSecurity: true
+      webSecurity: true,
+      backgroundThrottling: false
     }
   });
-  mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
-  mainWindow.on("closed", () => { mainWindow = null; });
+
+  const window = mainWindow;
+  window.webContents.on("did-start-loading", () => diagnostics?.push?.("did-start-loading"));
+  window.webContents.on("dom-ready", () => diagnostics?.push?.("dom-ready"));
+  window.webContents.on("did-finish-load", () => diagnostics?.push?.("did-finish-load-event"));
+  window.webContents.on("did-stop-loading", () => diagnostics?.push?.("did-stop-loading"));
+  window.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
+    diagnostics?.push?.(`did-fail-load ${code} ${description} ${url} main=${isMainFrame}`);
+  });
+  window.webContents.on("render-process-gone", (_event, details) => {
+    diagnostics?.push?.(`render-process-gone ${details.reason || "unbekannt"}`);
+  });
+  window.webContents.on("preload-error", (_event, preloadPath, error) => {
+    diagnostics?.push?.(`preload-error ${preloadPath}: ${String(error?.message || error)}`);
+  });
+  window.webContents.on("console-message", (_event, level, message) => {
+    if (level >= 2) diagnostics?.push?.(`console[${level}] ${message}`);
+  });
+
+  const loadPromise = window.loadFile(path.join(__dirname, "renderer", "index.html"));
+  loadPromise.then(() => diagnostics?.push?.("loadFile-resolved")).catch((error) => diagnostics?.push?.(`loadFile: ${String(error?.message || error)}`));
+  if (show) window.once("ready-to-show", () => window?.show());
+  window.on("closed", () => { if (mainWindow === window) mainWindow = null; });
+  return { window, loadPromise };
 }
 
 function registerIpc() {
   ipcMain.handle("app:get-state", () => stateSnapshot());
 
   ipcMain.handle("settings:save", async (_event, value) => {
-    const current = await settingsStore.get();
     const payload = value && typeof value === "object" ? value : {};
-    return settingsStore.set({
-      ...current,
-      ...payload,
-      obs: {
-        ...current.obs,
-        ...(payload.obs || {}),
-        password: ""
-      },
-      preferences: { ...current.preferences, ...(payload.preferences || {}) },
-      deck: { ...current.deck, ...(payload.deck || {}) }
-    });
+    if (payload.obs && Object.prototype.hasOwnProperty.call(payload.obs, "password")) payload.obs = { ...payload.obs, password: "" };
+    const saved = await settingsStore.patch(payload);
+    await hybridRuntime?.configureFromSettings();
+    return saved;
   });
 
-  ipcMain.handle("hardware:scan", async () => {
-    hardware = await collectHardware();
-    await sampleTelemetry();
-    return hardware;
-  });
-
-  ipcMain.handle("internet:test", async () => {
-    internetResult = await runInternetTest();
-    return internetResult;
-  });
-
-  ipcMain.handle("diagnostics:cpu-load", (_event, options) => {
-    return runCpuLoadTest(options?.durationSeconds || 10);
-  });
+  ipcMain.handle("hybrid:status", () => hybridRuntime?.refresh() || {});
+  ipcMain.handle("hybrid:refresh", () => hybridRuntime?.refresh() || {});
+  ipcMain.handle("hybrid:health-check", () => hybridRuntime?.healthCheck() || { ready: false, checks: {} });
+  ipcMain.handle("hybrid:secret-status", () => hybridRuntime?.secretStatus() || {});
+  ipcMain.handle("hybrid:set-secret", (_event, name, value) => hybridRuntime.setSecret(name, value));
+  ipcMain.handle("tiktok-live-studio:status", () => hybridRuntime.liveStudio.status());
+  ipcMain.handle("tiktok-live-studio:launch", () => hybridRuntime.liveStudio.launch());
 
   ipcMain.handle("obs:connect", async (_event, input = {}) => {
     const current = await settingsStore.get();
@@ -227,12 +193,8 @@ function registerIpc() {
     if (!password) password = await secretStore.get("obs-websocket-password");
     const result = await obs.connect({ host, port, password });
     await settingsStore.patch({ obs: { host, port, password: "" } });
-    if (input.rememberPassword && password) {
-      await secretStore.set("obs-websocket-password", password);
-    } else if (input.clearStoredPassword) {
-      await secretStore.delete("obs-websocket-password");
-    }
-    await sampleTelemetry();
+    if (input.rememberPassword && password) await secretStore.set("obs-websocket-password", password);
+    else if (input.clearStoredPassword) await secretStore.delete("obs-websocket-password");
     return result;
   });
 
@@ -240,42 +202,13 @@ function registerIpc() {
     await obs.disconnect();
     return obs.status();
   });
-
   ipcMain.handle("obs:forget-password", async () => {
     await secretStore.delete("obs-websocket-password");
     return { configured: false };
   });
-
   ipcMain.handle("obs:snapshot", () => safeObsSnapshot());
   ipcMain.handle("obs:execute", (_event, action, payload) => obs.execute(action, payload));
   ipcMain.handle("obs:recording-test", (_event, options) => obs.runRecordingTest(options?.durationSeconds || 15));
-
-  ipcMain.handle("recommendation:build", async (_event, input = {}) => {
-    const state = await settingsStore.get();
-    const currentHardware = await ensureHardware();
-    recommendation = buildRecommendation({
-      platform: input.platform || state.preferences.platform,
-      resolution: input.resolution || state.preferences.targetResolution,
-      fps: input.fps || state.preferences.targetFps,
-      uploadMbps: input.uploadMbps ?? internetResult?.uploadMbps ?? 0,
-      gpu: currentHardware.preferredGpu || {}
-    });
-    return recommendation;
-  });
-
-  ipcMain.handle("monitoring:status", () => monitoringServer?.status() || { running: false });
-  ipcMain.handle("monitoring:open-editor", async () => {
-    const status = monitoringServer?.status();
-    if (!status?.editorUrl) throw new Error("Monitoring-Editor ist nicht gestartet.");
-    await shell.openExternal(status.editorUrl);
-    return status;
-  });
-  ipcMain.handle("monitoring:copy-url", () => {
-    const status = monitoringServer?.status();
-    if (!status?.overlayUrl) throw new Error("Monitoring-Overlay ist nicht gestartet.");
-    clipboard.writeText(status.overlayUrl);
-    return status.overlayUrl;
-  });
 
   ipcMain.handle("holo:status", () => holoServer?.status() || { running: false });
   ipcMain.handle("holo:open-editor", async () => {
@@ -292,28 +225,25 @@ function registerIpc() {
   });
 
   ipcMain.handle("deck:execute", async (_event, assignment = {}) => {
-    if (assignment.type === "obs") {
-      return obs.execute(assignment.action, assignment.payload || {});
-    }
+    if (assignment.type === "obs") return obs.execute(assignment.action, assignment.payload || {});
     if (assignment.type === "url") {
       const url = String(assignment.url || "");
       if (!/^https?:\/\//i.test(url)) throw new Error("Nur HTTP- oder HTTPS-Adressen sind erlaubt.");
       await shell.openExternal(url);
       return { opened: true };
     }
-    if (assignment.type === "monitoring-editor") {
-      return ipcMain.emit ? shell.openExternal(monitoringServer.status().editorUrl) : null;
-    }
     if (assignment.type === "holo-editor") {
-      return shell.openExternal(holoServer.status().editorUrl);
+      const status = holoServer?.status();
+      if (!status?.editorUrl) throw new Error("Hologramm-Editor ist nicht gestartet.");
+      return shell.openExternal(status.editorUrl);
     }
     throw new Error("Diese Touch-Deck-Aktion ist nicht eingerichtet.");
   });
 
   ipcMain.handle("dialog:save-report", async (_event, report) => {
     const result = await dialog.showSaveDialog(mainWindow, {
-      title: "Batto-OBS-Tool-Diagnosebericht speichern",
-      defaultPath: `Batto-OBS-Tool-Diagnose-${new Date().toISOString().slice(0, 10)}.json`,
+      title: "Batto-OBS-Tool-Bericht speichern",
+      defaultPath: `Batto-OBS-Tool-Bericht-${new Date().toISOString().slice(0, 10)}.json`,
       filters: [{ name: "JSON", extensions: ["json"] }]
     });
     if (result.canceled || !result.filePath) return { saved: false };
@@ -323,24 +253,23 @@ function registerIpc() {
   });
 }
 
+function createHybridRuntime() {
+  hybridRuntime = new HybridRuntime({
+    settingsStore,
+    secretStore,
+    obs,
+    emit: (channel, payload) => mainWindow?.webContents.send(channel, payload)
+  });
+}
+
 async function runSelfTest() {
   const result = {
     product: "Batto OBS Tool",
     version: app.getVersion(),
     platform: process.platform,
+    hardwareDiagnostics: false,
     modules: {}
   };
-  const currentHardware = await collectHardware();
-  result.hardware = {
-    cpu: currentHardware.cpu?.name || "Nicht verfügbar",
-    preferredGpu: currentHardware.preferredGpu?.name || "Nicht verfügbar",
-    memoryGb: currentHardware.memory?.totalGb || 0
-  };
-  const monitoringRoot = path.join(__dirname, "..", "modules", "encoder-monitoring-overlay", "web");
-  const testMonitoring = new MonitoringOverlayServer({ port: 18922, webRoot: monitoringRoot });
-  await testMonitoring.start();
-  result.modules.monitoring = testMonitoring.status().running;
-  await testMonitoring.stop();
   const testHolo = new TwitchHoloServer({
     preferredPort: 18923,
     webRoot: path.join(__dirname, "..", "modules", "twitch-holo-chat", "web")
@@ -349,6 +278,50 @@ async function runSelfTest() {
   result.modules.twitchHolo = testHolo.status().running;
   await testHolo.stop();
   process.stdout.write(`${JSON.stringify(result)}\n`);
+}
+
+async function runUiSmokeTest() {
+  createHybridRuntime();
+  registerIpc();
+  const diagnostics = [];
+  const { window, loadPromise } = createMainWindow({ show: false, diagnostics });
+  try {
+    await withTimeout(loadPromise, 12000, "Renderer laden");
+  } catch (error) {
+    throw new Error(`${error.message} Diagnose: ${diagnostics.join(" | ")} URL=${window.webContents.getURL()} loading=${window.webContents.isLoading()} mainLoading=${window.webContents.isLoadingMainFrame()}`);
+  }
+
+  let readiness = null;
+  const deadline = Date.now() + 12000;
+  while (Date.now() < deadline) {
+    readiness = await withTimeout(
+      window.webContents.executeJavaScript("window.__battoRendererReady || null"),
+      2000,
+      "Renderer-Bereitschaft abfragen"
+    );
+    if (readiness) break;
+    await sleep(250);
+  }
+  if (!readiness) throw new Error(`Renderer hat keinen Bereitschaftsstatus gemeldet. Diagnose: ${diagnostics.join(" | ")}`);
+
+  const result = await withTimeout(window.webContents.executeJavaScript(`(() => ({
+    api: Boolean(window.batto),
+    renderer: window.__battoRendererReady || null,
+    pageTitle: document.getElementById("page-title")?.textContent || "",
+    obsConnect: Boolean(document.getElementById("obs-connect")),
+    settingsView: Boolean(document.getElementById("view-settings")),
+    hardwareNav: Boolean(document.querySelector('[data-view="hardware"]')),
+    hardwareView: Boolean(document.getElementById("view-hardware")),
+    hardwareText: document.body.innerText.includes("Hardwarediagnose"),
+    monitoringText: document.body.innerText.includes("Encoder- und Hardware-Monitoring")
+  }))()`), 3000, "Renderer-Zustand prüfen");
+
+  if (!result.api) throw new Error("Preload API fehlt im Renderer.");
+  if (!result.renderer?.ok) throw new Error(`Renderer nicht bereit: ${result.renderer?.error || "unbekannt"}; Diagnose: ${diagnostics.join(" | ")}`);
+  if (!result.obsConnect || !result.settingsView) throw new Error(`Kernoberfläche wurde nicht vollständig geladen. Diagnose: ${diagnostics.join(" | ")}`);
+  if (result.hardwareNav || result.hardwareView || result.hardwareText || result.monitoringText) throw new Error("Hardwarediagnose/Monitoring ist noch im ausgelieferten Renderer vorhanden.");
+  process.stdout.write(`${JSON.stringify({ uiSmoke: true, diagnostics, ...result })}\n`);
+  window.destroy();
 }
 
 app.whenReady().then(async () => {
@@ -367,10 +340,26 @@ app.whenReady().then(async () => {
     return;
   }
 
+  if (process.argv.includes("--ui-smoke-test")) {
+    try {
+      await runUiSmokeTest();
+      app.exit(0);
+    } catch (error) {
+      process.stderr.write(`${String(error?.stack || error)}\n`);
+      app.exit(1);
+    }
+    return;
+  }
+
+  createHybridRuntime();
   registerIpc();
   await startLocalModules();
   createMainWindow();
-  startTelemetryLoop();
+
+  Promise.resolve(hybridRuntime.start()).catch((error) => {
+    moduleErrors.hybridRuntime = errorPayload(error);
+    console.error("Hybrid-Runtime konnte nicht vollständig starten:", error);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
@@ -385,8 +374,11 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  clearInterval(telemetryTimer);
+  void hybridRuntime?.stop();
   void obs.disconnect();
-  void monitoringServer?.stop();
   void holoServer?.stop();
 });
+
+module.exports = {
+  getObsClient: () => obs
+};

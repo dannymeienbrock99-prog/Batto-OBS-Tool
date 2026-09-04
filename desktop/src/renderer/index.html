@@ -6,6 +6,10 @@
     <meta name="color-scheme" content="dark">
     <title>Batto OBS Tool</title>
     <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./overview-hero.css">
+    <link rel="stylesheet" href="./multi-chat.css">
+    <link rel="stylesheet" href="./touch-deck-20260802.css">
+    <link rel="stylesheet" href="./integration-20260904.css">
   </head>
   <body>
     <div class="app-shell">
@@ -16,19 +20,17 @@
         </header>
         <nav aria-label="Hauptnavigation">
           <button class="nav-button active" data-view="overview"><span>⌂</span> Übersicht</button>
-          <button class="nav-button" data-view="hardware"><span>▣</span> Hardwarediagnose</button>
-          <button class="nav-button" data-view="internet"><span>↕</span> Internettest</button>
-          <button class="nav-button" data-view="obs"><span>◉</span> OBS-Verbindung</button>
-          <button class="nav-button" data-view="recommendation"><span>⚙</span> Encoder-Empfehlung</button>
-          <button class="nav-button" data-view="loadtest"><span>◫</span> Belastungstest</button>
-          <button class="nav-button" data-view="monitoring"><span>⌁</span> Monitoring-Overlay</button>
-          <button class="nav-button" data-view="holo"><span>✦</span> Twitch-Hologramm</button>
-          <button class="nav-button" data-view="deck"><span>▦</span> Touch-Deck</button>
+          <button class="nav-button" data-view="obs"><span>◉</span> OBS</button>
+          <button class="nav-button" data-view="chat"><span>✦</span> Multi-Chat</button>
+          <button class="nav-button" data-custom-view="moderation"><span>🛡</span> Moderation</button>
+          <button class="nav-button" data-custom-view="cohost"><span>▣</span> Co-Host</button>
+          <button class="nav-button" data-view="deck-0802"><span>▦</span> Touch-Deck</button>
+          <button class="nav-button" data-view="holo"><span>◇</span> Twitch-Hologramm</button>
           <button class="nav-button" data-view="settings"><span>☷</span> Einstellungen</button>
         </nav>
         <footer>
-          <span id="version-label">Version 1.9.1</span>
-          <small>Windows-PC-Version</small>
+          <span id="version-label">Version 2.1.0</span>
+          <small>Windows x64</small>
         </footer>
       </aside>
 
@@ -36,103 +38,76 @@
         <header class="topbar">
           <div>
             <h1 id="page-title">Übersicht</h1>
-            <p id="page-subtitle">PC erkennen, OBS prüfen und passende Einstellungen ermitteln.</p>
+            <p id="page-subtitle">OBS, TikTok, Multi-Chat, Touch-Deck und Overlays an einem Ort.</p>
           </div>
           <div class="top-status">
+            <span id="tiktok-studio-pill" class="status-pill neutral">TikTok Studio prüft …</span>
             <span id="obs-pill" class="status-pill offline">OBS getrennt</span>
-            <span id="scan-pill" class="status-pill neutral">Noch nicht gescannt</span>
           </div>
         </header>
 
         <main class="content">
           <section id="view-overview" class="view active">
-            <div class="hero-card">
-              <div>
-                <span class="eyebrow">BATTO OBS TOOL 1.9.1</span>
-                <h2>Vom echten PC zur passenden OBS-Einstellung</h2>
-                <p>Die Windows-Diagnose liest Hardware lokal aus. Werte, die Windows oder der Treiber nicht zuverlässig liefert, bleiben als „Nicht verfügbar“ gekennzeichnet.</p>
+            <div class="hero-card overview-hero">
+              <img class="overview-bg" src="./assets/bg.jpg" alt="Crazy_Batto PC mit rotem und blauem Rauch">
+              <div class="overview-hero-shade" aria-hidden="true"></div>
+              <div class="overview-hero-copy">
+                <h2 class="overview-title">Crazy_Batto Multi Chat</h2>
+                <span class="eyebrow overview-version">BATTO OBS TOOL 2.1.0</span>
+                <h3>OBS, TikTok und Multi-Chat zentral steuern</h3>
+                <p>Produktionskern für OBS, TikTok LIVE Studio/API, Multi-Chat, Touch-Deck und Browser-Overlays.</p>
                 <div class="button-row">
-                  <button id="overview-scan" class="primary">PC vollständig scannen</button>
-                  <button id="overview-connect-obs">OBS verbinden</button>
+                  <button id="overview-connect-obs" class="primary">OBS verbinden</button>
+                  <button data-jump="settings">Plattformen einrichten</button>
                 </div>
               </div>
-              <img src="./assets/team-alpha-logo.svg" alt="Team Alpha">
             </div>
 
             <div class="summary-grid">
-              <article class="summary-card"><span>Prozessor</span><strong id="summary-cpu">Nicht erkannt</strong><small id="summary-cpu-extra">–</small></article>
-              <article class="summary-card"><span>Dedizierte Grafikkarte</span><strong id="summary-gpu">Nicht erkannt</strong><small id="summary-gpu-extra">–</small></article>
-              <article class="summary-card"><span>Arbeitsspeicher</span><strong id="summary-ram">Nicht erkannt</strong><small id="summary-ram-extra">–</small></article>
-              <article class="summary-card"><span>Mainboard</span><strong id="summary-board">Nicht erkannt</strong><small id="summary-board-extra">–</small></article>
-              <article class="summary-card"><span>Upload</span><strong id="summary-upload">Noch nicht getestet</strong><small id="summary-upload-extra">–</small></article>
               <article class="summary-card"><span>OBS</span><strong id="summary-obs">Nicht verbunden</strong><small id="summary-obs-extra">WebSocket 5.x · Port 4455</small></article>
+              <article class="summary-card"><span>TikTok</span><strong id="summary-tiktok-studio">LIVE Studio wird geprüft</strong><small id="summary-tiktok-extra">LIVE Studio + TikFinity lokal</small></article>
+              <article class="summary-card"><span>Multi-Chat</span><strong>TikTok · Twitch · YouTube · CNG</strong><small>Ein gemeinsamer Chat-Verlauf</small></article>
+              <article class="summary-card"><span>Touch-Deck</span><strong>Stand 02.08.2026 · 5 × 3</strong><small>15 Tasten · OBS-Aktionen</small></article>
             </div>
 
             <div class="two-column-cards">
               <article class="panel">
-                <header><div><span class="eyebrow">LIVE-MONITORING</span><h3>Aktuelle Systemwerte</h3></div></header>
-                <div class="metric-strip">
-                  <div><span>CPU</span><strong id="live-cpu">–</strong></div>
-                  <div><span>RAM</span><strong id="live-ram">–</strong></div>
-                  <div><span>GPU</span><strong id="live-gpu">–</strong></div>
-                  <div><span>Upload</span><strong id="live-upload">–</strong></div>
-                  <div><span>Ping</span><strong id="live-ping">–</strong></div>
-                  <div><span>FPS</span><strong id="live-fps">–</strong></div>
+                <header><div><span class="eyebrow">SCHNELLSTART</span><h3>Direkt öffnen</h3></div></header>
+                <div class="quick-grid">
+                  <button data-jump="obs">OBS-Verbindung</button>
+                  <button data-jump="chat">Multi-Chat</button>
+                  <button data-view="deck-0802" class="nav-jump-deck">Touch-Deck</button>
+                  <button data-jump="settings">Einstellungen</button>
                 </div>
               </article>
               <article class="panel">
-                <header><div><span class="eyebrow">SCHNELLSTART</span><h3>Direkt öffnen</h3></div></header>
-                <div class="quick-grid">
-                  <button data-jump="recommendation">Encoder-Empfehlung</button>
-                  <button data-jump="monitoring">Monitoring-Overlay</button>
-                  <button data-jump="holo">Twitch-Hologramm</button>
-                  <button data-jump="deck">Touch-Deck</button>
-                </div>
+                <header><div><span class="eyebrow">STATUS</span><h3>Getrennte Module</h3></div></header>
+                <div class="result-copy">Ein Plattformfehler blockiert nicht den gesamten Programmstart. Verbindungen können getrennt eingerichtet und geprüft werden.</div>
               </article>
             </div>
-          </section>
-
-          <section id="view-hardware" class="view">
-            <div class="section-heading">
-              <div><span class="eyebrow">LOKALE WINDOWS-DIAGNOSE</span><h2>Hardware vollständig erfassen</h2><p>CPU, GPUs, RAM-Module, Mainboard, BIOS, Monitore, Datenträger, Netzwerkadapter und OBS-Installation.</p></div>
-              <div class="button-row"><button id="hardware-save-report">Bericht speichern</button><button id="hardware-scan" class="primary">PC jetzt scannen</button></div>
-            </div>
-            <div id="hardware-progress" class="progress-card" hidden><div><strong>Windows-Diagnose läuft</strong><span id="hardware-progress-text">CIM-Daten werden gelesen …</span></div><div class="progress-track"><i></i></div></div>
-            <div id="hardware-grid" class="hardware-grid empty-state"><p>Noch kein Hardware-Scan. Klicke auf „PC jetzt scannen“.</p></div>
-          </section>
-
-          <section id="view-internet" class="view">
-            <div class="section-heading">
-              <div><span class="eyebrow">UPLOAD UND LATENZ</span><h2>Internetverbindung testen</h2><p>Der Test überträgt ungefähr 12 MiB. Er startet nur nach deiner Bestätigung.</p></div>
-              <button id="internet-start" class="primary">Internettest starten</button>
-            </div>
-            <div class="info-banner warning"><strong>Hinweis:</strong> Während des Tests können Downloads, Streams oder Cloud-Synchronisation das Ergebnis verfälschen.</div>
-            <div class="speed-grid">
-              <article><span>Download</span><strong id="speed-download">–</strong><small>Mbit/s</small></article>
-              <article><span>Upload</span><strong id="speed-upload">–</strong><small>Mbit/s</small></article>
-              <article><span>Latenz</span><strong id="speed-latency">–</strong><small>ms</small></article>
-              <article><span>Streaming-Budget</span><strong id="speed-budget">–</strong><small>Kbit/s bei 72 % Reserve</small></article>
-            </div>
-            <article class="panel"><header><div><h3>Bewertung</h3></div></header><div id="internet-evaluation" class="result-copy">Noch kein Test ausgeführt.</div></article>
           </section>
 
           <section id="view-obs" class="view">
             <div class="section-heading">
-              <div><span class="eyebrow">OBS WEBSOCKET 5</span><h2>OBS Studio verbinden</h2><p>Standardadresse: 127.0.0.1:4455. Ein gespeichertes Passwort wird über Windows safeStorage verschlüsselt.</p></div>
+              <div><span class="eyebrow">OBS WEBSOCKET 5</span><h2>OBS Studio verbinden</h2><p>Lokale Verbindung über 127.0.0.1:4455. Das Passwort wird nur verschlüsselt gespeichert.</p></div>
               <span id="obs-status-large" class="large-status offline">Nicht verbunden</span>
             </div>
             <div class="obs-layout">
               <article class="panel form-panel">
                 <h3>Verbindungsdaten</h3>
-                <label>Adresse<input id="obs-host" value="127.0.0.1" autocomplete="off" readonly title="Batto OBS Tool verbindet ausschließlich das lokale OBS auf diesem PC."></label>
+                <label>Adresse<input id="obs-host" value="127.0.0.1" autocomplete="off" readonly></label>
                 <label>Port<input id="obs-port" type="number" min="1" max="65535" value="4455"></label>
                 <label>WebSocket-Passwort<input id="obs-password" type="password" autocomplete="new-password" placeholder="Leer lassen, um das gespeicherte Passwort zu verwenden"></label>
                 <label class="check-line"><input id="obs-remember" type="checkbox" checked> Passwort verschlüsselt speichern</label>
-                <div class="button-row"><button id="obs-connect" class="primary">Verbinden</button><button id="obs-disconnect">Trennen</button><button id="obs-forget-password" class="danger-text">Passwort vergessen</button></div>
+                <div class="button-row">
+                  <button id="obs-connect" class="primary">Verbinden</button>
+                  <button id="obs-disconnect">Trennen</button>
+                  <button id="obs-forget-password" class="danger-text">Passwort vergessen</button>
+                </div>
                 <output id="obs-message" class="inline-message"></output>
               </article>
               <article class="panel">
-                <header><div><h3>OBS-Status</h3><p>Die Anzeige verwendet ausschließlich Daten der verbundenen OBS-Instanz.</p></div><button id="obs-refresh">Aktualisieren</button></header>
+                <header><div><h3>OBS-Status</h3><p>Status der verbundenen OBS-Instanz.</p></div><button id="obs-refresh">Aktualisieren</button></header>
                 <dl id="obs-details" class="details-list"><div><dt>Status</dt><dd>Nicht verbunden</dd></div></dl>
               </article>
             </div>
@@ -150,99 +125,31 @@
             </article>
           </section>
 
-          <section id="view-recommendation" class="view">
-            <div class="section-heading">
-              <div><span class="eyebrow">MANUELL IN OBS EINTRAGEN</span><h2>Encoder-Empfehlung berechnen</h2><p>Die Empfehlung ändert keine OBS-Einstellung automatisch.</p></div>
-              <button id="recommendation-build" class="primary">Empfehlung erstellen</button>
-            </div>
-            <div class="recommendation-layout">
-              <article class="panel form-panel">
-                <h3>Ziel</h3>
-                <label>Plattform<select id="target-platform"><option value="twitch">Twitch-Livestream</option><option value="youtube">YouTube-Livestream</option><option value="recording">Lokale Aufnahme</option></select></label>
-                <label>Auflösung<select id="target-resolution"><option value="1280x720">1280 × 720</option><option value="1920x1080" selected>1920 × 1080</option><option value="2560x1440">2560 × 1440</option><option value="3840x2160">3840 × 2160</option></select></label>
-                <label>FPS<select id="target-fps"><option value="30">30 FPS</option><option value="60" selected>60 FPS</option><option value="120">120 FPS</option></select></label>
-                <label>Gemessener Upload in Mbit/s<input id="target-upload" type="number" min="0" max="10000" step="0.1" placeholder="Internettest übernehmen"></label>
-              </article>
-              <article class="panel recommendation-result">
-                <header><div><h3>Empfohlene OBS-Werte</h3><p id="recommendation-hardware">Zuerst Hardware scannen.</p></div><button id="recommendation-copy">Werte kopieren</button></header>
-                <div id="recommendation-settings" class="setting-cards empty-state"><p>Noch keine Empfehlung berechnet.</p></div>
-                <ul id="recommendation-notes" class="notes-list"></ul>
-              </article>
-            </div>
-          </section>
-
-          <section id="view-loadtest" class="view">
-            <div class="section-heading"><div><span class="eyebrow">NUR NACH BESTÄTIGUNG</span><h2>Realer Belastungs- und OBS-Aufnahmetest</h2><p>Kein Test startet automatisch. Beobachte Temperaturen mit deinem Hardwaremonitor und brich bei ungewöhnlichen Werten ab.</p></div></div>
-            <div class="test-grid">
-              <article class="panel"><h3>CPU-Belastungstest</h3><p>Erzeugt für zehn Sekunden reale Rechenlast auf bis zu acht Threads. Es werden keine Dateien oder Einstellungen verändert.</p><button id="cpu-test-start">CPU-Test bestätigen und starten</button><pre id="cpu-test-result">Noch nicht ausgeführt.</pre></article>
-              <article class="panel"><h3>OBS-Encoder-Aufnahmetest</h3><p>Startet nach einer zweiten Bestätigung eine 15-sekündige OBS-Aufnahme, sammelt OBS-Statistiken und beendet die Aufnahme wieder. Wird nicht gestartet, wenn OBS bereits aufnimmt.</p><button id="obs-test-start">OBS-Test bestätigen und starten</button><pre id="obs-test-result">Noch nicht ausgeführt.</pre></article>
-            </div>
-          </section>
-
-          <section id="view-monitoring" class="view full-height-view">
-            <div class="section-heading compact">
-              <div><span class="eyebrow">TRANSPARENTE OBS-BROWSERQUELLE</span><h2>Encoder- und Hardware-Monitoring</h2><p>Messwerte frei aktivieren, verschieben, skalieren und je OBS-Profil speichern.</p></div>
-              <div class="button-row"><button id="monitoring-copy">OBS-Adresse kopieren</button><button id="monitoring-external">In Browser öffnen</button></div>
-            </div>
-            <div class="url-bar"><span>OBS-Browserquelle</span><code id="monitoring-url">Wird gestartet …</code></div>
-            <iframe id="monitoring-frame" class="module-frame" title="Monitoring-Overlay-Editor"></iframe>
-          </section>
+          <section id="view-chat" class="view full-height-view"><div id="multi-chat-root"></div></section>
+          <section id="view-moderation" class="view"></section>
+          <section id="view-cohost" class="view"></section>
+          <section id="view-deck-0802" class="view full-height-view" aria-label="Touch-Deck vom 02.08.2026"></section>
 
           <section id="view-holo" class="view full-height-view">
             <div class="section-heading compact">
-              <div><span class="eyebrow">OHNE DISCORD UND SERVER-BOOST</span><h2>Twitch-Hologramm für Namen und Chatfarbe</h2><p>Eigene Farbverläufe für Streamer, Mods, VIPs, Subs, Zuschauer und einzelne Twitch-Namen.</p></div>
+              <div><span class="eyebrow">OBS-BROWSERQUELLE</span><h2>Twitch-Hologramm</h2><p>Namen, Chatfarben und Schriftart als Overlay gestalten.</p></div>
               <div class="button-row"><button id="holo-copy">OBS-Adresse kopieren</button><button id="holo-external">In Browser öffnen</button></div>
             </div>
             <div class="url-bar"><span>OBS-Browserquelle</span><code id="holo-url">Wird gestartet …</code></div>
             <iframe id="holo-frame" class="module-frame" title="Twitch-Hologramm-Editor"></iframe>
           </section>
 
-          <section id="view-deck" class="view">
-            <div class="section-heading">
-              <div><span class="eyebrow">PROFILBASIERTES TOUCH-DECK</span><h2>Tastenraster selbst festlegen</h2><p>1 × 1 bis 10 × 10. Belegte Tasten bleiben beim Verkleinern im Profil gespeichert und erscheinen wieder, sobald das Raster vergrößert wird.</p></div>
-              <button id="deck-save" class="primary">Deck speichern</button>
-            </div>
-            <div class="deck-toolbar">
-              <label>Profil<select id="deck-profile"></select></label>
-              <button id="deck-profile-add">Neues Profil</button>
-              <label>Zeilen<input id="deck-rows" type="number" min="1" max="10" value="3"></label>
-              <label>Spalten<input id="deck-columns" type="number" min="1" max="10" value="5"></label>
-              <button id="deck-apply-grid">Raster anwenden</button>
-            </div>
-            <div class="deck-workspace">
-              <div id="deck-grid" class="deck-grid"></div>
-              <aside class="deck-inspector">
-                <h3>Taste bearbeiten</h3>
-                <p id="deck-selected-label">Keine Taste ausgewählt.</p>
-                <label>Titel<input id="deck-title" maxlength="40"></label>
-                <label>Aktion<select id="deck-action-type"><option value="none">Keine Aktion</option><option value="obs:stream.start">OBS · Stream starten</option><option value="obs:stream.stop">OBS · Stream stoppen</option><option value="obs:record.start">OBS · Aufnahme starten</option><option value="obs:record.stop">OBS · Aufnahme stoppen</option><option value="obs:virtualcam.start">OBS · Virtuelle Kamera starten</option><option value="obs:virtualcam.stop">OBS · Virtuelle Kamera stoppen</option><option value="obs:scene.set">OBS · Szene aktivieren</option><option value="monitoring-editor">Monitoring-Editor öffnen</option><option value="holo-editor">Hologramm-Editor öffnen</option><option value="url">Webseite öffnen</option></select></label>
-                <label id="deck-value-row">Wert<input id="deck-action-value" placeholder="Szenenname oder https://…"></label>
-                <div class="button-row"><button id="deck-apply-key" class="primary">Taste übernehmen</button><button id="deck-clear-key">Taste leeren</button></div>
-              </aside>
-            </div>
-          </section>
-
           <section id="view-settings" class="view">
-            <div class="section-heading"><div><span class="eyebrow">LOKALE EINSTELLUNGEN</span><h2>Einstellungen und Datenschutz</h2><p>Hardware-, OBS- und Layoutdaten bleiben auf diesem Computer.</p></div><button id="settings-save" class="primary">Einstellungen speichern</button></div>
-            <div class="settings-grid">
-              <article class="panel form-panel"><h3>Standardziel</h3><label>Plattform<select id="settings-platform"><option value="twitch">Twitch</option><option value="youtube">YouTube</option><option value="recording">Aufnahme</option></select></label><label>Auflösung<select id="settings-resolution"><option value="1280x720">1280 × 720</option><option value="1920x1080">1920 × 1080</option><option value="2560x1440">2560 × 1440</option><option value="3840x2160">3840 × 2160</option></select></label><label>FPS<select id="settings-fps"><option value="30">30</option><option value="60">60</option><option value="120">120</option></select></label></article>
-              <article class="panel"><h3>Sicherheit</h3><ul class="privacy-list"><li>OBS-Passwörter werden mit Windows safeStorage verschlüsselt.</li><li>Overlay-Server binden ausschließlich an 127.0.0.1.</li><li>Keine Administrator- oder Firewall-Freigabe ist für lokale Overlays nötig.</li><li>Sensorwerte werden nicht erfunden; fehlende Werte erscheinen als „Nicht verfügbar“.</li><li>Belastungstests starten ausschließlich nach Bestätigung.</li></ul></article>
-              <article class="panel"><h3>Produkt</h3><dl class="details-list"><div><dt>Name</dt><dd>Batto OBS Tool</dd></div><div><dt>Version</dt><dd>1.9.1</dd></div><div><dt>Branding</dt><dd>Crazy_Batto / Team Alpha</dd></div><div><dt>Plattform</dt><dd>Windows x64</dd></div></dl></article>
-            </div>
+            <div class="section-heading"><div><span class="eyebrow">EINSTELLUNGEN</span><h2>Produkt-Einstellungen</h2><p>Die 2.1-Einstellungen werden geladen …</p></div></div>
           </section>
         </main>
       </section>
     </div>
 
-    <dialog id="confirm-dialog">
-      <form method="dialog">
-        <h2 id="confirm-title">Aktion bestätigen</h2>
-        <p id="confirm-text"></p>
-        <div class="dialog-actions"><button value="cancel">Abbrechen</button><button value="confirm" class="primary">Bestätigen</button></div>
-      </form>
-    </dialog>
-
     <div id="toast" class="toast" hidden></div>
     <script src="./app.js"></script>
+    <script src="./multi-chat.js"></script>
+    <script src="./touch-deck-20260802.js"></script>
+    <script src="./integration-20260904.js"></script>
   </body>
 </html>

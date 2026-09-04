@@ -4,64 +4,278 @@
   const api = window.batto;
   const root = document.getElementById("multi-chat-root");
   if (!api || !root) return;
-  const platformMeta = { all:["Alle","#5aa7ff","✦"], twitch:["Twitch","#9146ff","◉"], cng:["CNG","#2f9cff","◆"], tiktok:["TikTok","#111111","♪"], youtube:["YouTube","#ff3030","▶"] };
+  if (root.dataset.initialized === "1") return;
+  root.dataset.initialized = "1";
+
+  const META = {
+    all: ["Alle", "#5aa7ff", "✦"],
+    twitch: ["Twitch", "#9146ff", "◉"],
+    cng: ["CNG", "#2f9cff", "◆"],
+    tiktok: ["TikTok", "#25f4ee", "♪"],
+    youtube: ["YouTube", "#ff3030", "▶"]
+  };
+  const TIKFINITY_URL = "ws://127.0.0.1:21213/";
+  const MOD_KEY = "batto-moderation-v1";
+
   let filter = "all";
   let messages = [];
-  let ttsConfig = { enabled:false, language:"de-DE", rate:1, pitch:1, volume:1, cooldownMs:1200, maxQueue:20, maxCommentLength:220, chat:true, events:true };
+  let tikfinity = null;
+  let tikfinityRetry = null;
+  let tikfinityState = "Getrennt";
+  let listenersBound = false;
+  let ttsConfig = { enabled:false, language:"de-DE", rate:1, pitch:1, volume:1, cooldownMs:1200, maxQueue:20, maxCommentLength:220, chat:true, announcePlatforms:["twitch","cng","tiktok","youtube"], blockUsers:[], allowUsers:[] };
   const ttsQueue = [];
   let ttsRunning = false;
   let lastTts = 0;
 
-  function esc(value){return String(value ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
-  function render(){
+  const esc = (value) => String(value ?? "").replace(/[&<>\"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const cleanUser = (value) => String(value || "").trim().replace(/^@/, "").slice(0, 80);
+  const val = (id) => root.querySelector(`#${id}`)?.value?.trim?.() || "";
+
+  function isSuppressed(platform, username) {
+    try {
+      const mod = JSON.parse(localStorage.getItem(MOD_KEY) || "{}");
+      const p = mod?.[platform] || {};
+      const name = cleanUser(username).toLowerCase();
+      return [...(p.muted || []), ...(p.blocked || [])].some((x) => cleanUser(x?.username).toLowerCase() === name);
+    } catch { return false; }
+  }
+
+  function normalizeMessage(input = {}, fallbackPlatform = "tiktok") {
+    const platform = String(input.platform || fallbackPlatform).toLowerCase();
+    const username = cleanUser(input.username || input.uniqueId || input.nickname || input.displayName || input.userId || "TikTok User");
+    const message = String(input.message || input.comment || input.text || "").trim();
+    if (!message || !username || isSuppressed(platform, username)) return null;
+    return {
+      id: input.id || `${platform}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      platform,
+      username,
+      message,
+      role: input.role || "",
+      color: input.color || META[platform]?.[1] || "#5aa7ff",
+      timestamp: input.timestamp || Date.now(),
+      source: input.source || "platform"
+    };
+  }
+
+  function accept(input, fallbackPlatform) {
+    const items = Array.isArray(input) ? input : [input];
+    let changed = false;
+    for (const item of items) {
+      const msg = normalizeMessage(item, fallbackPlatform);
+      if (!msg) continue;
+      if (messages.some((x) => x.id === msg.id)) continue;
+      messages.push(msg);
+      changed = true;
+      speak(msg);
+    }
+    if (messages.length > 500) messages = messages.slice(-500);
+    if (changed) updateBody();
+  }
+
+  function settingsHtml() {
+    return `<div class="settings-section"><h3>Verbindungen</h3><div class="status-grid" id="chat-status-grid"></div></div>
+      <div class="settings-section"><h3>TikFinity lokal</h3><div class="status-card"><strong>TikTok ohne Euler im Batto-UI</strong><small><span class="dot ${tikfinityState === "Verbunden" ? "on" : ""}"></span><span id="tikfinity-state">${esc(tikfinityState)}</span></small></div><small>${TIKFINITY_URL} · TikFinity Desktop muss laufen und mit dem LIVE verbunden sein.</small><div class="settings-actions"><button id="tikfinity-connect">Verbinden</button><button id="tikfinity-disconnect">Trennen</button></div></div>
+      <div class="settings-section"><h3>Twitch</h3><label>Kanal<input id="cfg-twitch-channel" placeholder="dein_channel"></label><label>OAuth-Token<input id="cfg-twitch-token" type="password" placeholder="oauth-…"></label><label>Username<input id="cfg-twitch-user" placeholder="batto_reader"></label><button id="cfg-twitch-connect">Twitch verbinden</button></div>
+      <div class="settings-section"><h3>CNG</h3><label>Persönliche Chat-URL<input id="cfg-cng-chat" placeholder="https://cng-plattform.com/chat-popout/…"></label><label>Persönliche Alert-URL<input id="cfg-cng-alert" placeholder="https://cng-plattform.com/alert-overlay…"></label><div class="settings-actions"><button id="cfg-cng-save">Speichern</button><button id="cfg-cng-connect">Verbinden</button></div></div>
+      <div class="settings-section"><h3>TikTok direkt</h3><label>LIVE-Username<input id="cfg-tiktok-user" placeholder="@username"></label><button id="cfg-tiktok-connect">Direkt verbinden</button><small>Ist der Account nicht LIVE, wird nur „Offline“ angezeigt.</small></div>
+      <div class="settings-section"><h3>YouTube</h3><label>Live-Chat-/Video-ID<input id="cfg-youtube-video" placeholder="Live-ID"></label><button id="cfg-youtube-connect">YouTube verbinden</button></div>
+      <div class="settings-section"><h3>Batto TTS</h3><label><input id="tts-enabled" type="checkbox"> Chat-TTS aktiv</label><label>Sprache<select id="tts-language"><option>de-DE</option><option>en-US</option><option>en-GB</option><option>es-ES</option></select></label><label>Geschwindigkeit<input id="tts-rate" type="range" min="0.5" max="2" step="0.05" value="1"></label><label>Lautstärke<input id="tts-volume" type="range" min="0" max="1" step="0.05" value="1"></label></div>
+      <div class="settings-actions"><button id="chat-clear">Chat leeren</button><button id="chat-settings-close">Schließen</button></div>`;
+  }
+
+  function render() {
     root.innerHTML = `<div class="multi-chat">
-      <header class="chat-head"><div class="chat-title"><span style="font-size:18px">✦</span><div><strong>BATTO MULTI-CHAT</strong><small>Twitch · CNG · TikTok · YouTube</small></div></div><div class="chat-actions"><button class="icon-btn" id="chat-settings-btn" title="Chat-Einstellungen">⚙</button><button class="icon-btn" id="chat-undock-btn" title="Abdocken">↗</button></div></header>
-      <nav class="chat-tabs">${Object.entries(platformMeta).map(([key,v])=>`<button class="chat-tab ${filter===key?'active':''}" data-filter="${key}" ${key!=="all"?`data-platform="${key}"`:""}>${v[0]}</button>`).join("")}</nav>
+      <header class="chat-head"><div class="chat-title"><span>✦</span><div><strong>BATTO MULTI-CHAT</strong><small>Twitch · CNG · TikTok · YouTube</small></div></div><div class="chat-actions"><button class="icon-btn" id="chat-settings-btn">⚙</button><button class="icon-btn" id="chat-undock-btn">↗</button></div></header>
+      <nav class="chat-tabs">${Object.entries(META).map(([key,v]) => `<button class="chat-tab ${filter === key ? "active" : ""}" data-filter="${key}" ${key !== "all" ? `data-platform="${key}"` : ""}>${v[0]}</button>`).join("")}</nav>
       <section class="chat-body" id="chat-body"></section>
-      <section class="chat-compose"><textarea id="chat-input" maxlength="1000" placeholder="Nachricht schreiben … (Versand wird pro Plattform später separat freigeschaltet)"></textarea><div class="compose-row"><small>Nur Anzeige/Reader-Architektur · kein stilles Senden</small><button class="send-btn" id="chat-send" disabled>Senden</button></div></section>
       <footer class="chat-footer"><span id="chat-status">● Initialisiere …</span><span id="chat-count">0 Nachrichten</span></footer>
       <aside class="chat-settings" id="chat-settings" hidden>${settingsHtml()}</aside>
     </div>`;
-    bind(); updateBody();
-  }
-  function settingsHtml(){return `<div class="settings-section"><h3>Verbindungen</h3><div class="status-grid" id="chat-status-grid"></div></div><div class="settings-section"><h3>Twitch</h3><label>Kanal<input id="cfg-twitch-channel" placeholder="dein_channel"></label><label>OAuth-Token<input id="cfg-twitch-token" type="password" placeholder="oauth-…"></label><label>Username<input id="cfg-twitch-user" placeholder="batto_reader"></label><button id="cfg-twitch-connect">Twitch verbinden</button></div><div class="settings-section"><h3>CNG · persönliche URLs</h3><label>Persönliche CNG-Chat-URL<input id="cfg-cng-chat" placeholder="https://cng-plattform.com/chat-popout/…?mode=obs&obsChatToken=…"></label><label>Persönliche Alert-URL<input id="cfg-cng-alert" placeholder="https://cng-plattform.com/alert-overlay?creatorId=…"></label><div class="settings-actions"><button id="cfg-cng-save">CNG-Konfiguration speichern</button><button id="cfg-cng-connect">Verbinden</button></div><small>Der Token wird intern maskiert/log-sicher behandelt. Der echte CNG-Realtime-Transport wird erst verwendet, wenn seine Schnittstelle nachweislich verfügbar ist.</small></div><div class="settings-section"><h3>TikTok LIVE</h3><label>LIVE-Username<input id="cfg-tiktok-user" placeholder="@username"></label><button id="cfg-tiktok-connect">TikTok verbinden</button><small>Öffentliche LIVE-Lesung über das optionale tiktok-live-connector Paket.</small></div><div class="settings-section"><h3>YouTube</h3><label>Video-ID<input id="cfg-youtube-video" placeholder="Live-Video-ID"></label><button id="cfg-youtube-connect">YouTube vorbereiten</button></div><div class="settings-section"><h3>Batto TTS</h3><label><input id="tts-enabled" type="checkbox"> Chat-TTS aktiv</label><label>Sprache<select id="tts-language"><option>de-DE</option><option>en-US</option><option>en-GB</option><option>fr-FR</option><option>es-ES</option><option>it-IT</option><option>pt-BR</option><option>ja-JP</option><option>ko-KR</option></select></label><label>Stimme<select id="tts-voice"><option value="">Systemstimme</option></select></label><label>Geschwindigkeit<input id="tts-rate" type="range" min="0.5" max="2" step="0.05" value="1"></label><label>Tonhöhe<input id="tts-pitch" type="range" min="0" max="2" step="0.05" value="1"></label><label>Lautstärke<input id="tts-volume" type="range" min="0" max="1" step="0.05" value="1"></label><label>Cooldown (ms)<input id="tts-cooldown" type="number" min="0" max="60000" value="1200"></label><label>Max. Kommentar-Länge<input id="tts-maxlen" type="number" min="20" max="1000" value="220"></label></div><div class="settings-actions"><button id="chat-clear">Chat leeren</button><button id="chat-settings-close">Schließen</button></div>`}
-  function bind(){
-    root.querySelectorAll("[data-filter]").forEach((button)=>button.onclick=()=>{filter=button.dataset.filter;render()});
-    root.querySelector("#chat-settings-btn").onclick=()=>{const el=root.querySelector("#chat-settings");el.hidden=!el.hidden; if(!el.hidden) refreshSettings()};
-    root.querySelector("#chat-settings-close").onclick=()=>root.querySelector("#chat-settings").hidden=true;
-    root.querySelector("#chat-clear").onclick=async()=>{await api.chatClear(filter);messages=[];updateBody()};
-    root.querySelector("#chat-undock-btn").onclick=()=>api.chatToggleWindow();
-    root.querySelector("#cfg-twitch-connect").onclick=async()=>{try{await api.chatConnect("twitch",{channel:value("cfg-twitch-channel"),token:value("cfg-twitch-token"),username:value("cfg-twitch-user")});refreshSettings()}catch(e){alert(e.message)}};
-    root.querySelector("#cfg-cng-save").onclick=async()=>{try{await api.saveCngConfig({chat:{url:value("cfg-cng-chat")},alerts:{url:value("cfg-cng-alert")}});refreshSettings()}catch(e){alert(e.message)}};
-    root.querySelector("#cfg-cng-connect").onclick=async()=>{try{await api.chatConnect("cng",await api.getCngConfig());refreshSettings()}catch(e){alert(e.message)}};
-    root.querySelector("#cfg-tiktok-connect").onclick=async()=>{try{await api.chatConnect("tiktok",{username:value("cfg-tiktok-user")});refreshSettings()}catch(e){alert(e.message)}};
-    root.querySelector("#cfg-youtube-connect").onclick=async()=>{try{await api.chatConnect("youtube",{videoId:value("cfg-youtube-video")});refreshSettings()}catch(e){alert(e.message)}};
-    root.querySelector("#tts-enabled").onchange=saveTts;
-    ["tts-language","tts-voice","tts-rate","tts-pitch","tts-volume","tts-cooldown","tts-maxlen"].forEach((id)=>root.querySelector(`#${id}`).onchange=saveTts);
-    root.querySelector("#chat-send").onclick=()=>{};
-    root.querySelector("#chat-input").addEventListener("keydown",(event)=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault()}});
-  }
-  function value(id){return root.querySelector(`#${id}`)?.value.trim()||""}
-  async function refreshSettings(){
-    const statuses=await api.chatStatuses();
-    root.querySelector("#chat-status-grid").innerHTML=Object.entries(statuses).map(([p,s])=>`<div class="status-card"><strong>${esc(platformMeta[p][0])}</strong><small><span class="dot ${s.connected?'on':''}"></span>${s.connected?'Verbunden':s.configured?'Konfiguriert':'Getrennt'}</small></div>`).join("");
-    const cng=await api.getCngConfig(); if(cng){root.querySelector("#cfg-cng-chat").value=cng.chat?.url||"";root.querySelector("#cfg-cng-alert").value=cng.alerts?.url||""}
-    const tts=await api.getTtsConfig(); if(tts){ttsConfig=tts;root.querySelector("#tts-enabled").checked=tts.enabled;root.querySelector("#tts-language").value=tts.language;root.querySelector("#tts-rate").value=tts.rate;root.querySelector("#tts-pitch").value=tts.pitch;root.querySelector("#tts-volume").value=tts.volume;root.querySelector("#tts-cooldown").value=tts.cooldownMs;root.querySelector("#tts-maxlen").value=tts.maxCommentLength}
-    loadVoices();
-  }
-  async function saveTts(){ttsConfig={...ttsConfig,enabled:root.querySelector("#tts-enabled").checked,language:value("tts-language"),voice:value("tts-voice"),rate:Number(root.querySelector("#tts-rate").value),pitch:Number(root.querySelector("#tts-pitch").value),volume:Number(root.querySelector("#tts-volume").value),cooldownMs:Number(root.querySelector("#tts-cooldown").value),maxCommentLength:Number(root.querySelector("#tts-maxlen").value)};await api.saveTtsConfig(ttsConfig);}
-  function loadVoices(){const select=root.querySelector("#tts-voice");if(!select||!window.speechSynthesis)return;const voices=window.speechSynthesis.getVoices();const current=select.value;select.innerHTML='<option value="">Systemstimme</option>'+voices.map(v=>`<option value="${esc(v.name)}">${esc(v.name)} · ${esc(v.lang)}</option>`).join("");select.value=current}
-  function updateBody(){const body=root.querySelector("#chat-body");const visible=messages.filter(m=>filter==="all"||m.platform===filter).slice(-300);root.querySelector("#chat-count").textContent=`${visible.length} Nachrichten`;if(!visible.length){body.innerHTML='<div class="chat-empty"><div><strong>Noch keine Nachrichten</strong><br><small>Verbinde Twitch/CNG/TikTok oder YouTube, um alles in einem Verlauf zu sehen.</small></div></div>';return}body.innerHTML=visible.map(m=>{const meta=platformMeta[m.platform]||platformMeta.cng;return `<div class="chat-row"><span class="platform-badge" style="background:${esc(m.color||meta[1])}">${meta[2]}</span><div><div class="chat-meta"><span class="chat-user" style="color:${esc(m.color||meta[1])}">${esc(m.username)}</span><span class="chat-role">${esc(meta[0])}</span>${m.role?`<span class="chat-role">${esc(m.role)}</span>`:""}</div><div class="chat-message">${esc(m.message)}</div></div></div>`}).join("");body.scrollTop=body.scrollHeight}
-  function acceptBatch(batch){for(const message of batch){messages.push(message);if(messages.length>500)messages.splice(0,messages.length-500);speak(message)}updateBody()}
-  function speak(message){if(!ttsConfig.enabled||!ttsConfig.chat||!ttsConfig.announcePlatforms.includes(message.platform)||!message.message)return;const text=message.message.slice(0,ttsConfig.maxCommentLength);if(Date.now()-lastTts<ttsConfig.cooldownMs||ttsQueue.length>=ttsConfig.maxQueue)return;if(ttsConfig.blockUsers.includes(message.username))return;if(ttsConfig.allowUsers.length&&!ttsConfig.allowUsers.includes(message.username))return;ttsQueue.push(`${message.username} sagt: ${text}`);pumpTts()}
-  function pumpTts(){if(ttsRunning||!ttsQueue.length||!window.speechSynthesis)return;const text=ttsQueue.shift();const utterance=new SpeechSynthesisUtterance(text);utterance.lang=ttsConfig.language;utterance.rate=ttsConfig.rate;utterance.pitch=ttsConfig.pitch;utterance.volume=ttsConfig.volume;const voice=window.speechSynthesis.getVoices().find(v=>v.name===ttsConfig.voice);if(voice)utterance.voice=voice;ttsRunning=true;lastTts=Date.now();utterance.onend=()=>{ttsRunning=false;setTimeout(pumpTts,ttsConfig.cooldownMs)};utterance.onerror=()=>{ttsRunning=false;setTimeout(pumpTts,ttsConfig.cooldownMs)};window.speechSynthesis.speak(utterance)}
-  async function init(){
-    render();
-    messages=await api.chatHistory({limit:300});
+    bindUi();
     updateBody();
-    api.onChatMessages(acceptBatch);api.onChatStatus(()=>{const el=root.querySelector("#chat-status");if(el)el.textContent="● Verbindungen aktualisiert"});api.onChatWindow((state)=>{const button=root.querySelector("#chat-undock-btn");if(button)button.textContent=state.undocked?"↙":"↗"});
-    if(window.speechSynthesis)window.speechSynthesis.onvoiceschanged=loadVoices;
-    refreshSettings();
   }
-  init();
+
+  function setStatus(text, error = false) {
+    const el = root.querySelector("#chat-status");
+    if (!el) return;
+    el.textContent = `● ${text}`;
+    el.dataset.error = error ? "1" : "0";
+  }
+
+  function updateBody() {
+    const body = root.querySelector("#chat-body");
+    if (!body) return;
+    const visible = messages.filter((m) => filter === "all" || m.platform === filter).slice(-300);
+    const count = root.querySelector("#chat-count");
+    if (count) count.textContent = `${visible.length} Nachrichten`;
+    if (!visible.length) {
+      body.innerHTML = '<div class="chat-empty"><div><strong>Noch keine Nachrichten</strong><br><small>TikFinity wird lokal automatisch gesucht. Twitch, CNG und YouTube können zusätzlich verbunden werden.</small></div></div>';
+      return;
+    }
+    body.innerHTML = visible.map((m) => {
+      const meta = META[m.platform] || META.all;
+      return `<div class="chat-row" data-platform="${esc(m.platform)}"><span class="platform-badge" style="background:${esc(m.color || meta[1])}">${meta[2]}</span><div><div class="chat-meta"><span class="chat-user" style="color:${esc(m.color || meta[1])}">${esc(m.username)}</span><span class="chat-role">${esc(meta[0])}</span>${m.role ? `<span class="chat-role">${esc(m.role)}</span>` : ""}${m.source === "tikfinity" ? '<span class="chat-role">TikFinity</span>' : ""}</div><div class="chat-message">${esc(m.message)}</div></div></div>`;
+    }).join("");
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function bindUi() {
+    root.querySelectorAll("[data-filter]").forEach((button) => button.onclick = () => { filter = button.dataset.filter; render(); });
+    root.querySelector("#chat-settings-btn").onclick = () => { const panel = root.querySelector("#chat-settings"); panel.hidden = !panel.hidden; if (!panel.hidden) void refreshSettings(); };
+    root.querySelector("#chat-settings-close").onclick = () => root.querySelector("#chat-settings").hidden = true;
+    root.querySelector("#chat-undock-btn").onclick = () => api.chatToggleWindow().catch((e) => setStatus(e.message, true));
+    root.querySelector("#chat-clear").onclick = async () => { try { if (filter !== "tiktok") await api.chatClear(filter); messages = filter === "all" ? [] : messages.filter((m) => m.platform !== filter); updateBody(); } catch (e) { setStatus(e.message, true); } };
+    root.querySelector("#tikfinity-connect").onclick = () => connectTikfinity(true);
+    root.querySelector("#tikfinity-disconnect").onclick = () => disconnectTikfinity(false);
+    root.querySelector("#cfg-twitch-connect").onclick = () => connectPlatform("twitch", { channel:val("cfg-twitch-channel"), token:val("cfg-twitch-token"), username:val("cfg-twitch-user") });
+    root.querySelector("#cfg-cng-save").onclick = async () => { try { await api.saveCngConfig({ chat:{url:val("cfg-cng-chat")}, alerts:{url:val("cfg-cng-alert")} }); setStatus("CNG gespeichert"); } catch (e) { setStatus(e.message, true); } };
+    root.querySelector("#cfg-cng-connect").onclick = async () => { try { await api.chatConnect("cng", await api.getCngConfig()); setStatus("CNG verbunden"); await refreshSettings(); } catch (e) { setStatus(e.message, true); } };
+    root.querySelector("#cfg-tiktok-connect").onclick = async () => { try { const status = await api.chatConnect("tiktok", { username:val("cfg-tiktok-user") }); setStatus(status?.offline ? "TikTok offline · nicht LIVE" : "TikTok direkt verbunden"); await refreshSettings(); } catch (e) { setStatus(e.message, true); } };
+    root.querySelector("#cfg-youtube-connect").onclick = () => connectPlatform("youtube", { videoId:val("cfg-youtube-video"), liveChatId:val("cfg-youtube-video") });
+    root.querySelector("#tts-enabled").onchange = () => void saveTts();
+    ["tts-language","tts-rate","tts-volume"].forEach((id) => root.querySelector(`#${id}`).onchange = () => void saveTts());
+  }
+
+  async function connectPlatform(platform, config) {
+    try { await api.chatConnect(platform, config); setStatus(`${META[platform]?.[0] || platform}: verbunden`); await refreshSettings(); }
+    catch (e) { setStatus(`${META[platform]?.[0] || platform}: ${e.message || e}`, true); }
+  }
+
+  async function refreshSettings() {
+    try {
+      const statuses = await api.chatStatuses();
+      const grid = root.querySelector("#chat-status-grid");
+      if (grid) {
+        const cards = Object.entries(statuses || {}).map(([p,s]) => `<div class="status-card"><strong>${esc(META[p]?.[0] || p)}</strong><small><span class="dot ${s.connected ? "on" : ""}"></span>${s.connected ? "Verbunden" : s.offline ? "Offline" : "Getrennt"}</small></div>`);
+        cards.unshift(`<div class="status-card"><strong>TikFinity</strong><small><span class="dot ${tikfinityState === "Verbunden" ? "on" : ""}"></span>${esc(tikfinityState)}</small></div>`);
+        grid.innerHTML = cards.join("");
+      }
+      const cng = await api.getCngConfig();
+      if (root.querySelector("#cfg-cng-chat")) root.querySelector("#cfg-cng-chat").value = cng?.chat?.url || "";
+      if (root.querySelector("#cfg-cng-alert")) root.querySelector("#cfg-cng-alert").value = cng?.alerts?.url || "";
+      const tts = await api.getTtsConfig();
+      if (tts) ttsConfig = { ...ttsConfig, ...tts };
+      if (root.querySelector("#tts-enabled")) root.querySelector("#tts-enabled").checked = !!ttsConfig.enabled;
+      if (root.querySelector("#tts-language")) root.querySelector("#tts-language").value = ttsConfig.language || "de-DE";
+      if (root.querySelector("#tts-rate")) root.querySelector("#tts-rate").value = ttsConfig.rate || 1;
+      if (root.querySelector("#tts-volume")) root.querySelector("#tts-volume").value = ttsConfig.volume ?? 1;
+    } catch (e) { setStatus(e.message || "Chat-Einstellungen nicht verfügbar", true); }
+  }
+
+  async function saveTts() {
+    try {
+      ttsConfig = await api.saveTtsConfig({ ...ttsConfig, enabled:root.querySelector("#tts-enabled").checked, language:val("tts-language"), rate:Number(root.querySelector("#tts-rate").value), volume:Number(root.querySelector("#tts-volume").value) });
+    } catch (e) { setStatus(e.message, true); }
+  }
+
+  function pick(obj, keys) {
+    for (const key of keys) if (obj?.[key] !== undefined && obj[key] !== null && obj[key] !== "") return obj[key];
+    return "";
+  }
+
+  function handleTikfinity(raw) {
+    let packet;
+    try { packet = JSON.parse(String(raw)); } catch { return; }
+    const event = String(packet.event || packet.type || packet.eventType || "").toLowerCase();
+    const data = packet.data || packet.payload || packet;
+    if (!event.includes("chat") && !event.includes("comment")) return;
+    const username = pick(data, ["uniqueId","username","nickname","displayName","userId"]);
+    const message = pick(data, ["comment","message","text"]);
+    accept({ platform:"tiktok", username, message, source:"tikfinity", id:pick(data,["msgId","messageId","id"]) || undefined }, "tiktok");
+  }
+
+  function updateTikfinityState(text) {
+    tikfinityState = text;
+    const el = root.querySelector("#tikfinity-state");
+    if (el) el.textContent = text;
+  }
+
+  function scheduleTikfinityRetry() {
+    clearTimeout(tikfinityRetry);
+    tikfinityRetry = setTimeout(() => connectTikfinity(false), 5000);
+  }
+
+  function connectTikfinity(manual = false) {
+    if (tikfinity && [WebSocket.OPEN, WebSocket.CONNECTING].includes(tikfinity.readyState)) return;
+    clearTimeout(tikfinityRetry);
+    updateTikfinityState("Verbinde …");
+    try {
+      tikfinity = new WebSocket(TIKFINITY_URL);
+      tikfinity.onopen = () => { updateTikfinityState("Verbunden"); setStatus("TikFinity lokal verbunden"); void refreshSettings(); };
+      tikfinity.onmessage = (event) => handleTikfinity(event.data);
+      tikfinity.onerror = () => updateTikfinityState("Nicht erreichbar");
+      tikfinity.onclose = () => { tikfinity = null; updateTikfinityState("Getrennt"); if (!manual) scheduleTikfinityRetry(); };
+    } catch (e) {
+      updateTikfinityState("Nicht erreichbar");
+      if (!manual) scheduleTikfinityRetry();
+    }
+  }
+
+  function disconnectTikfinity(manual = true) {
+    clearTimeout(tikfinityRetry);
+    const ws = tikfinity;
+    tikfinity = null;
+    try { ws?.close(); } catch {}
+    updateTikfinityState("Getrennt");
+    if (!manual) scheduleTikfinityRetry();
+  }
+
+  function speak(message) {
+    if (!ttsConfig.enabled || !ttsConfig.chat || !message?.message || !window.speechSynthesis) return;
+    if (!Array.isArray(ttsConfig.announcePlatforms) || !ttsConfig.announcePlatforms.includes(message.platform)) return;
+    if (Date.now() - lastTts < Number(ttsConfig.cooldownMs || 0) || ttsQueue.length >= Number(ttsConfig.maxQueue || 20)) return;
+    const blocked = Array.isArray(ttsConfig.blockUsers) ? ttsConfig.blockUsers.map(cleanUser) : [];
+    if (blocked.includes(cleanUser(message.username))) return;
+    ttsQueue.push(`${message.username} sagt: ${message.message.slice(0, Number(ttsConfig.maxCommentLength || 220))}`);
+    pumpTts();
+  }
+
+  function pumpTts() {
+    if (ttsRunning || !ttsQueue.length || !window.speechSynthesis) return;
+    const utterance = new SpeechSynthesisUtterance(ttsQueue.shift());
+    utterance.lang = ttsConfig.language || "de-DE";
+    utterance.rate = Number(ttsConfig.rate || 1);
+    utterance.pitch = Number(ttsConfig.pitch || 1);
+    utterance.volume = Number(ttsConfig.volume ?? 1);
+    ttsRunning = true;
+    lastTts = Date.now();
+    const done = () => { ttsRunning = false; setTimeout(pumpTts, Number(ttsConfig.cooldownMs || 0)); };
+    utterance.onend = done;
+    utterance.onerror = done;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function bindListeners() {
+    if (listenersBound) return;
+    listenersBound = true;
+    api.onChatMessages((batch) => accept(batch));
+    api.onChatStatus((status) => {
+      const name = META[status?.platform]?.[0] || status?.platform || "Chat";
+      if (status?.error) setStatus(`${name}: ${status.error}`, true);
+      else if (status?.offline) setStatus(`${name}: offline · nicht LIVE`);
+      else if (status?.connected) setStatus(`${name}: verbunden`);
+      if (!root.querySelector("#chat-settings")?.hidden) void refreshSettings();
+    });
+    api.onChatWindow((state) => { const button = root.querySelector("#chat-undock-btn"); if (button) button.textContent = state?.undocked ? "↙" : "↗"; });
+    window.addEventListener("batto:external-chat", (event) => accept(event.detail));
+  }
+
+  async function init() {
+    render();
+    bindListeners();
+    try {
+      const history = await api.chatHistory({ limit:300 });
+      messages = Array.isArray(history) ? history.map((m) => normalizeMessage(m)).filter(Boolean) : [];
+      updateBody();
+      setStatus("Chat bereit");
+    } catch (e) {
+      setStatus(`Chat-Backend: ${e.message || e}`, true);
+    }
+    try { ttsConfig = { ...ttsConfig, ...(await api.getTtsConfig()) }; } catch {}
+    connectTikfinity(false);
+  }
+
+  window.addEventListener("beforeunload", () => { clearTimeout(tikfinityRetry); try { tikfinity?.close(); } catch {} });
+  void init();
 })();

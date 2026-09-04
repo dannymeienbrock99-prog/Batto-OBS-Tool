@@ -1,0 +1,141 @@
+name: Batto OBS Tool 2.1.0 Windows CI
+
+on:
+  push:
+    branches:
+      - main
+      - product/2.1.0-commercial-settings
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-and-pack:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare production source
+        run: npm run prepare:integrated
+
+      - name: Verify production source
+        run: node scripts/verify-source-tree.cjs
+
+      - name: Verify TouchDeck source linkage
+        shell: pwsh
+        run: |
+          $source = Get-Content "resources/touchdeck-0802/SOURCE-COMMIT.txt" -Raw
+          if ($source.Trim() -ne "51be33d29c07f50323b19d58782804af391b8394") { throw "Wrong TouchDeck source commit: $source" }
+          Write-Host "TouchDeck suite linkage verified for exact 02.08.2026 source commit $($source.Trim())."
+
+      - name: Verify full UI without removed diagnostics
+        shell: pwsh
+        run: |
+          $html = Get-Content "src/renderer/index.html" -Raw
+          foreach ($required in @('view-stream-overlay','view-plugins','view-mobile','view-moderation','view-cohost','view-deck-0802','multi-chat-dashboard.svg')) {
+            if (-not $html.Contains($required)) { throw "Missing production UI section: $required" }
+          }
+          foreach ($forbidden in @('Hardwarediagnose','Encoder- und Hardware-Monitoring','CPU-Belastungstest','./assets/bg.jpg')) {
+            if ($html.Contains($forbidden)) { throw "Removed UI returned: $forbidden" }
+          }
+          Write-Host "Full production UI verified."
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build unpacked Windows app
+        run: npm run pack:win
+
+      - name: Verify Windows executable
+        shell: pwsh
+        run: |
+          $exe = "dist/win-unpacked/Batto OBS Tool.exe"
+          if (-not (Test-Path $exe)) { throw "Windows executable missing: $exe" }
+          $item = Get-Item $exe
+          if ($item.Length -lt 1MB) { throw "Windows executable is unexpectedly small: $($item.Length) bytes" }
+          Write-Host "Windows executable verified: $($item.FullName) ($($item.Length) bytes)"
+
+      - name: Verify packaged TouchDeck linkage
+        shell: pwsh
+        run: |
+          $marker = "dist/win-unpacked/resources/touchdeck-0802/SOURCE-COMMIT.txt"
+          if (-not (Test-Path $marker)) { throw "Packaged TouchDeck source marker missing: $marker" }
+          $source = Get-Content $marker -Raw
+          if ($source.Trim() -ne "51be33d29c07f50323b19d58782804af391b8394") { throw "Wrong packaged TouchDeck source marker: $source" }
+          Write-Host "Packaged TouchDeck suite linkage verified."
+
+      - name: Run packaged self-test
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "dist/win-unpacked/Batto OBS Tool.exe"
+          $stdout = Join-Path $env:RUNNER_TEMP "batto-self-test.out.txt"
+          $stderr = Join-Path $env:RUNNER_TEMP "batto-self-test.err.txt"
+          $process = Start-Process -FilePath $exe -ArgumentList "--self-test" -PassThru -Wait -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          if (Test-Path $stdout) { Get-Content $stdout }
+          if (Test-Path $stderr) { Get-Content $stderr }
+          if ($process.ExitCode -ne 0) { throw "Packaged self-test failed with exit code $($process.ExitCode)" }
+          Write-Host "Packaged self-test passed."
+
+      - name: Run packaged UI smoke test
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "dist/win-unpacked/Batto OBS Tool.exe"
+          $stdout = Join-Path $env:RUNNER_TEMP "batto-ui-smoke.out.txt"
+          $stderr = Join-Path $env:RUNNER_TEMP "batto-ui-smoke.err.txt"
+          $process = Start-Process -FilePath $exe -ArgumentList "--ui-smoke-test" -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          $finished = $process.WaitForExit(30000)
+          if (-not $finished) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (Test-Path $stdout) { Get-Content $stdout }
+            if (Test-Path $stderr) { Get-Content $stderr }
+            throw "Packaged UI smoke test timed out after 30 seconds"
+          }
+          if (Test-Path $stdout) { Get-Content $stdout }
+          if (Test-Path $stderr) { Get-Content $stderr }
+          if ($process.ExitCode -ne 0) { throw "Packaged UI smoke test failed with exit code $($process.ExitCode)" }
+          Write-Host "Packaged UI smoke test passed."
+
+      - name: Upload unpacked app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Batto-OBS-Tool-2.1.0-win-unpacked
+          path: desktop/dist/win-unpacked/**
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Build Windows installer
+        run: npm run dist:win
+
+      - name: Verify Windows installer
+        shell: pwsh
+        run: |
+          $installer = "dist/Batto-OBS-Tool-Setup-2.1.0.exe"
+          if (-not (Test-Path $installer)) { throw "Windows installer missing: $installer" }
+          $item = Get-Item $installer
+          if ($item.Length -lt 10MB) { throw "Windows installer is unexpectedly small: $($item.Length) bytes" }
+          Write-Host "Windows installer verified: $($item.FullName) ($($item.Length) bytes)"
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Batto-OBS-Tool-Setup-2.1.0
+          path: desktop/dist/Batto-OBS-Tool-Setup-2.1.0.exe
+          if-no-files-found: error
+          retention-days: 7
