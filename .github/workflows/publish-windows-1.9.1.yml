@@ -77,4 +77,4 @@ jobs:
             "$env:RELEASE_INSTRUCTIONS" `
             --target release/windows-1.9.1-hotfix `
             --title "Batto OBS Tool 1.9.1" `
-            --notes "Reparierter Windows-x64-Release. Ein NSIS-Installer und eine Hauptanwendung. Der geprüfte Build wurde still installiert, per Self-Test gestartet und auf genau eine Hauptinstanz geprüft. Enthalten sind lokale Hardwarediagnose, OBS-WebSocket-Verbindung, Encoder-Empfehlung, bestätigungspflichtige Belastungstests, transparentes Monitoring, Twitch-Hologramm und Touch-Deck. Keine Demo-Version und keine separate Creator-Hub-EXE."
+            --notes "Reparierter Windows-x64-Release. Ein NSIS-Installer und eine Hauptanwendung. Der geprüfte Build wurde still installiert, per Self-Test gestartet und auf genau eine Hauptinstanz geprüft. Enthalten sind lokale Hardwarediagnose, OBS-WebSocket-Verbindung, Encoder-Empfehlung, bestätigungspflichtige Belastungstests, transparentes Monitoring und Twitch-Hologramm. Keine Demo-Version und keine separate Creator-Hub-EXE."
