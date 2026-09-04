@@ -7,28 +7,24 @@ const path = require("node:path");
 const test = require("node:test");
 const { SettingsStore, normalizeState } = require("../src/services/store.cjs");
 
-test("deck grid accepts 1x1 through 10x10 without truncating hidden assignments", () => {
-  const assignments = Array.from({ length: 100 }, (_, index) => ({
-    title: `Taste ${index + 1}`,
-    type: "obs",
-    action: "record.start"
-  }));
+test("settings normalization keeps supported preferences", () => {
   const state = normalizeState({
-    deck: {
-      activeProfile: "Streaming",
-      profiles: {
-        Streaming: {
-          rows: 2,
-          columns: 2,
-          pages: { root: assignments }
-        }
-      }
+    obs: { host: "localhost", port: 4455 },
+    preferences: {
+      platform: "youtube",
+      targetResolution: "2560x1440",
+      targetFps: 60,
+      monitoringEnabled: true,
+      twitchHoloEnabled: false
     }
   });
-  assert.equal(state.deck.profiles.Streaming.rows, 2);
-  assert.equal(state.deck.profiles.Streaming.columns, 2);
-  assert.equal(state.deck.profiles.Streaming.pages.root.length, 100);
-  assert.equal(state.deck.profiles.Streaming.pages.root[99].title, "Taste 100");
+  assert.equal(state.obs.host, "127.0.0.1");
+  assert.equal(state.obs.port, 4455);
+  assert.equal(state.preferences.platform, "youtube");
+  assert.equal(state.preferences.targetResolution, "2560x1440");
+  assert.equal(state.preferences.targetFps, 60);
+  assert.equal(state.preferences.monitoringEnabled, true);
+  assert.equal(state.preferences.twitchHoloEnabled, false);
 });
 
 test("settings are written atomically and can be loaded again", async () => {
@@ -36,22 +32,16 @@ test("settings are written atomically and can be loaded again", async () => {
   const filename = path.join(directory, "settings.json");
   const store = new SettingsStore(filename);
   const saved = await store.set({
-    preferences: { platform: "youtube", targetFps: 60 },
-    deck: {
-      activeProfile: "YouTube",
-      profiles: {
-        YouTube: {
-          rows: 4,
-          columns: 6,
-          pages: { root: [{ title: "Stream", type: "obs", action: "stream.start" }] }
-        }
-      }
+    preferences: {
+      platform: "youtube",
+      targetResolution: "1920x1080",
+      targetFps: 60
     }
   });
-  assert.equal(saved.deck.activeProfile, "YouTube");
+  assert.equal(saved.preferences.platform, "youtube");
   const reloaded = new SettingsStore(filename);
   const value = await reloaded.get();
   assert.equal(value.preferences.platform, "youtube");
-  assert.equal(value.deck.profiles.YouTube.rows, 4);
-  assert.equal(value.deck.profiles.YouTube.pages.root[0].action, "stream.start");
+  assert.equal(value.preferences.targetResolution, "1920x1080");
+  assert.equal(value.preferences.targetFps, 60);
 });
