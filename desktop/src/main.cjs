@@ -5,7 +5,7 @@ const { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } = r
 require("./services/moderation-bootstrap.cjs");
 const { SettingsStore } = require("./services/store.cjs");
 const { SecretStore } = require("./services/secret-store.cjs");
-const { collectHardware, runInternetTest } = require("./services/hardware.cjs");
+const { runInternetTest } = require("./services/internet-test.cjs");
 const { ObsWebSocketClient, normalizeLocalObsHost } = require("./services/obs-websocket.cjs");
 const { TwitchHoloServer } = require("./services/twitch-holo-server.cjs");
 
@@ -17,7 +17,6 @@ let mainWindow = null;
 let settingsStore = null;
 let secretStore = null;
 let holoServer = null;
-let hardware = null;
 let internetResult = null;
 let moduleErrors = {};
 const obs = new ObsWebSocketClient();
@@ -50,7 +49,6 @@ async function stateSnapshot() {
   return {
     product: { name: "Batto OBS Tool", version: app.getVersion(), author: "Crazy_Batto / Team Alpha", packaged: app.isPackaged },
     settings: { ...state, obs: { host: state.obs.host, port: state.obs.port, passwordConfigured: await secretStore.has("obs-websocket-password") } },
-    hardware,
     internetResult,
     obs: await safeObsSnapshot(),
     twitchHolo: holoServer?.status() || { running: false },
@@ -83,7 +81,6 @@ function registerIpc() {
     const payload = value && typeof value === "object" ? value : {};
     return settingsStore.set({ ...current, ...payload, obs: { ...current.obs, ...(payload.obs || {}), password: "" }, preferences: { ...current.preferences, ...(payload.preferences || {}) } });
   });
-  ipcMain.handle("hardware:scan", async () => { hardware = await collectHardware(); return hardware; });
   ipcMain.handle("internet:test", async () => { internetResult = await runInternetTest(); return internetResult; });
   ipcMain.handle("obs:connect", async (_event, input = {}) => {
     const current = await settingsStore.get();
@@ -104,18 +101,10 @@ function registerIpc() {
   ipcMain.handle("holo:status", () => holoServer?.status() || { running: false });
   ipcMain.handle("holo:open-editor", async () => { const status = holoServer?.status(); if (!status?.editorUrl) throw new Error("Hologramm-Editor ist nicht gestartet."); await shell.openExternal(status.editorUrl); return status; });
   ipcMain.handle("holo:copy-url", () => { const status = holoServer?.status(); if (!status?.overlayUrl) throw new Error("Hologramm-Overlay ist nicht gestartet."); clipboard.writeText(status.overlayUrl); return status.overlayUrl; });
-  ipcMain.handle("dialog:save-report", async (_event, report) => {
-    const result = await dialog.showSaveDialog(mainWindow, { title: "Batto-OBS-Tool-Diagnosebericht speichern", defaultPath: `Batto-OBS-Tool-Diagnose-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: "JSON", extensions: ["json"] }] });
-    if (result.canceled || !result.filePath) return { saved: false };
-    const fs = require("node:fs/promises");
-    await fs.writeFile(result.filePath, JSON.stringify(report, null, 2), "utf8");
-    return { saved: true, filePath: result.filePath };
-  });
 }
 
 async function runSelfTest() {
-  const currentHardware = await collectHardware();
-  const result = { product: "Batto OBS Tool", version: app.getVersion(), platform: process.platform, hardware: { cpu: currentHardware.cpu?.name || "Nicht verfügbar", preferredGpu: currentHardware.preferredGpu?.name || "Nicht verfügbar", memoryGb: currentHardware.memory?.totalGb || 0 }, modules: {} };
+  const result = { product: "Batto OBS Tool", version: app.getVersion(), platform: process.platform, modules: {} };
   const testHolo = new TwitchHoloServer({ preferredPort: 18923, webRoot: path.join(__dirname, "..", "modules", "twitch-holo-chat", "web") });
   await testHolo.start();
   result.modules.twitchHolo = testHolo.status().running;
