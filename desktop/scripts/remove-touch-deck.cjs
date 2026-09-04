@@ -4,24 +4,24 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const src = path.join(root, "src");
 
-function read(relative) {
-  return fs.readFileSync(path.join(root, relative), "utf8");
+function file(relative) { return path.join(root, relative); }
+function read(relative) { return fs.readFileSync(file(relative), "utf8"); }
+function write(relative, text) { fs.writeFileSync(file(relative), text, "utf8"); }
+function removeFile(relative) { if (fs.existsSync(file(relative))) fs.rmSync(file(relative), { force: true }); }
+function removeBetween(text, start, end, keepEnd = true) {
+  const a = text.indexOf(start);
+  if (a < 0) return text;
+  const b = text.indexOf(end, a + start.length);
+  if (b < 0) throw new Error(`Touch-Deck-Entfernung: Endmarker fehlt: ${end}`);
+  return text.slice(0, a) + (keepEnd ? text.slice(b) : text.slice(b + end.length));
 }
-function write(relative, text) {
-  fs.writeFileSync(path.join(root, relative), text, "utf8");
-}
-function removeFile(relative) {
-  const file = path.join(root, relative);
-  if (fs.existsSync(file)) fs.rmSync(file, { force: true });
-}
-function removeIndentedFunction(text, namePattern) {
-  const rx = new RegExp(`\\n  function ${namePattern}\\([^]*?\\n  }\\n`, "g");
-  return text.replace(rx, "\n");
+function removeLineContaining(text, needles) {
+  const list = Array.isArray(needles) ? needles : [needles];
+  return text.split(/\r?\n/).filter((line) => !list.some((needle) => line.includes(needle))).join("\n");
 }
 
-// Main process: remove DeckStore, deck state, mobile deck execution and all deck IPC handlers.
+// Hauptprozess: DeckStore, Deck-State, Mobile-Deck-Ausführung und Deck-IPC vollständig entfernen.
 {
   const relative = "src/main.cjs";
   let text = read(relative);
@@ -31,77 +31,113 @@ function removeIndentedFunction(text, namePattern) {
   text = text.replace(/^\s*deckStore = new DeckStore\([^\n]+\);\r?\n/m, "");
   text = text.replace(/new LegacyMigration\(\{ userData: app\.getPath\("userData"\), deckStore, pluginRegistry \}\)/g,
     'new LegacyMigration({ userData: app.getPath("userData"), pluginRegistry })');
-  text = text.replace(/\nasync function executeMobilePayload\(payload = \{\}\) \{\n\s*if \(payload\.kind === "deck-button"\) \{[^]*?\n\s*\}\n\s*if \(payload\.kind === "action"/, '\nasync function executeMobilePayload(payload = {}) {\n  if (payload.kind === "action"');
-  text = text.replace(/\n\s*handle\("deck:create-profile"[^]*?\n\s*handle\("action:execute"/, '\n  handle("action:execute"');
-  text = text.replace(/Touch-Deck/gi, "entfernte Altsteuerung");
+
+  const mobileStart = '\nasync function executeMobilePayload(payload = {}) {\n  if (payload.kind === "deck-button") {';
+  const mobileNext = '\n  if (payload.kind === "action") {';
+  if (text.includes(mobileStart)) {
+    const start = text.indexOf(mobileStart);
+    const next = text.indexOf(mobileNext, start);
+    if (next < 0) throw new Error("Touch-Deck-Entfernung: Mobile-Aktionsmarker fehlt.");
+    text = text.slice(0, start) + '\nasync function executeMobilePayload(payload = {}) {' + text.slice(next);
+  }
+
+  const deckIpcStart = '\n  handle("deck:create-profile"';
+  const actionIpc = '\n  handle("action:execute"';
+  if (text.includes(deckIpcStart)) text = removeBetween(text, deckIpcStart, actionIpc, true);
+
+  text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+  text = text.replace(/legacy-deck/gi, "legacy-control");
   write(relative, text);
 }
 
-// Preload bridge: no deck API/channel may be exposed to the renderer.
+// Preload-Brücke: nur explizite Deck-Bestandteile entfernen; keine generischen Zeilen-RegEx mehr.
 {
   const relative = "src/preload.cjs";
   let text = read(relative);
-  text = removeIndentedFunction(text, "deckForLegacy");
-  text = text.replace(/^.*deck:[^\n]*\r?\n/gmi, "");
-  text = text.replace(/^.*deck[A-Z][^\n]*\r?\n/gm, "");
-  text = text.replace(/^.*Deck[^\n]*\r?\n/gm, "");
-  text = text.replace(/,?\s*deck:\s*deckForLegacy\([^\n]+\)/g, "");
+  text = removeLineContaining(text, [
+    '"deck:create-profile"', '"deck:create-folder"', '"deck:update-button"'
+  ]);
+
+  text = removeBetween(text, "\nfunction actionToLegacy(action) {", "\nfunction legacyState(value) {", true);
+  text = text.replace(/^\s*deck:\s*deckForLegacy\([^\n]+\),\r?\n/m, "");
+  text = removeBetween(text, "\nfunction actionForLegacyAssignment(assignment = {}) {", "\nfunction on(channel, callback) {", true);
+  text = text.replace(/^\s*if \(value\.deck\) patch\.legacyDeck = value\.deck;\r?\n/m, "");
+  text = text.replace(/^\s*return \(await invoke\("settings:update", patch\)\)\.legacyDeck \|\| value\.deck \|\| patch;\r?\n/m,
+    '    return invoke("settings:update", patch);\n');
+  text = text.replace(/^\s*executeDeckAction:[^\n]+\r?\n/m, "");
+  text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+  text = text.replace(/legacy-deck/gi, "legacy-control");
   write(relative, text);
 }
 
-// Integrated renderer: remove navigation, view markup, functions, state and event lines for Touch Deck Pro.
+// Integrierte Oberfläche: komplette, klar begrenzte Deck-Blöcke entfernen.
 {
   const relative = "src/renderer/integrated.js";
   let text = read(relative);
-  text = text.replace(/^\s*\["deck-pro"[^\n]*\r?\n/m, "");
-  text = text.replace(/^\s*"deck-pro": deckMarkup\(\),\r?\n/m, "");
-  text = text.replace(/^\s*let selectedDeckButtonIndex[^\n]*\r?\n/m, "");
-  text = text.replace(/^\s*let editingDeckButton[^\n]*\r?\n/m, "");
-  for (const pattern of ["deckMarkup", "deck[A-Za-z0-9_]*", "renderDeck[A-Za-z0-9_]*", "fillDeck[A-Za-z0-9_]*", "saveDeck[A-Za-z0-9_]*", "loadDeck[A-Za-z0-9_]*"]) {
-    text = removeIndentedFunction(text, pattern);
+  text = removeLineContaining(text, [
+    '["deck-pro",',
+    '"deck-pro": deckMarkup()',
+    'let selectedDeckButtonIndex',
+    'let editingDeckButton',
+    'if (id === "deck-pro") renderDeckPro();'
+  ]);
+  text = removeBetween(text, "\n  function deckMarkup() {", "\n  function mobileMarkup() {", true);
+
+  const deckEventsStart = '    $("#deck-pro-profile")?.addEventListener';
+  const mobileEventsStart = '    $("#mobile-new-pin")?.addEventListener';
+  if (text.includes(deckEventsStart)) {
+    const a = text.indexOf(deckEventsStart);
+    const b = text.indexOf(mobileEventsStart, a);
+    if (b < 0) throw new Error("Touch-Deck-Entfernung: Mobile-Eventmarker fehlt.");
+    text = text.slice(0, a) + text.slice(b);
   }
-  text = text.replace(/^.*deck-pro[^\n]*\r?\n/gmi, "");
-  text = text.replace(/^.*Touch-Deck[^\n]*\r?\n/gmi, "");
-  text = text.replace(/^.*state\.deck[^\n]*\r?\n/gm, "");
+
+  text = removeBetween(text, "\n  function deckProfile() {", "\n  function renderMobile() {", true);
+  text = text.replace(/<li>Touch[-‑– ]Deck[^<]*<\/li>/gi, "");
+  text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+  text = text.replace(/deck-pro/gi, "removed-control");
   write(relative, text);
 }
 
-// Legacy renderer: remove old navigation/view strings and deck-only blocks where possible.
-{
-  const relative = "src/renderer/app.js";
-  let text = read(relative);
-  text = removeIndentedFunction(text, "deckState");
-  text = removeIndentedFunction(text, "renderDeck[A-Za-z0-9_]*");
-  text = text.replace(/^.*deck:\s*\["Touch-Deck"[^\n]*\r?\n/gm, "");
-  text = text.replace(/^.*data-view=["']deck["'][^\n]*\r?\n/gmi, "");
-  text = text.replace(/^.*Touch-Deck[^\n]*\r?\n/gmi, "");
-  write(relative, text);
-}
-
-// Desktop HTML: remove any legacy deck navigation/view remnants.
+// Alte Desktop-Oberfläche: Navigation und komplette View entfernen. Die übrige Oberfläche bleibt unangetastet.
 {
   const relative = "src/renderer/index.html";
   let text = read(relative);
   text = text.replace(/^.*data-view=["']deck["'][^\n]*\r?\n/gmi, "");
-  text = text.replace(/<section[^>]+id=["']view-deck["'][^>]*>[^]*?<\/section>/gmi, "");
-  text = text.replace(/^.*Touch-Deck[^\n]*\r?\n/gmi, "");
+  text = text.replace(/<section[^>]+id=["']view-deck["'][^>]*>[\s\S]*?<\/section>/gmi, "");
+  text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
   write(relative, text);
 }
 
-// Mobile client: remove deck tab/sections/scripts; OBS/status remain available.
-for (const relative of ["src/mobile/index.html", "src/mobile/app.js", "src/mobile/index-v2.html", "src/mobile/app-v2.js"]) {
-  const file = path.join(root, relative);
-  if (!fs.existsSync(file)) continue;
-  let text = fs.readFileSync(file, "utf8");
-  text = text.replace(/^.*data-page=["']deck["'][^\n]*\r?\n/gmi, "");
-  text = text.replace(/<section[^>]+id=["']deck["'][^>]*>[^]*?<\/section>/gmi, "");
-  text = text.replace(/^.*Touch-Deck[^\n]*\r?\n/gmi, "");
-  text = text.replace(/^.*deck-button[^\n]*\r?\n/gmi, "");
-  text = text.replace(/^.*state\.deck[^\n]*\r?\n/gm, "");
-  fs.writeFileSync(file, text, "utf8");
+{
+  const relative = "src/renderer/app.js";
+  let text = read(relative);
+  text = text.replace(/^\s*deck:\s*\["Touch-Deck"[^\n]*\r?\n/gm, "");
+  text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+  // Alte Deck-Routinen dürfen als toter Legacy-Code nicht im ausgelieferten Produkt bleiben.
+  text = text.replace(/^.*api\.executeDeckAction[^\n]*\r?\n/gm, "");
+  text = text.replace(/^.*data-view=["']deck["'][^\n]*\r?\n/gmi, "");
+  write(relative, text);
 }
 
-// Files that must not enter the packaged application.
+// Mobile UI: Deck-Tab und Deck-Bereich entfernen. OBS und Status bleiben erhalten.
+for (const relative of ["src/mobile/index.html", "src/mobile/index-v2.html"]) {
+  if (!fs.existsSync(file(relative))) continue;
+  let text = read(relative);
+  text = text.replace(/^.*data-page=["']deck["'][^\n]*\r?\n/gmi, "");
+  text = text.replace(/<section[^>]+id=["']deck["'][^>]*>[\s\S]*?<\/section>/gmi, "");
+  text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+  write(relative, text);
+}
+for (const relative of ["src/mobile/app.js", "src/mobile/app-v2.js"]) {
+  if (!fs.existsSync(file(relative))) continue;
+  let text = read(relative);
+  text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+  text = removeLineContaining(text, ["deck-button", "state.deck"]);
+  write(relative, text);
+}
+
+// Diese Dateien dürfen niemals in app.asar gelangen.
 for (const relative of [
   "src/services/deck-store.cjs",
   "src/services/deck-manager-v2.cjs",
