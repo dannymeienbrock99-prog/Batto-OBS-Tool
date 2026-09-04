@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { authentication, normalizeLocalObsHost, websocketUrl } = require("../src/services/obs-websocket.cjs");
+const { obsAuthentication, normalizeLocalObsHost, buildObsWebSocketUrl } = require("../src/services/obs-websocket.cjs");
 const { buildRecommendation } = require("../src/services/recommendation.cjs");
 const { selectPreferredGpu } = require("../src/services/hardware.cjs");
 const { normalizeState } = require("../src/services/store.cjs");
@@ -13,9 +13,9 @@ test("OBS connection is local, authenticated and IPv6-safe", () => {
   assert.equal(normalizeLocalObsHost("2003:f8:3733:8662:183e:947b:4c84:e8f7"), "127.0.0.1");
   assert.equal(normalizeLocalObsHost("192.168.2.121"), "127.0.0.1");
   assert.equal(normalizeLocalObsHost("[::1]"), "::1");
-  assert.equal(websocketUrl("::1", 4455), "ws://[::1]:4455");
-  assert.equal(websocketUrl("127.0.0.1", 4455), "ws://127.0.0.1:4455");
-  assert.equal(authentication("pass", "salt", "challenge"), "EabUNw4z9EKKpEOC0yvqBO8dJPSIcTb82eo+adWKOvk=");
+  assert.equal(buildObsWebSocketUrl("::1", 4455), "ws://[::1]:4455");
+  assert.equal(buildObsWebSocketUrl("127.0.0.1", 4455), "ws://127.0.0.1:4455");
+  assert.equal(obsAuthentication("pass", "salt", "challenge"), "EabUNw4z9EKKpEOC0yvqBO8dJPSIcTb82eo+adWKOvk=");
 });
 
 test("RTX 5080 wins over CPU graphics and produces NVENC H.264 for Twitch", () => {
@@ -45,9 +45,11 @@ test("production UI uses Batto branding", () => {
   const root = path.join(__dirname, "..");
   const visible = [
     "src/renderer/index.html",
-    "src/renderer/app.js"
+    "src/renderer/app.js",
+    "src/renderer/chat-bot.js"
   ].map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
   assert.doesNotMatch(visible, /Creator Hub/i);
   assert.doesNotMatch(visible, /\bKandidat\b/i);
   assert.match(visible, /Batto OBS Tool/i);
+  assert.match(visible, /BATTO CHAT BOT/i);
 });
