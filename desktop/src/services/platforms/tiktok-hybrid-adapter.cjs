@@ -66,10 +66,14 @@ class TikTokHybridAdapter extends EventEmitter {
     super();
     this.platform = "tiktok";
     this.wsFactory = options.wsFactory || ((url) => new WebSocket(url));
-    this.direct = options.directAdapter || new TikTokAdapter(options.directOptions || {});
+    const directOptions = { ...(options.directOptions || {}) };
+    if (options.connectorFactory && !directOptions.connectorFactory) directOptions.connectorFactory = options.connectorFactory;
+    this.direct = options.directAdapter || new TikTokAdapter(directOptions);
+    this.preferInjectedDirect = Boolean(options.connectorFactory && !options.wsFactory && !options.directAdapter);
     this.socket = null;
     this.connected = false;
     this.configured = false;
+    this.offline = false;
     this.source = "none";
     this.url = "ws://127.0.0.1:21213/";
     this.lastError = "";
@@ -80,6 +84,7 @@ class TikTokHybridAdapter extends EventEmitter {
     this.direct.onStatus((status) => {
       if (this.source === "direct" || status.connected) {
         this.connected = Boolean(status.connected);
+        this.offline = Boolean(status.offline);
         this.emitStatus({ direct: status });
       }
     });
@@ -92,6 +97,8 @@ class TikTokHybridAdapter extends EventEmitter {
       platform: "tiktok",
       connected: this.connected,
       configured: this.configured,
+      available: this.source === "tikfinity" ? true : this.direct.status?.().available !== false,
+      offline: this.offline,
       source: this.source,
       tikfinityUrl: this.url,
       error: this.lastError
@@ -99,12 +106,39 @@ class TikTokHybridAdapter extends EventEmitter {
   }
   emitStatus(extra = {}) { this.emit("status", { ...this.status(), ...extra }); }
 
+  async connectDirect(config = {}, { fallback = false } = {}) {
+    const username = String(config.username || config.uniqueId || "").trim().replace(/^@/, "");
+    if (!username) throw new Error("TikTok LIVE benötigt den @Username des öffentlichen LIVE-Streams.");
+    this.source = "direct";
+    try {
+      const status = await this.direct.connect({ username, signApiKey: config.signApiKey });
+      this.connected = Boolean(status.connected);
+      this.offline = Boolean(status.offline);
+      this.lastError = this.offline ? "TikTok ist aktuell nicht LIVE." : "";
+      this.emitStatus({ fallback, offline: this.offline });
+      return this.status();
+    } catch (error) {
+      this.connected = false;
+      this.offline = false;
+      this.lastError = String(error?.message || error);
+      this.emitStatus({ fallback, error: this.lastError });
+      throw error;
+    }
+  }
+
   async connect(config = {}) {
     await this.disconnect();
     this.config = { ...config };
     this.url = String(config.tikfinityUrl || config.wsUrl || "ws://127.0.0.1:21213/").trim() || "ws://127.0.0.1:21213/";
     this.configured = true;
+    this.offline = false;
     this.lastError = "";
+
+    // Dependency-injected direct connector is primarily used for deterministic
+    // adapter tests and custom runtimes. Production still prefers TikFinity.
+    if (this.preferInjectedDirect && (config.username || config.uniqueId)) {
+      return this.connectDirect(config);
+    }
 
     try {
       await this.connectTikFinity();
@@ -115,16 +149,13 @@ class TikTokHybridAdapter extends EventEmitter {
 
     const username = String(config.username || config.uniqueId || "").trim().replace(/^@/, "");
     if (config.directFallback !== false && username) {
-      this.source = "direct";
       try {
-        const status = await this.direct.connect({ username });
-        this.connected = Boolean(status.connected);
-        this.lastError = status.offline ? "TikTok ist aktuell nicht LIVE." : "";
-        this.emitStatus({ fallback: true, offline: Boolean(status.offline) });
-        if (!this.connected) this.scheduleReconnect();
-        return this.status();
+        const status = await this.connectDirect(config, { fallback: true });
+        if (!status.connected) this.scheduleReconnect();
+        return status;
       } catch (error) {
         this.connected = false;
+        this.offline = false;
         this.lastError = String(error?.message || error);
       }
     }
@@ -154,6 +185,7 @@ class TikTokHybridAdapter extends EventEmitter {
         settled = true;
         clearTimeout(timeout);
         this.connected = true;
+        this.offline = false;
         this.source = "tikfinity";
         this.lastError = "";
         this.emitStatus({ provider: "TikFinity", local: true });
@@ -171,6 +203,7 @@ class TikTokHybridAdapter extends EventEmitter {
         if (this.socket === socket) this.socket = null;
         if (this.source === "tikfinity") {
           this.connected = false;
+          this.offline = false;
           this.source = "none";
           this.emitStatus({ info: "TikFinity-Verbindung getrennt." });
           this.scheduleReconnect();
@@ -220,6 +253,7 @@ class TikTokHybridAdapter extends EventEmitter {
     try { socket?.close?.(); } catch {}
     try { await this.direct.disconnect(); } catch {}
     this.connected = false;
+    this.offline = false;
     this.source = "none";
     this.emitStatus();
     return this.status();
