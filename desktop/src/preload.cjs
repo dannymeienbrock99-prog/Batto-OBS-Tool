@@ -38,6 +38,9 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   chatOverlayInstall: (config) => ipcRenderer.invoke("chat:overlay-install", config),
   chatOverlayRemove: () => ipcRenderer.invoke("chat:overlay-remove"),
 
+  getModerationState: (platform) => ipcRenderer.invoke("moderation:get-state", platform),
+  applyModeration: (input) => ipcRenderer.invoke("moderation:apply", input),
+
   getChatBotState: () => ipcRenderer.invoke("chatbot:get-state"),
   saveChatBotConfig: (value) => ipcRenderer.invoke("chatbot:save-config", value),
   testChatBotCommand: (commandId, platform) => ipcRenderer.invoke("chatbot:test-command", commandId, platform),
