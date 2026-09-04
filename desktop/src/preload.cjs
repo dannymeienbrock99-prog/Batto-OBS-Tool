@@ -21,6 +21,15 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   openHoloEditor: () => ipcRenderer.invoke("holo:open-editor"),
   copyHoloUrl: () => ipcRenderer.invoke("holo:copy-url"),
 
+  getV4Configs: () => ipcRenderer.invoke("v4:configs:get"),
+  getV4Config: (id) => ipcRenderer.invoke("v4:config:get", id),
+  saveV4Config: (id, patch) => ipcRenderer.invoke("v4:config:save", id, patch),
+  resetV4Config: (id) => ipcRenderer.invoke("v4:config:reset", id),
+  getV4Logs: (options) => ipcRenderer.invoke("v4:logs:list", options),
+  clearV4Logs: () => ipcRenderer.invoke("v4:logs:clear"),
+  exportV4Logs: () => ipcRenderer.invoke("v4:logs:export"),
+  onV4ConfigChanged: (callback) => on("v4:config-changed", callback),
+
   chatHistory: (options) => ipcRenderer.invoke("chat:history", options),
   chatStatuses: () => ipcRenderer.invoke("chat:statuses"),
   chatConnect: (platform, config) => ipcRenderer.invoke("chat:connect", platform, config),
