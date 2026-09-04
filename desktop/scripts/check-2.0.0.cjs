@@ -82,6 +82,7 @@ must(bot, "/overlay/gifts", "Gift-Overlay fehlt.");
 must(bot, "target.requireRunning", "Hotkey-Zielprozessprüfung fehlt.");
 must(obs, "127.0.0.1", "Lokaler OBS-Host fehlt.");
 must(obs, "::1", "OBS IPv6-Loopback fehlt.");
+mustNot(obs, /runRecordingTest|averageObsCpuPercent|Aufnahmetest/, "Der gelöschte OBS-Aufnahme-/Belastungstest ist im Backend zurückgekehrt.");
 
 const visible = [index,appJs,settings,preload,main,multiCss].join("\n");
 mustNot(visible, /Creator Hub/i, "Alte Produktbezeichnung ist sichtbar.");
