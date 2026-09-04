@@ -28,7 +28,7 @@ test("settings normalization keeps supported application preferences", () => {
 
 test("production UI uses Batto branding and removed areas stay absent", () => {
   const root = path.join(__dirname, "..");
-  const visible = ["src/renderer/index.html", "src/renderer/app.js", "src/renderer/chat-bot.js"]
+  const visible = ["src/renderer/index.html", "src/renderer/app.js", "src/renderer/multi-chat.js", "src/renderer/chat-bot.js"]
     .map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
   assert.doesNotMatch(visible, /Creator Hub/i);
   assert.doesNotMatch(visible, /Hardwarediagnose|Hardware vollständig erfassen|PC vollständig scannen|PC jetzt scannen|Hardware-Scan|Windows-Diagnose|Encoder-Empfehlung|Belastungstest|Monitoring-Overlay|Encoder- und Hardware-Monitoring|Realer Belastungs- und OBS-Aufnahmetest/i);
