@@ -25,7 +25,7 @@ Creator Hub.exe
     └── damalige Mobile-Webdateien
 ```
 
-Die Anwendungsteile liefen damit nicht als mehrere eigenständige Programme. Touch-Deck, OBS-Verbindung, Overlay-Server und weitere Module wurden aus derselben Electron-Anwendung gestartet.
+Die Anwendungsteile liefen damit nicht als mehrere eigenständige Programme. OBS-Verbindung, Overlay-Server und weitere Module wurden aus derselben Electron-Anwendung gestartet.
 
 ## Übernommene Architektur für Batto OBS Tool
 
