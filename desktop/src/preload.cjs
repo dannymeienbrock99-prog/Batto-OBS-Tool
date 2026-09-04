@@ -8,7 +8,8 @@ const SAFE_INVOKE_CHANNELS = new Set([
   "deck:create-profile", "deck:update-profile", "deck:delete-profile", "deck:activate-profile",
   "deck:create-folder", "deck:update-folder", "deck:delete-folder", "deck:activate-folder",
   "deck:update-button", "deck:move-button", "deck:clear-button", "deck:execute-button",
-  "deck:quick-media", "deck:export", "deck:import"
+  "deck:quick-media", "deck:export", "deck:import",
+  "deck:original-0802-status", "deck:open-original-0802"
 ]);
 
 function invoke(channel, payload) {
