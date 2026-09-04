@@ -15,7 +15,9 @@ test("overview uses the Crazy_Batto Multi Chat hero and reconstructed bg image",
   assert.match(html, /Crazy_Batto Multi Chat/);
   assert.match(html, /BATTO OBS TOOL 2\.1\.0/);
   assert.match(html, /OBS, TikTok und Multi-Chat zentral steuern/);
-  assert.match(html, /Produktionskern für OBS, TikTok LIVE Studio\/API, Multi-Chat, Touch-Deck Pro und Browser-Overlays\./);
+  assert.match(html, /Produktionskern für OBS, TikTok LIVE Studio\/API, Multi-Chat, Touch-Deck und Browser-Overlays\./);
+  assert.match(html, /Stand 02\.08\.2026/);
+  assert.doesNotMatch(html, /Touch-Deck Pro/);
   assert.match(html, /assets\/bg\.jpg/);
   assert.match(css, /object-fit:\s*cover/);
   assert.equal(fs.existsSync(bg), true, "bg.jpg muss durch prepare:integrated erzeugt worden sein");
