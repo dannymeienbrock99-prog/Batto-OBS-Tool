@@ -8,6 +8,7 @@ const { SettingsStore } = require("./services/store.cjs");
 const { SecretStore } = require("./services/secret-store.cjs");
 const { runInternetTest } = require("./services/internet-test.cjs");
 const { ObsWebSocketClient, normalizeLocalObsHost } = require("./services/obs-websocket.cjs");
+const { StreamStatusSampler } = require("./services/stream-status.cjs");
 const { TwitchHoloServer } = require("./services/twitch-holo-server.cjs");
 
 app.setName("Batto OBS Tool");
@@ -21,6 +22,7 @@ let holoServer = null;
 let internetResult = null;
 let moduleErrors = {};
 const obs = new ObsWebSocketClient();
+const streamStatusSampler = new StreamStatusSampler(obs);
 
 function userDataFile(name) { return path.join(app.getPath("userData"), name); }
 function errorPayload(error) { return { message: String(error?.message || error || "Unbekannter Fehler"), name: error?.name || "Error", code: error?.code || "" }; }
@@ -83,6 +85,7 @@ function registerIpc() {
     return settingsStore.set({ ...current, ...payload, obs: { ...current.obs, ...(payload.obs || {}), password: "" }, preferences: { ...current.preferences, ...(payload.preferences || {}) } });
   });
   ipcMain.handle("internet:test", async () => { internetResult = await runInternetTest(); return internetResult; });
+  ipcMain.handle("stream-status:get", () => streamStatusSampler.snapshot());
   ipcMain.handle("obs:connect", async (_event, input = {}) => {
     const current = await settingsStore.get();
     const host = normalizeLocalObsHost(input.host || current.obs.host || "127.0.0.1");
