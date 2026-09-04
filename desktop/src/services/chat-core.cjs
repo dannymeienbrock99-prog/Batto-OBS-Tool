@@ -62,6 +62,15 @@ class ChatCore extends EventEmitter {
     return adapter.disconnect?.() || { platform, connected: false };
   }
 
+  async send(platform, message) {
+    const adapter = this.adapters.get(platform);
+    if (!adapter) throw new Error(`Kein Adapter für ${platform} eingerichtet.`);
+    if (typeof adapter.sendMessage !== "function") throw new Error(`${PLATFORM_META[platform]?.label || platform}: Senden wird von der aktuell verbundenen Schnittstelle nicht unterstützt.`);
+    const value = cleanText(message, 1000);
+    if (!value) throw new Error("Leere Chat-Nachrichten werden nicht gesendet.");
+    return adapter.sendMessage(value);
+  }
+
   ingest(input) {
     const message = normalizeMessage(input);
     const stored = this.store.add(message);
@@ -85,7 +94,10 @@ class ChatCore extends EventEmitter {
   clear(platform) { this.store.clear(platform); this.emit("cleared", platform || "all"); }
 
   statuses() {
-    return Object.fromEntries(PLATFORMS.map((platform) => [platform, this.adapters.get(platform)?.status?.() || { platform, connected: false, configured: false }]));
+    return Object.fromEntries(PLATFORMS.map((platform) => {
+      const status = this.adapters.get(platform)?.status?.() || { platform, connected: false, configured: false };
+      return [platform, { ...status, canSend: typeof this.adapters.get(platform)?.sendMessage === "function" }];
+    }));
   }
 
   stop() {
