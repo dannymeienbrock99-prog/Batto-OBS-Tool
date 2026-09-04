@@ -9,7 +9,9 @@ const SAFE_INVOKE_CHANNELS = new Set([
   "deck:create-folder", "deck:update-folder", "deck:delete-folder", "deck:activate-folder",
   "deck:update-button", "deck:move-button", "deck:clear-button", "deck:execute-button",
   "deck:quick-media", "deck:export", "deck:import",
-  "deck:original-0802-status", "deck:open-original-0802"
+  "deck:original-0802-status", "deck:open-original-0802",
+  "chat:overlay-status", "chat:overlay-copy-url", "chat:overlay-open", "chat:overlay-install", "chat:overlay-remove",
+  "mobile:status", "mobile:start", "mobile:regenerate-pin", "mobile:set-approval", "mobile:approve", "mobile:reject", "mobile:disconnect"
 ]);
 
 function invoke(channel, payload) {
@@ -57,10 +59,27 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   chatToggleWindow: () => ipcRenderer.invoke("chat:toggle-window"),
   chatWindowStatus: () => ipcRenderer.invoke("chat:window-status"),
   setChatAlwaysOnTop: (value) => ipcRenderer.invoke("chat:window-always-on-top", value),
+  chatOverlayStatus: () => ipcRenderer.invoke("chat:overlay-status"),
+  chatOverlayCopyUrl: () => ipcRenderer.invoke("chat:overlay-copy-url"),
+  chatOverlayOpen: () => ipcRenderer.invoke("chat:overlay-open"),
+  chatOverlayInstall: (options) => ipcRenderer.invoke("chat:overlay-install", options),
+  chatOverlayRemove: () => ipcRenderer.invoke("chat:overlay-remove"),
   saveCngConfig: (value) => ipcRenderer.invoke("cng:save-config", value),
   getCngConfig: () => ipcRenderer.invoke("cng:get-config"),
   getTtsConfig: () => ipcRenderer.invoke("tts:get-config"),
   saveTtsConfig: (value) => ipcRenderer.invoke("tts:save-config", value),
+
+  scanPlugins: () => invoke("plugins:scan", {}),
+  enablePlugin: (id, enabled) => invoke("plugins:enable", { id, enabled }),
+  updatePluginSettings: (id, settings) => invoke("plugins:settings", { id, settings }),
+
+  mobileStatus: () => invoke("mobile:status", {}),
+  mobileStart: () => invoke("mobile:start", {}),
+  mobileRegeneratePin: () => invoke("mobile:regenerate-pin", {}),
+  mobileSetApproval: (value) => invoke("mobile:set-approval", value),
+  mobileApprove: (id) => invoke("mobile:approve", id),
+  mobileReject: (id) => invoke("mobile:reject", id),
+  mobileDisconnect: (id) => invoke("mobile:disconnect", id),
 
   onStateChanged: (callback) => on("state:update", callback),
   onObsStatusChanged: (callback) => on("obs:status-changed", callback),
