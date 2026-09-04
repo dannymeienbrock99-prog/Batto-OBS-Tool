@@ -12,6 +12,8 @@ class HybridRuntime {
     this.connections = new ConnectionManager();
     this.liveStudio = new TikTokLiveStudioService();
     this.started = false;
+    this.liveStudioPoll = null;
+    this.lastLiveStudioSignature = "";
 
     this.connections.register("obs", {
       connect: async () => {
@@ -53,6 +55,55 @@ class HybridRuntime {
     return state;
   }
 
+  liveStudioConnectionState(status) {
+    if (status.running) return "connected";
+    if (status.installed) return "ready";
+    return "unavailable";
+  }
+
+  async publishLiveStudioStatus({ force = false } = {}) {
+    const state = await this.settingsStore.get();
+    const enabled = Boolean(state.platforms?.tiktok?.enabled && state.platforms?.tiktok?.liveStudio?.enabled !== false);
+    const status = await this.liveStudio.status();
+    const signature = JSON.stringify({ enabled, installed: status.installed, running: status.running, executablePath: status.executablePath });
+    if (!force && signature === this.lastLiveStudioSignature) return status;
+    this.lastLiveStudioSignature = signature;
+
+    this.emit("connections:status", {
+      name: "tiktokLiveStudio",
+      state: enabled ? this.liveStudioConnectionState(status) : "disabled",
+      enabled,
+      updatedAt: Date.now(),
+      details: { role: "tiktok-host", ...status }
+    });
+    return status;
+  }
+
+  startLiveStudioPolling() {
+    if (this.liveStudioPoll) return;
+    const tick = () => {
+      void this.publishLiveStudioStatus().catch((error) => {
+        this.emit("connections:status", {
+          name: "tiktokLiveStudio",
+          state: "error",
+          enabled: true,
+          updatedAt: Date.now(),
+          lastError: { message: String(error?.message || error), name: error?.name || "Error", code: error?.code || "" },
+          details: { role: "tiktok-host" }
+        });
+      });
+    };
+    this.liveStudioPoll = setInterval(tick, 2000);
+    this.liveStudioPoll.unref?.();
+    tick();
+  }
+
+  stopLiveStudioPolling() {
+    if (this.liveStudioPoll) clearInterval(this.liveStudioPoll);
+    this.liveStudioPoll = null;
+    this.lastLiveStudioSignature = "";
+  }
+
   async start() {
     const state = await this.configureFromSettings();
     const live = state.platforms?.tiktok?.liveStudio || {};
@@ -72,6 +123,7 @@ class HybridRuntime {
       }
     }
     this.started = true;
+    this.startLiveStudioPolling();
     return this.connections.startEnabled();
   }
 
@@ -160,6 +212,7 @@ class HybridRuntime {
   }
 
   async stop() {
+    this.stopLiveStudioPolling();
     const tasks = ["obs", "tiktokLiveStudio", "tiktokApi", "twitch", "youtube", "cng"].map((name) => this.connections.disconnect(name));
     await Promise.allSettled(tasks);
     this.started = false;
