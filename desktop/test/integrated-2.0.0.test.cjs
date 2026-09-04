@@ -6,7 +6,6 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { authentication, normalizeLocalObsHost, websocketUrl } = require("../src/services/obs-websocket.cjs");
-const { DeckStore } = require("../src/services/deck-store.cjs");
 const { PluginRegistry } = require("../src/services/plugin-registry.cjs");
 const { StreamOverlayServer } = require("../src/services/stream-overlay-server.cjs");
 const { MobileBridge } = require("../src/services/mobile-bridge.cjs");
@@ -37,29 +36,6 @@ test("RTX 5080 wins over the CPU graphics and produces NVENC H.264 for Twitch", 
   const result = buildRecommendation({ platform: "twitch", resolution: "1920x1080", fps: 60, uploadMbps: 30, gpu });
   assert.equal(result.settings.encoder, "NVIDIA NVENC H.264");
   assert.equal(result.settings.codec, "H.264");
-});
-
-test("Touch-Deck shrink preserves hidden actions, folders and delays", () => {
-  const directory = temp("batto-deck");
-  try {
-    const store = new DeckStore(path.join(directory, "deck.json"));
-    const profile = store.snapshot().profiles[0];
-    const folder = profile.folders[0];
-    store.updateButton(profile.id, folder.id, 14, {
-      title: "OBS und Overlay",
-      actions: [
-        { type: "obs.scene", settings: { sceneName: "Gaming" }, delayMs: 0 },
-        { type: "overlay.wheel", settings: {}, delayMs: 750 }
-      ]
-    });
-    store.updateFolder(profile.id, folder.id, { rows: 2, columns: 3 });
-    let current = store.snapshot().profiles[0].folders[0];
-    assert.equal(current.rows * current.columns, 6);
-    assert.equal(current.buttons[14].actions[1].delayMs, 750);
-    store.updateFolder(profile.id, folder.id, { rows: 3, columns: 5 });
-    current = store.snapshot().profiles[0].folders[0];
-    assert.equal(current.buttons[14].title, "OBS und Overlay");
-  } finally { remove(directory); }
 });
 
 test("native replacements cover the legacy plugin catalog", () => {
@@ -109,7 +85,7 @@ test("mobile bridge provides web, Batto and legacy QR pairing without exposing P
   const directory = temp("batto-mobile");
   const server = new MobileBridge({
     webRoot: path.join(__dirname, "..", "src", "mobile"), stateFile: path.join(directory, "pairings.json"),
-    preferredPort: 49220, stateProvider: () => ({ deck: { profiles: [] } }), actionHandler: async () => ({ ok: true })
+    preferredPort: 49220, stateProvider: () => ({}), actionHandler: async () => ({ ok: true })
   });
   try {
     await server.start();
@@ -156,7 +132,7 @@ test("legacy file copy never overwrites existing Batto data", () => {
   } finally { remove(directory); }
 });
 
-test("production UI contains integrated pages and no visible old product name", () => {
+test("production UI contains integrated pages and no Touch Deck", () => {
   const root = path.join(__dirname, "..");
   const visible = [
     "src/renderer/index.html", "src/renderer/app.js", "src/renderer/integrated.js",
@@ -164,6 +140,7 @@ test("production UI contains integrated pages and no visible old product name", 
   ].map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
   assert.doesNotMatch(visible, /Creator Hub/i);
   assert.doesNotMatch(visible, /\bKandidat\b/i);
-  for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Touch-Deck Pro", "Handy verbinden"]) assert.match(visible, new RegExp(label));
+  assert.doesNotMatch(visible, /Touch[-‑– ]Deck|deck-pro|data-view=["']deck|data-page=["']deck/i);
+  for (const label of ["Stream-Overlay", "Multi-Chat", "OBS Gäste", "Plugins", "Handy verbinden"]) assert.match(visible, new RegExp(label));
   assert.match(fs.readFileSync(path.join(root, "modules", "encoder-monitoring-overlay", "web", "overlay.css"), "utf8"), /background:\s*transparent\s*!important/);
 });
