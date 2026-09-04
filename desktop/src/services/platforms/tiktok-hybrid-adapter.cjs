@@ -135,12 +135,7 @@ class TikTokHybridAdapter extends EventEmitter {
     this.lastError = "";
 
     if (config.directOnly === true) return this.connectDirect(config);
-
-    // Dependency-injected direct connector is primarily used for deterministic
-    // adapter tests and custom runtimes. Production still prefers TikFinity.
-    if (this.preferInjectedDirect && (config.username || config.uniqueId)) {
-      return this.connectDirect(config);
-    }
+    if (this.preferInjectedDirect && (config.username || config.uniqueId)) return this.connectDirect(config);
 
     try {
       await this.connectTikFinity();
@@ -177,7 +172,10 @@ class TikTokHybridAdapter extends EventEmitter {
       const timeout = setTimeout(() => {
         if (settled) return;
         settled = true;
-        try { socket.close?.(); } catch {}
+        try {
+          if (socket.readyState === WebSocket.CONNECTING && typeof socket.terminate === "function") socket.terminate();
+          else socket.close?.();
+        } catch {}
         reject(new Error("Zeitüberschreitung"));
       }, 1800);
       timeout.unref?.();
@@ -236,11 +234,7 @@ class TikTokHybridAdapter extends EventEmitter {
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
       if (this.connected || !this.configured) return;
-      try {
-        await this.connectTikFinity();
-      } catch {
-        this.scheduleReconnect();
-      }
+      try { await this.connectTikFinity(); } catch { this.scheduleReconnect(); }
     }, 3000);
     this.reconnectTimer.unref?.();
   }
@@ -251,8 +245,20 @@ class TikTokHybridAdapter extends EventEmitter {
     this.reconnectTimer = null;
     const socket = this.socket;
     this.socket = null;
-    try { socket?.removeAllListeners?.(); } catch {}
-    try { socket?.close?.(); } catch {}
+
+    if (socket) {
+      // Ein CONNECTING-WebSocket darf nicht mit close() beendet werden: ws wirft
+      // sonst "WebSocket was closed before the connection was established".
+      // Außerdem bleibt immer ein Fehler-Listener aktiv, damit beim Beenden der
+      // Anwendung keine ungefangene main-process Exception entsteht.
+      try { socket.removeAllListeners?.(); } catch {}
+      try { socket.on?.("error", () => {}); } catch {}
+      try {
+        if (socket.readyState === WebSocket.CONNECTING && typeof socket.terminate === "function") socket.terminate();
+        else if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CLOSING) socket.close?.();
+      } catch {}
+    }
+
     try { await this.direct.disconnect(); } catch {}
     this.connected = false;
     this.offline = false;
