@@ -67,7 +67,7 @@ $bios=Get-CimInstance Win32_BIOS | Select-Object Manufacturer,SMBIOSBIOSVersion,
 $disk=Get-CimInstance Win32_DiskDrive | Select-Object Model,Manufacturer,SerialNumber,Size,InterfaceType,MediaType,FirmwareRevision,Status
 $net=Get-NetAdapter | Select-Object Name,InterfaceDescription,Status,LinkSpeed,MacAddress,MediaType
 $os=Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,OSArchitecture,LastBootUpTime
-$mon=Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID | ForEach-Object { [pscustomobject]@{ Name=([Text.Encoding]::ASCII.GetString($_.UserFriendlyName)-replace "`0",''); Manufacturer=([Text.Encoding]::ASCII.GetString($_.ManufacturerName)-replace "`0",''); Serial=([Text.Encoding]::ASCII.GetString($_.SerialNumberID)-replace "`0",''); Active=$_.Active; InstanceName=$_.InstanceName } }
+$mon=Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID | ForEach-Object { [pscustomobject]@{ Name=([Text.Encoding]::ASCII.GetString($_.UserFriendlyName)).Trim([char]0); Manufacturer=([Text.Encoding]::ASCII.GetString($_.ManufacturerName)).Trim([char]0); Serial=([Text.Encoding]::ASCII.GetString($_.SerialNumberID)).Trim([char]0); Active=$_.Active; InstanceName=$_.InstanceName } }
 $obs=@('C:\Program Files\obs-studio\bin\64bit\obs64.exe','C:\Program Files (x86)\obs-studio\bin\64bit\obs64.exe') | Where-Object { Test-Path $_ }
 [pscustomobject]@{cpu=$cpu;gpus=@($gpu);memory=@($ram);board=$board;bios=$bios;disks=@($disk);networkAdapters=@($net);operatingSystem=$os;monitors=@($mon);obsPaths=@($obs)} | ConvertTo-Json -Depth 6 -Compress
 `;
