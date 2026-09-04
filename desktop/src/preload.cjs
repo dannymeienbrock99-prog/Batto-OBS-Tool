@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   getState: () => ipcRenderer.invoke("app:get-state"),
   saveSettings: (value) => ipcRenderer.invoke("settings:save", value),
   runInternetTest: () => ipcRenderer.invoke("internet:test"),
+  getStreamStatus: () => ipcRenderer.invoke("stream-status:get"),
   connectObs: (options) => ipcRenderer.invoke("obs:connect", options),
   disconnectObs: () => ipcRenderer.invoke("obs:disconnect"),
   forgetObsPassword: () => ipcRenderer.invoke("obs:forget-password"),
