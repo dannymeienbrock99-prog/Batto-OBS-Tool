@@ -15,6 +15,7 @@ let multiChatText = fs.readFileSync(multiChat, "utf8");
 bootstrapText = bootstrapText.replace('ipcMain.handle("chat:clear", (_event, platform)', 'ipcMain.handle("chat:unified-clear", (_event, platform)');
 bootstrapText = bootstrapText.replace("if(document.getElementById('batto-multi-chat-dock'))return;", "if(document.getElementById('multi-chat-root')||document.getElementById('batto-multi-chat-dock'))return;");
 
+multiChatText = multiChatText.replace('<label>OAuth-Token<input id="cfg-twitch-token" type="password" placeholder="oauth-…"></label>', '<label>Twitch-Anmeldung<input id="cfg-twitch-token" type="password" placeholder="oauth-…" autocomplete="off"></label>');
 const historyNeedle = '<small>${esc(entry.reason || entry.lastMessage || "Kein Grund angegeben")}</small></div>';
 const historyReplacement = '<small>${esc(entry.reason || entry.lastMessage || "Kein Grund angegeben")}</small><span class="history-result ${entry.remoteApplied ? "platform" : "local"}">${entry.remoteApplied ? "Plattform" : "Lokal"}</span></div>';
 if (!multiChatText.includes('entry.remoteApplied ? "Plattform" : "Lokal"') && multiChatText.includes(historyNeedle)) multiChatText = multiChatText.replace(historyNeedle, historyReplacement);
@@ -27,6 +28,7 @@ if (!preloadText.includes("chatHistory:") || !preloadText.includes("onChatWindow
 if (!bootstrapText.includes('ipcMain.handle("chat:unified-clear"')) throw new Error("V4 Unified-Clear IPC fehlt.");
 if (!bootstrapText.includes("document.getElementById('multi-chat-root')")) throw new Error("V4: Doppeltes Multi-Chat-Dock ist nicht verhindert.");
 if (!multiChatText.includes('id="cfg-twitch-token"') || !multiChatText.includes('type="password"')) throw new Error("V4: Twitch-Authentifizierung ist im Multi-Chat nicht mehr bedienbar.");
+if (multiChatText.includes("OAuth-Token")) throw new Error("V4: Alte Token-Wand-Beschriftung ist noch sichtbar.");
 if (!multiChatText.includes('entry.remoteApplied ? "Plattform" : "Lokal"')) throw new Error("V4: Moderationsverlauf kennzeichnet Plattform/Lokal nicht.");
 
-console.log("Batto OBS Tool 2.0.0: V4 Multi-Chat korrigiert – kein Doppel-Dock, Twitch-Authentifizierung funktionsfähig, Moderation Plattform/Lokal.");
+console.log("Batto OBS Tool 2.0.0: V4 Multi-Chat korrigiert – kein Doppel-Dock, Twitch-Anmeldung funktionsfähig, Moderation Plattform/Lokal.");
