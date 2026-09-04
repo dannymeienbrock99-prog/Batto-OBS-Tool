@@ -100,7 +100,7 @@ const twitch = fs.readFileSync(path.join(root, "src", "services", "platforms", "
 if (!twitch.includes("366") || !twitch.includes("Zeitüberschreitung beim Verbinden")) throw new Error("Twitch-Kanalbeitritt/Timeout ist nicht robust verdrahtet.");
 
 const integration = fs.readFileSync(path.join(root, "src", "renderer", "integration-20260904.js"), "utf8");
-for (const marker of ["ws://127.0.0.1:21213/", "Als Moderator hinzufügen", "Als Moderator entfernen", "Stummen", "Blockieren", "Entstummen", "Entblocken", "cohost-tiktok.html", "cohost-twitch.html"]) {
+for (const marker of ["ws://127.0.0.1:21213/", "Als Moderator hinzufügen", "Als Moderator entfernen", "Stummen", "Blockieren", "Entstummen", "Entblocken", "cohost-${format}.html"]) {
   if (!integration.includes(marker)) throw new Error(`Neue Produktfunktion fehlt: ${marker}`);
 }
 
