@@ -6,22 +6,28 @@ const path = require("node:path");
 const file = path.join(__dirname, "..", "src", "renderer", "multi-chat.js");
 let source = fs.readFileSync(file, "utf8");
 
-source = source.replace(
-  'root.querySelector("#tikfinity-connect").onclick = () => connectTikfinity(true);',
-  'root.querySelector("#tikfinity-connect").onclick = () => void connectTikfinityBackend(true);'
-);
-source = source.replace(
-  'root.querySelector("#tikfinity-disconnect").onclick = () => disconnectTikfinity(false);',
-  'root.querySelector("#tikfinity-disconnect").onclick = () => void disconnectTikfinityBackend();'
-);
-source = source.replace(
-  'api.chatConnect("tiktok", { username:val("cfg-tiktok-user") })',
-  'api.chatConnect("tiktok", { username:val("cfg-tiktok-user"), directOnly:true })'
-);
+const alreadyPatched = source.includes("async function connectTikfinityBackend")
+  && source.includes("directFallback:false")
+  && source.includes("directOnly:true")
+  && !source.includes("new WebSocket(TIKFINITY_URL)");
 
-const transportBlock = /  function scheduleTikfinityRetry\(\) \{[\s\S]*?\n  function bindListeners\(\) \{/;
-if (!transportBlock.test(source)) throw new Error("Alter Renderer-TikFinity-Transportblock wurde nicht gefunden.");
-source = source.replace(transportBlock, `  async function connectTikfinityBackend(manual = false) {
+if (!alreadyPatched) {
+  source = source.replace(
+    'root.querySelector("#tikfinity-connect").onclick = () => connectTikfinity(true);',
+    'root.querySelector("#tikfinity-connect").onclick = () => void connectTikfinityBackend(true);'
+  );
+  source = source.replace(
+    'root.querySelector("#tikfinity-disconnect").onclick = () => disconnectTikfinity(false);',
+    'root.querySelector("#tikfinity-disconnect").onclick = () => void disconnectTikfinityBackend();'
+  );
+  source = source.replace(
+    'api.chatConnect("tiktok", { username:val("cfg-tiktok-user") })',
+    'api.chatConnect("tiktok", { username:val("cfg-tiktok-user"), directOnly:true })'
+  );
+
+  const transportBlock = /  function scheduleTikfinityRetry\(\) \{[\s\S]*?\n  function bindListeners\(\) \{/;
+  if (!transportBlock.test(source)) throw new Error("Alter Renderer-TikFinity-Transportblock fehlt und Backend-Patch ist ebenfalls nicht vollständig vorhanden.");
+  source = source.replace(transportBlock, `  async function connectTikfinityBackend(manual = false) {
     updateTikfinityState("Verbinde …");
     try {
       const status = await api.chatConnect("tiktok", { tikfinityUrl:TIKFINITY_URL, directFallback:false });
@@ -49,9 +55,10 @@ source = source.replace(transportBlock, `  async function connectTikfinityBacken
 
   function bindListeners() {`);
 
-source = source.replace('    connectTikfinity(false);', '    await connectTikfinityBackend(false);');
-source = source.replace(/\n  window\.addEventListener\("beforeunload", \(\) => \{ clearTimeout\(tikfinityRetry\); try \{ tikfinity\?\.close\(\); \} catch \{\} \}\);/, "");
-source = source.replace('  let tikfinity = null;\n  let tikfinityRetry = null;\n', '');
+  source = source.replace('    connectTikfinity(false);', '    await connectTikfinityBackend(false);');
+  source = source.replace(/\n  window\.addEventListener\("beforeunload", \(\) => \{ clearTimeout\(tikfinityRetry\); try \{ tikfinity\?\.close\(\); \} catch \{\} \}\);/, "");
+  source = source.replace('  let tikfinity = null;\n  let tikfinityRetry = null;\n', '');
+}
 
 if (source.includes('new WebSocket(TIKFINITY_URL)')) throw new Error("Renderer öffnet weiterhin einen eigenen TikFinity-WebSocket.");
 if (!source.includes('connectTikfinityBackend')) throw new Error("Backend-TikFinity-Verbindung wurde nicht eingebaut.");
@@ -59,4 +66,4 @@ if (!source.includes('directFallback:false')) throw new Error("TikFinity-Button 
 if (!source.includes('directOnly:true')) throw new Error("Der explizite TikTok-Direkt-Button ist nicht als Direktverbindung markiert.");
 
 fs.writeFileSync(file, source, "utf8");
-console.log("Multi-Chat: TikFinity besitzt genau einen Backend-Transport; explizite Direktverbindung bleibt separat.");
+console.log("Multi-Chat: TikFinity-Backend-Patch ist vorhanden und wiederholbar ausführbar.");
