@@ -5,7 +5,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const file = path.join(root, "src", "services", "stream-overlay-server.cjs");
-let source = fs.readFileSync(file, "utf8");
+let source = fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 
 if (source.includes("BATTO_COHOST_STABLE_ROUTES")) {
   console.log("Co-Host-Runtime bereits gepatcht.");
