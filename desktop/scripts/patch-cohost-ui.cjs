@@ -5,7 +5,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const file = path.join(root, "src", "renderer", "integration-20260904.js");
-let source = fs.readFileSync(file, "utf8");
+let source = fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 
 if (source.includes("BATTO_COHOST_REAL_URLS")) {
   console.log("Co-Host-UI bereits gepatcht.");
