@@ -73,6 +73,49 @@ async function findVersionedExecutable(root) {
   return "";
 }
 
+function spawnDetached(executablePath) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let child;
+    try {
+      child = spawn(executablePath, [], {
+        cwd: path.dirname(executablePath),
+        detached: true,
+        stdio: "ignore",
+        windowsHide: false
+      });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    const finishError = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    child.once("error", finishError);
+    child.once("spawn", () => {
+      if (settled) return;
+      settled = true;
+      child.removeListener("error", finishError);
+      // Fehler nach erfolgreichem Spawn dürfen niemals als ungefangene
+      // main-process Exception die komplette Batto-App beenden.
+      child.on("error", () => {});
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+async function startViaWindowsShell(executablePath) {
+  await execFileAsync("cmd.exe", ["/d", "/s", "/c", "start", "", executablePath], {
+    windowsHide: true,
+    cwd: path.dirname(executablePath),
+    timeout: 10000
+  });
+}
+
 class TikTokLiveStudioService {
   constructor(options = {}) {
     this.configuredPath = String(options.executablePath || "").trim();
@@ -163,14 +206,20 @@ class TikTokLiveStudioService {
       return { launched: false, alreadyRunning: true, executablePath };
     }
 
-    const child = spawn(executablePath, [], {
-      cwd: path.dirname(executablePath),
-      detached: true,
-      stdio: "ignore",
-      windowsHide: false
-    });
-    child.unref();
-    return { launched: true, alreadyRunning: false, executablePath };
+    try {
+      await spawnDetached(executablePath);
+      return { launched: true, alreadyRunning: false, executablePath, method: "spawn" };
+    } catch (error) {
+      if (process.platform === "win32" && ["EACCES", "EPERM"].includes(String(error?.code || ""))) {
+        try {
+          await startViaWindowsShell(executablePath);
+          return { launched: true, alreadyRunning: false, executablePath, method: "windows-shell" };
+        } catch (shellError) {
+          throw new Error(`TikTok LIVE Studio konnte nicht gestartet werden (${error.code}). Bitte LIVE Studio einmal direkt als Windows-Benutzer starten. ${String(shellError?.message || shellError)}`);
+        }
+      }
+      throw new Error(`TikTok LIVE Studio konnte nicht gestartet werden: ${String(error?.message || error)}`);
+    }
   }
 }
 
@@ -180,5 +229,6 @@ module.exports = {
   INSTALL_ROOTS,
   expandEnvironment,
   findVersionedExecutable,
-  compareVersionLikeDesc
+  compareVersionLikeDesc,
+  spawnDetached
 };
