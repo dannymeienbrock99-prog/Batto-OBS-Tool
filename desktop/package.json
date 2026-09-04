@@ -2,25 +2,40 @@
   "name": "batto-obs-tool",
   "version": "2.0.0",
   "private": true,
-  "description": "Batto OBS Tool – OBS-Steuerung, Hardwarediagnose, Overlays, Touch-Deck, Multi-Chat, Plugins und lokale Handy-Steuerung",
+  "description": "Batto OBS Tool – OBS-Steuerung, Hardwarediagnose, Overlays, Multi-Chat, Plugins und lokale Handy-Steuerung",
   "author": "Crazy_Batto / Team Alpha",
   "main": "src/main.cjs",
   "scripts": {
-    "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && echo 'Step 1: prepare-2.0.0-integrated.cjs OK' && node scripts/patch-2.0.0-integrated.cjs && echo 'Step 2: patch-2.0.0-integrated.cjs OK' && node scripts/prepare-touch-deck-pro-v2.cjs && echo 'Step 3: prepare-touch-deck-pro-v2.cjs OK' && node scripts/patch-2.0.0-chat.cjs && echo 'Step 4: Unified Multi-Chat runtime patch OK'",
+    "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && echo 'Step 1: prepare-2.0.0-integrated.cjs OK' && node scripts/patch-2.0.0-integrated.cjs && echo 'Step 2: patch-2.0.0-integrated.cjs OK' && node scripts/patch-2.0.0-chat.cjs && echo 'Step 3: Unified Multi-Chat runtime patch OK'",
     "pretest": "npm run prepare:integrated",
     "check": "node scripts/check-2.0.0.cjs && node scripts/check-icon.cjs",
-    "test": "npm run check && node --test test/integrated-2.0.0.test.cjs test/touch-deck-pro-v2.test.cjs test/multi-chat.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs",
+    "test": "npm run check && node --test test/integrated-2.0.0.test.cjs test/multi-chat.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs",
     "predist:win": "npm run prepare:integrated && electron scripts/generate-icon.cjs",
     "dist:win": "electron-builder --win nsis --x64 --publish never"
   },
-  "dependencies": {"qrcode":"^1.5.4","tiktok-live-connector":"^2.4.4","ws":"^8.18.3"},
-  "devDependencies": {"electron":"38.8.6","electron-builder":"26.0.12"},
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "tiktok-live-connector": "^2.4.4",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "electron": "38.8.6",
+    "electron-builder": "26.0.12"
+  },
   "build": {
-    "appId":"de.crazybatto.battoobstool","productName":"Batto OBS Tool","artifactName":"Batto-OBS-Tool-Setup-${version}.${ext}","asar":true,
-    "files":["src/**/*","modules/**/*","resources/**/*","package.json"],
-    "extraResources":[{"from":"build/license.txt","to":"Nutzungs-und-Lizenzbedingungen.txt"},{"from":"resources/team-logo.png","to":"resources/team-logo.png"},{"from":"resources/team-logo.svg","to":"resources/team-logo.svg"},{"from":"resources/cng-chat-config.example.json","to":"resources/cng-chat-config.example.json"}],
-    "directories":{"output":"dist","buildResources":"build"},
-    "win":{"icon":"build/icon.png","requestedExecutionLevel":"asInvoker","target":[{"target":"nsis","arch":["x64"]}]},
-    "nsis":{"oneClick":false,"perMachine":true,"allowElevation":true,"allowToChangeInstallationDirectory":true,"runAfterFinish":false,"include":"build/installer.nsh","createDesktopShortcut":true,"createStartMenuShortcut":true,"deleteAppDataOnUninstall":true}
+    "appId": "de.crazybatto.battoobstool",
+    "productName": "Batto OBS Tool",
+    "artifactName": "Batto-OBS-Tool-Setup-${version}.${ext}",
+    "asar": true,
+    "files": ["src/**/*", "modules/**/*", "resources/**/*", "package.json"],
+    "extraResources": [
+      {"from": "build/license.txt", "to": "Nutzungs-und-Lizenzbedingungen.txt"},
+      {"from": "resources/team-logo.png", "to": "resources/team-logo.png"},
+      {"from": "resources/team-logo.svg", "to": "resources/team-logo.svg"},
+      {"from": "resources/cng-chat-config.example.json", "to": "resources/cng-chat-config.example.json"}
+    ],
+    "directories": {"output": "dist", "buildResources": "build"},
+    "win": {"icon": "build/icon.png", "requestedExecutionLevel": "asInvoker", "target": [{"target": "nsis", "arch": ["x64"]}]},
+    "nsis": {"oneClick": false, "perMachine": true, "allowElevation": true, "allowToChangeInstallationDirectory": true, "runAfterFinish": false, "include": "build/installer.nsh", "createDesktopShortcut": true, "createStartMenuShortcut": true, "deleteAppDataOnUninstall": true}
   }
 }
