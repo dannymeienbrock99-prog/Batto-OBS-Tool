@@ -9,4 +9,5 @@ if (!testMode) {
   require("./deck-bootstrap.cjs");
   require("./deck-creatorhub-bootstrap.cjs");
   require("./chat-bootstrap.cjs");
+  require("./mobile-bootstrap.cjs");
 }
