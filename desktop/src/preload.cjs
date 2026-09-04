@@ -69,3 +69,41 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   onChatBotState: (callback) => on("chatbot:state", callback),
   onChatBotOverlay: (callback) => on("chatbot:overlay", callback)
 }));
+
+window.addEventListener("DOMContentLoaded", () => {
+  const nav = document.querySelector(".sidebar nav");
+  const content = document.querySelector("main.content");
+  if (!nav || !content || document.getElementById("view-chatbot")) return;
+
+  const style = document.createElement("link");
+  style.rel = "stylesheet";
+  style.href = "./chat-bot.css";
+  document.head.appendChild(style);
+
+  const button = document.createElement("button");
+  button.className = "nav-button";
+  button.dataset.view = "chatbot";
+  button.innerHTML = "<span>⚡</span> Chat Bot";
+  const settingsButton = nav.querySelector('[data-view="settings"]');
+  nav.insertBefore(button, settingsButton || null);
+
+  const section = document.createElement("section");
+  section.id = "view-chatbot";
+  section.className = "view";
+  section.innerHTML = '<div id="batto-chatbot-root"><div class="chatbot-empty">Chat Bot wird geladen …</div></div>';
+  content.appendChild(section);
+
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view === section));
+    document.querySelectorAll(".nav-button").forEach((item) => item.classList.toggle("active", item === button));
+    const title = document.getElementById("page-title");
+    const subtitle = document.getElementById("page-subtitle");
+    if (title) title.textContent = "Chat Bot";
+    if (subtitle) subtitle.textContent = "Auto-Broadcast, Commands, Hotkeys, Events, Medien, Discord und OBS-Overlays konfigurieren.";
+  });
+
+  const script = document.createElement("script");
+  script.src = "./chat-bot.js";
+  script.defer = true;
+  document.body.appendChild(script);
+});
