@@ -23,8 +23,7 @@ Enthalten:
 - manuell übertragbare Encoder-Empfehlungen,
 - bestätigungspflichtige CPU- und OBS-Aufnahmetests,
 - transparentes Hardware-/Encoder-Monitoring,
-- Twitch-Hologrammfarben für Namen und Nachrichten,
-- variables Touch-Deck.
+- Twitch-Hologrammfarben für Namen und Nachrichten.
 
 ## Branches
 
