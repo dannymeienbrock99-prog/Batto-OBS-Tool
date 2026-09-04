@@ -2,6 +2,7 @@
 
 const path = require("node:path");
 const { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } = require("electron");
+require("./services/moderation-bootstrap.cjs");
 const { SettingsStore } = require("./services/store.cjs");
 const { SecretStore } = require("./services/secret-store.cjs");
 const { collectHardware, runInternetTest } = require("./services/hardware.cjs");
