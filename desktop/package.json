@@ -2,14 +2,14 @@
   "name": "batto-obs-tool",
   "version": "2.0.0",
   "private": true,
-  "description": "Batto OBS Tool – OBS-Steuerung, Hardwarediagnose, Overlays, Multi-Chat, Chat Bot, Plugins und lokale Handy-Steuerung",
+  "description": "Batto OBS Tool – OBS-Steuerung, Multi-Chat, Moderation, Chat Bot, Overlays und modulare V4-Einstellungen",
   "author": "Crazy_Batto / Team Alpha",
   "main": "src/chat-bootstrap.cjs",
   "scripts": {
-    "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && echo 'Step 1: prepare-2.0.0-integrated.cjs OK' && node scripts/patch-2.0.0-chat.cjs && echo 'Step 2: Unified Multi-Chat runtime patch OK'",
+    "prepare:integrated": "node scripts/prepare-2.0.0-integrated.cjs && echo 'Step 1: prepare-2.0.0-integrated.cjs OK' && node scripts/patch-2.0.0-chat.cjs && echo 'Step 2: V4 Multi-Chat runtime patch OK'",
     "pretest": "npm run prepare:integrated",
     "check": "node scripts/check-2.0.0.cjs && node scripts/check-icon.cjs",
-    "test": "npm run check && node --test test/integrated-2.0.0.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs modules/twitch-holo-chat/test/*.test.cjs",
+    "test": "npm run check && node --test test/integrated-2.0.0.test.cjs test/v4-phase1.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs modules/twitch-holo-chat/test/*.test.cjs",
     "predist:win": "npm run prepare:integrated && electron scripts/generate-icon.cjs",
     "dist:win": "electron-builder --win nsis --x64 --publish never"
   },
@@ -33,7 +33,6 @@
       {"from": "resources/team-logo.png", "to": "resources/team-logo.png"},
       {"from": "resources/team-logo.svg", "to": "resources/team-logo.svg"},
       {"from": "resources/desktop-icon.jpg", "to": "resources/desktop-icon.jpg"},
-      {"from": "src/renderer/assets/multi-chat-hero.jpg", "to": "resources/multi-chat-hero.jpg"},
       {"from": "resources/cng-chat-config.example.json", "to": "resources/cng-chat-config.example.json"}
     ],
     "directories": {"output": "dist", "buildResources": "build"},
