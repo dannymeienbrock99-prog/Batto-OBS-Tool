@@ -23,7 +23,6 @@
           <button class="nav-button" data-view="loadtest"><span>◫</span> Belastungstest</button>
           <button class="nav-button" data-view="monitoring"><span>⌁</span> Monitoring-Overlay</button>
           <button class="nav-button" data-view="holo"><span>✦</span> Twitch-Hologramm</button>
-          <button class="nav-button" data-view="deck"><span>▦</span> Touch-Deck</button>
           <button class="nav-button" data-view="settings"><span>☷</span> Einstellungen</button>
         </nav>
         <footer>
@@ -86,7 +85,6 @@
                   <button data-jump="recommendation">Encoder-Empfehlung</button>
                   <button data-jump="monitoring">Monitoring-Overlay</button>
                   <button data-jump="holo">Twitch-Hologramm</button>
-                  <button data-jump="deck">Touch-Deck</button>
                 </div>
               </article>
             </div>
@@ -195,31 +193,6 @@
             </div>
             <div class="url-bar"><span>OBS-Browserquelle</span><code id="holo-url">Wird gestartet …</code></div>
             <iframe id="holo-frame" class="module-frame" title="Twitch-Hologramm-Editor"></iframe>
-          </section>
-
-          <section id="view-deck" class="view">
-            <div class="section-heading">
-              <div><span class="eyebrow">PROFILBASIERTES TOUCH-DECK</span><h2>Tastenraster selbst festlegen</h2><p>1 × 1 bis 10 × 10. Belegte Tasten bleiben beim Verkleinern im Profil gespeichert und erscheinen wieder, sobald das Raster vergrößert wird.</p></div>
-              <button id="deck-save" class="primary">Deck speichern</button>
-            </div>
-            <div class="deck-toolbar">
-              <label>Profil<select id="deck-profile"></select></label>
-              <button id="deck-profile-add">Neues Profil</button>
-              <label>Zeilen<input id="deck-rows" type="number" min="1" max="10" value="3"></label>
-              <label>Spalten<input id="deck-columns" type="number" min="1" max="10" value="5"></label>
-              <button id="deck-apply-grid">Raster anwenden</button>
-            </div>
-            <div class="deck-workspace">
-              <div id="deck-grid" class="deck-grid"></div>
-              <aside class="deck-inspector">
-                <h3>Taste bearbeiten</h3>
-                <p id="deck-selected-label">Keine Taste ausgewählt.</p>
-                <label>Titel<input id="deck-title" maxlength="40"></label>
-                <label>Aktion<select id="deck-action-type"><option value="none">Keine Aktion</option><option value="obs:stream.start">OBS · Stream starten</option><option value="obs:stream.stop">OBS · Stream stoppen</option><option value="obs:record.start">OBS · Aufnahme starten</option><option value="obs:record.stop">OBS · Aufnahme stoppen</option><option value="obs:virtualcam.start">OBS · Virtuelle Kamera starten</option><option value="obs:virtualcam.stop">OBS · Virtuelle Kamera stoppen</option><option value="obs:scene.set">OBS · Szene aktivieren</option><option value="monitoring-editor">Monitoring-Editor öffnen</option><option value="holo-editor">Hologramm-Editor öffnen</option><option value="url">Webseite öffnen</option></select></label>
-                <label id="deck-value-row">Wert<input id="deck-action-value" placeholder="Szenenname oder https://…"></label>
-                <div class="button-row"><button id="deck-apply-key" class="primary">Taste übernehmen</button><button id="deck-clear-key">Taste leeren</button></div>
-              </aside>
-            </div>
           </section>
 
           <section id="view-settings" class="view">
