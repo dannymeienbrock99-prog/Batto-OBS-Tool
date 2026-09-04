@@ -86,3 +86,23 @@ jobs:
           path: desktop/dist/win-unpacked/**
           if-no-files-found: error
           retention-days: 7
+
+      - name: Build Windows installer
+        run: npm run dist:win
+
+      - name: Verify Windows installer
+        shell: pwsh
+        run: |
+          $installer = "dist/Batto-OBS-Tool-Setup-2.1.0.exe"
+          if (-not (Test-Path $installer)) { throw "Windows installer missing: $installer" }
+          $item = Get-Item $installer
+          if ($item.Length -lt 10MB) { throw "Windows installer is unexpectedly small: $($item.Length) bytes" }
+          Write-Host "Windows installer verified: $($item.FullName) ($($item.Length) bytes)"
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Batto-OBS-Tool-Setup-2.1.0
+          path: desktop/dist/Batto-OBS-Tool-Setup-2.1.0.exe
+          if-no-files-found: error
+          retention-days: 7
