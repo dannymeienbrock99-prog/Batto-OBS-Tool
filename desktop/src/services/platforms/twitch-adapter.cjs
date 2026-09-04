@@ -39,7 +39,8 @@ class TwitchAdapter extends EventEmitter {
 
   handleLine(line) {
     if (line.startsWith("PING")) { this.ws?.send("PONG :tmi.twitch.tv"); return; }
-    if (line.includes(" GLOBALUSERSTATE ")) return;
+    if (line.includes(" 001 ") || line.includes(" JOIN #")) { this.connected = true; this.emitStatus(); return; }
+    if (line.includes(" GLOBALUSERSTATE ")) { this.connected = true; this.emitStatus(); return; }
     if (!line.includes(" PRIVMSG #")) return;
     const tagText = line.startsWith("@") ? line.slice(1, line.indexOf(" ")) : "";
     const tags = Object.fromEntries(tagText.split(";").filter(Boolean).map((part) => { const [key, ...rest] = part.split("="); return [key, rest.join("=")]; }));
@@ -54,9 +55,17 @@ class TwitchAdapter extends EventEmitter {
     this.emitStatus();
     this.emit("message", {
       platform: "twitch", username, userId: tags["user-id"] || "", message,
-      color: tags.color || "#9146ff", badges, role: badges.includes("broadcaster") ? "broadcaster" : badges.includes("moderator") ? "moderator" : badges.includes("vip") ? "vip" : "",
+      color: tags.color || "#9146ff", badges, role: badges.includes("broadcaster") ? "broadcaster" : badges.includes("moderator") ? "moderator" : badges.includes("vip") ? "vip" : badges.includes("subscriber") ? "subscriber" : "",
       metadata: { channel: this.config.channel, rawTags: tags }
     });
+  }
+
+  async sendMessage(message) {
+    if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) throw new Error("Twitch ist nicht verbunden.");
+    const value = String(message || "").replace(/[\r\n]+/g, " ").trim().slice(0, 500);
+    if (!value) throw new Error("Leere Twitch-Nachrichten werden nicht gesendet.");
+    this.ws.send(`PRIVMSG #${this.config.channel} :${value}`);
+    return { platform: "twitch", sent: true, message: value };
   }
 
   async disconnect() {
