@@ -44,7 +44,7 @@ const required = [
   "src/services/chat-core.cjs",
   "src/services/moderation-store.cjs",
   "src/services/moderation-bootstrap.cjs",
-  "src/services/hardware.cjs",
+  "src/services/internet-test.cjs",
   "src/services/obs-websocket.cjs",
   "src/services/obs-chat-overlay.cjs",
   "src/services/store.cjs",
@@ -57,6 +57,7 @@ for (const relative of required) {
 }
 
 const forbiddenPaths = [
+  "src/services/hardware.cjs",
   "src/services/recommendation.cjs",
   "src/services/telemetry.cjs",
   "modules/encoder-monitoring-overlay"
@@ -65,4 +66,10 @@ for (const relative of forbiddenPaths) {
   if (fs.existsSync(path.join(root, relative))) throw new Error(`Entfernter Bereich ist wieder vorhanden: ${relative}`);
 }
 
-console.log(`Batto OBS Tool 2.0.0: ${required.length} Kernbestandteile geprüft; Multi-Chat/Moderation vorhanden, Monitoring/Encoder-Empfehlung/Belastungstests entfernt.`);
+const visible = ["src/renderer/index.html", "src/renderer/app.js", "src/preload.cjs", "src/main.cjs"]
+  .map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
+if (/Hardwarediagnose|Hardware vollständig erfassen|PC vollständig scannen|PC jetzt scannen|Hardware-Scan|hardware:scan|scanHardware|collectHardware/i.test(visible)) {
+  throw new Error("Hardwarediagnose ist wieder im Produkt enthalten.");
+}
+
+console.log(`Batto OBS Tool 2.0.0: ${required.length} Kernbestandteile geprüft; Multi-Chat/Moderation vorhanden, Hardwarediagnose/Monitoring/Encoder-Empfehlung/Belastungstests entfernt.`);
