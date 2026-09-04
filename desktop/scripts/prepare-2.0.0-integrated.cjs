@@ -14,7 +14,7 @@ fs.writeFileSync(indexFile, index, "utf8");
 const packagePath = path.join(root, "package.json");
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 if (packageJson.version !== "2.0.0") throw new Error(`Falsche Paketversion: ${packageJson.version}`);
-if (packageJson.main !== "src/main.cjs") throw new Error(`Falscher Programmeinstieg: ${packageJson.main}`);
+if (packageJson.main !== "src/chat-bootstrap.cjs") throw new Error(`Falscher Programmeinstieg: ${packageJson.main}`);
 packageJson.build = packageJson.build || {};
 packageJson.build.nsis = {
   ...(packageJson.build.nsis || {}),
@@ -33,10 +33,15 @@ const required = [
   "src/renderer/app.js",
   "src/renderer/styles.css",
   "src/renderer/assets/team-alpha-logo.svg",
+  "src/renderer/assets/multi-chat-hero.jpg",
   "src/renderer/multi-chat.html",
   "src/renderer/multi-chat.js",
   "src/renderer/multi-chat.css",
   "src/renderer/chat-overlay-controls.js",
+  "src/renderer/chat-bot.js",
+  "src/renderer/chat-bot.css",
+  "src/services/chat-bot.cjs",
+  "src/services/chat-core.cjs",
   "src/services/hardware.cjs",
   "src/services/recommendation.cjs",
   "src/services/obs-websocket.cjs",
