@@ -15,17 +15,6 @@ function patch(relative, replacements) {
   fs.writeFileSync(file, content, "utf8");
 }
 
-patch("src/services/deck-manager-v2.cjs", [
-  [
-    'if (!profile || !folderId || folderId === "root") return profile ? { ...profile, id: "root", parentId: null } : null;',
-    'if (!profile || !folderId || folderId === "root") return profile || null;'
-  ],
-  [
-    'const folder = normalizeFolder({ id: safeId("folder"), name: payload.name || "Neuer Ordner", parentId: parent.id === "root" ? "root" : parent.id }, profile);',
-    'const folder = normalizeFolder({ id: safeId("folder"), name: payload.name || "Neuer Ordner", parentId: !payload.parentId || payload.parentId === "root" ? "root" : parent.id }, profile);'
-  ]
-]);
-
 patch("src/preload.cjs", [
   [
     '  "app:close",',
