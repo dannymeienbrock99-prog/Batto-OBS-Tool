@@ -2,17 +2,27 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+
 const root = path.resolve(__dirname, "..");
 const source = path.join(root, "src");
 
 const indexFile = path.join(source, "renderer", "index.html");
 if (!fs.existsSync(indexFile)) throw new Error("Hauptfenster fehlt.");
+const index = fs.readFileSync(indexFile, "utf8").replaceAll("1.9.1", "2.0.0");
+fs.writeFileSync(indexFile, index, "utf8");
+
 const packagePath = path.join(root, "package.json");
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 if (packageJson.version !== "2.0.0") throw new Error(`Falsche Paketversion: ${packageJson.version}`);
 if (packageJson.main !== "src/chat-bootstrap.cjs") throw new Error(`Falscher Programmeinstieg: ${packageJson.main}`);
 packageJson.build = packageJson.build || {};
-packageJson.build.nsis = { ...(packageJson.build.nsis || {}), oneClick: false, allowToChangeInstallationDirectory: true, runAfterFinish: false, include: "build/installer.nsh" };
+packageJson.build.nsis = {
+  ...(packageJson.build.nsis || {}),
+  oneClick: false,
+  allowToChangeInstallationDirectory: true,
+  runAfterFinish: false,
+  include: "build/installer.nsh"
+};
 fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + "\n", "utf8");
 
 const required = [
@@ -32,6 +42,8 @@ const required = [
   "src/renderer/chat-bot.css",
   "src/services/chat-bot.cjs",
   "src/services/chat-core.cjs",
+  "src/services/moderation-store.cjs",
+  "src/services/moderation-bootstrap.cjs",
   "src/services/hardware.cjs",
   "src/services/obs-websocket.cjs",
   "src/services/obs-chat-overlay.cjs",
@@ -53,4 +65,4 @@ for (const relative of forbiddenPaths) {
   if (fs.existsSync(path.join(root, relative))) throw new Error(`Entfernter Bereich ist wieder vorhanden: ${relative}`);
 }
 
-console.log(`Batto OBS Tool 2.0.0: ${required.length} Kernbestandteile geprüft; Monitoring, Encoder-Empfehlung und Belastungstests sind entfernt.`);
+console.log(`Batto OBS Tool 2.0.0: ${required.length} Kernbestandteile geprüft; Multi-Chat/Moderation vorhanden, Monitoring/Encoder-Empfehlung/Belastungstests entfernt.`);
