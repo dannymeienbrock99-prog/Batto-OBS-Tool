@@ -12,7 +12,7 @@ const required = [
   "src/renderer/index.html", "src/renderer/app.js", "src/renderer/commercial-settings.js", "src/renderer/commercial-settings.css", "src/renderer/multi-chat.js", "src/renderer/multi-chat.css", "src/renderer/touch-deck-20260802.js", "src/renderer/touch-deck-20260802.css", "src/renderer/integration-20260904.js", "src/renderer/integration-20260904.css", "src/renderer/restored-tools.js", "src/renderer/restored-tools.css", "src/renderer/assets/multi-chat-dashboard.svg",
   "src/stream-overlay/chat-overlay.html", "src/stream-overlay/chat-overlay.css", "src/stream-overlay/chat-overlay.js", "src/stream-overlay/editor.html", "src/stream-overlay/overlay.html", "src/stream-overlay/cohost-tiktok.html", "src/stream-overlay/cohost-twitch.html",
   "modules/twitch-holo-chat/web/editor.html", "modules/twitch-holo-chat/web/editor.css", "modules/twitch-holo-chat/web/font-editor-addon.js", "modules/twitch-holo-chat/web/font-overlay-addon.js",
-  "scripts/prepare-original-touchdeck.cjs"
+  "scripts/prepare-original-touchdeck.cjs", "scripts/patch-cohost-runtime.cjs", "scripts/patch-cohost-ui.cjs", "scripts/patch-plugin-truth.cjs"
 ];
 
 for (const relative of required) {
@@ -58,12 +58,17 @@ const twitch = fs.readFileSync(path.join(root, "src", "services", "platforms", "
 if (!twitch.includes("366") || !twitch.includes("Zeitüberschreitung beim Verbinden")) throw new Error("Twitch-Kanalbeitritt/Timeout ist nicht robust verdrahtet.");
 
 const integration = fs.readFileSync(path.join(root, "src", "renderer", "integration-20260904.js"), "utf8");
-for (const marker of ["Als Moderator hinzufügen","Als Moderator entfernen","Stummen","Blockieren","Entstummen","Entblocken","cohost-${format}.html"]) if (!integration.includes(marker)) throw new Error(`Moderation/Co-Host fehlt: ${marker}`);
+for (const marker of ["Als Moderator hinzufügen","Als Moderator entfernen","Stummen","Blockieren","Entstummen","Entblocken","BATTO_COHOST_REAL_URLS","/cohost/tiktok","/cohost/twitch"]) if (!integration.includes(marker)) throw new Error(`Moderation/Co-Host fehlt: ${marker}`);
+const overlayServer = fs.readFileSync(path.join(root, "src", "services", "stream-overlay-server.cjs"), "utf8");
+for (const marker of ["BATTO_COHOST_STABLE_ROUTES","/cohost/tiktok","/cohost/twitch","/api/cohost","cohost.json"]) if (!overlayServer.includes(marker)) throw new Error(`Co-Host-Runtime fehlt: ${marker}`);
 
 const originalDeck = fs.readFileSync(path.join(root, "src", "deck-creatorhub-bootstrap.cjs"), "utf8");
 for (const marker of ["51be33d29c07f50323b19d58782804af391b8394","CreatorHub.TouchDeck.exe","deck:open-original-0802"]) if (!originalDeck.includes(marker)) throw new Error(`Original-TouchDeck-Verdrahtung fehlt: ${marker}`);
 const prepareDeck = fs.readFileSync(path.join(root, "scripts", "prepare-original-touchdeck.cjs"), "utf8");
 for (const marker of ["51be33d29c07f50323b19d58782804af391b8394","SOURCE-COMMIT.txt","separat gebaut"]) if (!prepareDeck.includes(marker)) throw new Error(`TouchDeck-Suite-Verknüpfung fehlt: ${marker}`);
+
+const pluginUi = fs.readFileSync(path.join(root, "src", "renderer", "restored-tools.js"), "utf8");
+for (const marker of ["BATTO_PLUGIN_TRUTHFUL_STATUS","nur erkannt","Laufzeit nicht bestätigt","plugin-open-touchdeck"]) if (!pluginUi.includes(marker)) throw new Error(`Wahrheitsgemäße Plugin-Anzeige fehlt: ${marker}`);
 
 const holoHtml = fs.readFileSync(path.join(root, "modules", "twitch-holo-chat", "web", "editor.html"), "utf8");
 for (const marker of ["Benutzername gestalten","Chat-Nachricht gestalten","font-editor-addon.js","preview-frame"]) if (!holoHtml.includes(marker)) throw new Error(`Twitch-Hologramm-Umbau fehlt: ${marker}`);
@@ -73,7 +78,7 @@ if (packageJson.main !== "src/main-v2.cjs") throw new Error("package.json muss s
 if (packageJson.version !== "2.1.0") throw new Error(`Unerwartete Version: ${packageJson.version}`);
 const prepareScript = String(packageJson.scripts?.["prepare:integrated"] || "");
 if (prepareScript.includes("prepare-touch-deck-pro-v2")) throw new Error("Touch-Deck Pro wird noch beim Build injiziert.");
-if (!prepareScript.includes("prepare:touchdeck-0802")) throw new Error("TouchDeck-Suite-Verknüpfung wird nicht vorbereitet.");
+for (const marker of ["prepare:touchdeck-0802","patch-cohost-runtime.cjs","patch-cohost-ui.cjs","patch-plugin-truth.cjs"]) if (!prepareScript.includes(marker)) throw new Error(`Produktions-Patch fehlt im Build: ${marker}`);
 const resources = JSON.stringify(packageJson.build?.extraResources || []);
 if (!resources.includes("touchdeck-0802")) throw new Error("TouchDeck-Suite-Marker wird nicht in den Installer übernommen.");
 const files = JSON.stringify(packageJson.build?.files || []);
