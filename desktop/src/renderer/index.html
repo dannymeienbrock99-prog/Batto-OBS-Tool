@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="de">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>Batto OBS Tool</title><link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./multi-chat.css"><link rel="stylesheet" href="./v4-shell.css"><link rel="stylesheet" href="./v4-settings.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>Batto OBS Tool</title><link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./multi-chat.css"><link rel="stylesheet" href="./v4-shell.css"><link rel="stylesheet" href="./v4-settings.css"><link rel="stylesheet" href="./v4-statusbar.css"></head>
 <body>
 <div class="app-shell">
 <aside class="sidebar"><header class="brand"><img src="./assets/team-alpha-logo.svg" alt="Team Alpha Logo"><div><strong>Batto OBS Tool</strong><span>Crazy_Batto · Team Alpha</span></div></header><nav aria-label="Hauptnavigation">
@@ -20,4 +20,5 @@
 <section id="view-holo" class="view full-height-view"><div class="section-heading compact"><div><span class="eyebrow">MULTI-CHAT DESIGN</span><h2>Chat-Design / Hologramm</h2></div><div class="button-row"><button id="holo-copy">OBS-Adresse kopieren</button><button id="holo-external">In Browser öffnen</button></div></div><div class="url-bar"><code id="holo-url">Wird gestartet …</code></div><iframe id="holo-frame" class="module-frame" title="Chat-Design / Hologramm"></iframe></section>
 <section id="view-settings" class="view"><article class="panel"><h2>V4 Einstellungen werden geladen …</h2></article></section>
 </main></section></div>
-<dialog id="confirm-dialog"><h3 id="confirm-title"></h3><p id="confirm-text"></p><form method="dialog"><button value="cancel">Abbrechen</button><button value="confirm" class="primary">Bestätigen</button></form></dialog><div id="toast" class="toast" hidden></div><script src="./app.js"></script><script src="./multi-chat.js"></script><script src="./v4-settings.js"></script></body></html>
+<div id="v4-stream-status" class="v4-stream-status" aria-label="Stream-Statusleiste"></div>
+<dialog id="confirm-dialog"><h3 id="confirm-title"></h3><p id="confirm-text"></p><form method="dialog"><button value="cancel">Abbrechen</button><button value="confirm" class="primary">Bestätigen</button></form></dialog><div id="toast" class="toast" hidden></div><script src="./app.js"></script><script src="./multi-chat.js"></script><script src="./v4-settings.js"></script><script src="./v4-statusbar.js"></script></body></html>
