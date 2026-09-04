@@ -3,7 +3,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { ensureDirectory, readJson, safeText, writeJsonAtomic } = require("./common.cjs");
+const { ensureDirectory, readJson, writeJsonAtomic } = require("./common.cjs");
 
 function exists(file) {
   try { return fs.existsSync(file); } catch { return false; }
@@ -63,9 +63,8 @@ function legacyRoots() {
 }
 
 class LegacyMigration {
-  constructor({ userData, deckStore, pluginRegistry } = {}) {
+  constructor({ userData, pluginRegistry } = {}) {
     this.userData = userData;
-    this.deckStore = deckStore;
     this.pluginRegistry = pluginRegistry;
     this.markerFile = path.join(userData, "legacy-import-v2.json");
     this.reportFile = path.join(userData, "legacy-import-report.json");
@@ -88,22 +87,9 @@ class LegacyMigration {
     };
 
     for (const directory of roots.legacyAppData) {
-      const candidates = ["profiles.json", "deck-profiles.json", "decks.json"];
-      for (const name of candidates) {
-        const file = path.join(directory, name);
-        if (!exists(file)) continue;
-        try {
-          const value = JSON.parse(fs.readFileSync(file, "utf8"));
-          const result = this.deckStore?.mergeLegacy(value);
-          report.profilesAdded += Number(result?.added || 0);
-          report.settingsImported.push(file);
-        } catch (error) {
-          report.errors.push(`Profile ${file}: ${error.message}`);
-        }
-      }
       for (const name of ["app-settings.json", "settings.json", "plugin-settings.json"]) {
-        const file = path.join(directory, name);
-        if (exists(file)) report.settingsImported.push(file);
+        const source = path.join(directory, name);
+        if (exists(source)) report.settingsImported.push(source);
       }
     }
 
@@ -129,9 +115,9 @@ class LegacyMigration {
         let entries = [];
         try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { return; }
         for (const entry of entries) {
-          const file = path.join(current, entry.name);
-          if (entry.isDirectory()) walk(file, depth + 1);
-          else if (entry.isFile() && /(?:team|batto|crazy).*logo|logo.*(?:team|batto|crazy)/i.test(entry.name) && /\.(?:png|jpe?g|webp|svg)$/i.test(entry.name)) files.push(file);
+          const currentFile = path.join(current, entry.name);
+          if (entry.isDirectory()) walk(currentFile, depth + 1);
+          else if (entry.isFile() && /(?:team|batto|crazy).*logo|logo.*(?:team|batto|crazy)/i.test(entry.name) && /\.(?:png|jpe?g|webp|svg)$/i.test(entry.name)) files.push(currentFile);
         }
       };
       walk(directory);
