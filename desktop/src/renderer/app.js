@@ -56,6 +56,42 @@
     if (byId("obs-set-scene")) byId("obs-set-scene").disabled = !connected;
   }
 
+  function renderTikTokStudio(input = {}) {
+    const details = input.details && typeof input.details === "object" ? input.details : input;
+    const running = Boolean(details.running || input.state === "connected");
+    const installed = Boolean(details.installed || details.available || running || input.state === "ready");
+    const enabled = input.enabled !== false && input.state !== "disabled";
+    const path = String(details.executablePath || "").trim();
+
+    let label = "Nicht aktiviert";
+    let summary = "LIVE Studio deaktiviert";
+    let className = "neutral";
+    if (enabled && running) {
+      label = "TikTok Studio läuft";
+      summary = "LIVE Studio geöffnet";
+      className = "online";
+    } else if (enabled && installed) {
+      label = "TikTok Studio bereit";
+      summary = "LIVE Studio installiert";
+      className = "neutral";
+    } else if (enabled) {
+      label = "TikTok Studio fehlt";
+      summary = "LIVE Studio nicht gefunden";
+      className = "offline";
+    }
+
+    const pill = byId("tiktok-studio-pill");
+    if (pill) {
+      pill.textContent = label;
+      pill.className = `status-pill ${className}`;
+    }
+    if (byId("summary-tiktok-studio")) byId("summary-tiktok-studio").textContent = summary;
+    if (byId("summary-tiktok-extra")) {
+      byId("summary-tiktok-extra").textContent = path ? path.split(/[\\/]/).slice(-2).join("\\") : "LIVE Studio + API";
+      byId("summary-tiktok-extra").title = path;
+    }
+  }
+
   function renderObs(snapshot = latestObs) {
     latestObs = snapshot || {};
     setObsConnected(Boolean(latestObs.connected), latestObs);
@@ -79,6 +115,17 @@
   async function refreshObs() {
     try { renderObs(await api.getObsSnapshot()); }
     catch (error) { showToast(errorMessage(error), "error"); }
+  }
+
+  async function refreshTikTokStudio() {
+    try {
+      const statuses = await api.hybridStatus();
+      if (statuses?.tiktokLiveStudio) renderTikTokStudio(statuses.tiktokLiveStudio);
+      else renderTikTokStudio(await api.detectTikTokLiveStudio());
+    } catch (error) {
+      renderTikTokStudio({ state: "unavailable", enabled: true });
+      console.error("TikTok LIVE Studio Status konnte nicht geladen werden:", error);
+    }
   }
 
   async function connectObs() {
@@ -139,6 +186,9 @@
     });
     byId("holo-external")?.addEventListener("click", () => void api.openHoloEditor());
     api.onObsStatusChanged?.((status) => setObsConnected(Boolean(status?.connected), status || {}));
+    api.onConnectionStatus?.((status) => {
+      if (status?.name === "tiktokLiveStudio") renderTikTokStudio(status);
+    });
   }
 
   async function initialize() {
@@ -150,6 +200,7 @@
     renderObs(latestObs);
     bindEvents();
     switchView("overview");
+    await refreshTikTokStudio();
     window.__battoRendererReady = { ok: true, version: state.product.version };
   }
 
