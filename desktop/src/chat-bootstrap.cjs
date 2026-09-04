@@ -62,6 +62,43 @@ async function streamIsLive() {
     return Boolean(client.status?.().streaming);
   }
 }
+function platformEvent(message = {}) {
+  const metadata = message.metadata || {};
+  const raw = metadata.raw || metadata || {};
+  const original = String(metadata.eventType || raw.eventType || raw.type || "").toLowerCase();
+  const mapped = {
+    gift: "gift",
+    subscribe: "subscriber",
+    subscriber: "subscriber",
+    subscription: "subscriber",
+    follow: "follow",
+    raid: "raid",
+    share: "share",
+    social: "share",
+    like: "like",
+    member: "member",
+    join: "member",
+    "stream-start": "stream-start",
+    "stream-end": "stream-end"
+  }[original];
+  if (!mapped) return null;
+  return {
+    trigger: mapped,
+    payload: {
+      ...message,
+      trigger: mapped,
+      platform: message.platform,
+      username: message.username,
+      user: message.username,
+      userId: message.userId || "",
+      gift_name: raw.giftName || raw.gift?.name || "",
+      gift_count: raw.repeatCount || raw.repeatEnd || raw.giftCount || 0,
+      diamonds: raw.diamondCount || raw.diamonds || 0,
+      likes: raw.likeCount || 0,
+      rawEvent: raw
+    }
+  };
+}
 function attachEmbeddedChat(main) {
   if (!main || main.isDestroyed()) return;
   const scriptPath = path.join(__dirname, "renderer", "multi-chat.js").replaceAll("\\", "/");
@@ -170,10 +207,14 @@ app.whenReady().then(async () => {
       const server = overlayServer();
       for (const message of filtered.visible) {
         server?.publishEvent(toOverlayChatEvent(message));
+        const event = platformEvent(message);
+        if (event) {
+          await chatBot.triggerEvent(event.trigger, event.payload).catch((error) => chatBot.log("error", `Event-Fehler: ${error.message}`));
+        }
         await chatBot.ingestChat(message).catch((error) => chatBot.log("error", `Command-Fehler: ${error.message}`));
       }
       if (filtered.visible.length) broadcast("chat:messages", filtered.visible);
-    })().catch((error) => console.error("Chat-Filter-Verarbeitung fehlgeschlagen:", error));
+    })().catch((error) => console.error("Chat-Filter-/Event-Verarbeitung fehlgeschlagen:", error));
   });
   core.on("status", (status) => broadcast("chat:status", status));
   core.on("cleared", (platform) => { overlayServer()?.clearChat(platform); broadcast("chat:cleared", platform); });
@@ -212,3 +253,5 @@ app.on("before-quit", () => {
   void chatBot?.stop();
   void core?.stop();
 });
+
+module.exports = { platformEvent };
