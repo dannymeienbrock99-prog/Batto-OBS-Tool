@@ -7,5 +7,6 @@ require("./main.cjs");
 if (!testMode) {
   require("./stream-overlay-bootstrap.cjs");
   require("./deck-bootstrap.cjs");
+  require("./deck-creatorhub-bootstrap.cjs");
   require("./chat-bootstrap.cjs");
 }
