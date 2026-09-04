@@ -49,9 +49,9 @@
     const title = heading?.querySelector("h2");
     const copy = heading?.querySelector("p");
     const row = heading?.querySelector(".button-row");
-    if (eyebrow) eyebrow.textContent = "STREAM DECK · PROFILE · ORDNER";
-    if (title) title.textContent = "Stream Deck";
-    if (copy) copy.textContent = "Große Touch-Tasten für OBS, Programme, Medien und deine Streaming-Aktionen.";
+    if (eyebrow) eyebrow.textContent = "PROFILE · ORDNER · PLUGIN-AKTIONEN";
+    if (title) title.textContent = "Touch-Deck";
+    if (copy) copy.textContent = "Tasten frei belegen, Geräte-Raster wählen und Größe, Abstand sowie Beschriftung an deinen Touch-Monitor anpassen.";
 
     if (row && !document.getElementById("creatorhub-edit")) {
       const edit = document.createElement("button");
@@ -82,27 +82,8 @@
       row.prepend(edit);
     }
 
-    const layout = shell.querySelector(".tdp-editor-layout");
-    if (layout && !shell.querySelector(".creatorhub-audio")) {
-      const audio = document.createElement("section");
-      audio.className = "creatorhub-audio";
-      audio.innerHTML = `
-        <div class="creatorhub-audio-copy"><span class="creatorhub-audio-icon">♪</span><div><strong>System-Audio</strong><small>Schnellsteuerung</small></div></div>
-        <div class="creatorhub-audio-meter" aria-hidden="true"></div>
-        <div class="creatorhub-audio-buttons">
-          <button type="button" data-media="volumedown" title="Leiser">−</button>
-          <button type="button" data-media="mute" title="Stumm">⌁</button>
-          <button type="button" data-media="volumeup" title="Lauter">＋</button>
-        </div>`;
-      layout.insertAdjacentElement("afterend", audio);
-      audio.querySelectorAll("[data-media]").forEach((button) => button.addEventListener("click", async () => {
-        try {
-          await api.invoke("deck:quick-media", { command: button.dataset.media });
-        } catch (error) {
-          message(error?.message || String(error), true);
-        }
-      }));
-    }
+    const oldAudio = shell.parentElement?.querySelector(".creatorhub-audio");
+    oldAudio?.remove();
 
     const grid = shell.querySelector("#tdp-grid");
     grid?.addEventListener("click", (event) => {
