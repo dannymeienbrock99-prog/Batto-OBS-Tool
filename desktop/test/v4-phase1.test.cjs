@@ -13,10 +13,13 @@ test("V4 module config contains every required module", () => {
   const state = v4Defaults();
   const expected = ["general","appearance","multichat","moderation","chatFilter","chatDesign","cohost","liveTools","platforms","chatbot","autoBroadcast","commands","hotkeys","events","media","mediaPools","tts","obsHttp","overlays","discord","statusbar","logs","backup","advanced"];
   assert.deepEqual(V4_MODULES.map(([id]) => id), expected);
-  for (const id of expected) assert.ok(state.modules[id], `missing V4 module ${id}`);
+  for (const id of expected) {
+    assert.ok(state.modules[id], `missing V4 module ${id}`);
+    assert.equal(state.modules[id].status, "bereit", `${id} is not ready`);
+  }
   assert.equal(state.modules.appearance.config.backgroundFile, "HIntergund.png");
   assert.equal(state.modules.appearance.config.tiles, false);
-  assert.equal(state.modules.statusbar.config.enabled, false);
+  assert.equal(state.modules.statusbar.config.enabled, true);
 });
 
 test("V4 full-window background is generated and old Multi Chat artwork is absent", () => {
@@ -33,8 +36,9 @@ test("V4 full-window background is generated and old Multi Chat artwork is absen
 test("V4 settings use module pages and required action buttons without raw JSON editor", () => {
   const ui = read("src/renderer/v4-settings.js");
   for (const word of ["HILFE","TESTEN","ZURÜCKSETZEN","ÜBERNEHMEN","SPEICHERN"]) assert.match(ui, new RegExp(word));
-  assert.match(ui, /nicht als funktionierend simuliert/i);
-  assert.doesNotMatch(ui, /<textarea/i);
+  assert.match(ui, /Plattform-Fähigkeiten/i);
+  assert.match(ui, /BACKUP EXPORTIEREN/i);
+  assert.doesNotMatch(ui, /textarea[^>]*json|JSON-Pflicht/i);
   assert.match(read("src/preload.cjs"), /getV4Configs/);
   assert.match(read("src/main.cjs"), /v4-bootstrap\.cjs/);
 });
