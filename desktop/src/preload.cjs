@@ -70,8 +70,8 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   saveTtsConfig: (value) => ipcRenderer.invoke("tts:save-config", value),
 
   scanPlugins: () => invoke("plugins:scan", {}),
-  enablePlugin: (id, enabled) => invoke("plugins:enable", { id, enabled }),
-  updatePluginSettings: (id, settings) => invoke("plugins:settings", { id, settings }),
+  enablePlugin: (id, enabled) => invoke("plugins:enable", { pluginId: id, enabled }),
+  updatePluginSettings: (id, settings) => invoke("plugins:settings", { pluginId: id, settings }),
 
   mobileStatus: () => invoke("mobile:status", {}),
   mobileStart: () => invoke("mobile:start", {}),
