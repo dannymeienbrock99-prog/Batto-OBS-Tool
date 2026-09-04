@@ -6,7 +6,13 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const sourceRoot = path.join(root, "bootstrap-2.0", "src", "services");
 const targetRoot = path.join(root, "src", "services");
-const files = ["common.cjs", "deck-store.cjs", "plugin-registry.cjs"];
+const files = [
+  "common.cjs",
+  "deck-store.cjs",
+  "plugin-registry.cjs",
+  "runtime-utils-v2.cjs",
+  "mobile-bridge-v2.cjs"
+];
 
 fs.mkdirSync(targetRoot, { recursive: true });
 for (const name of files) {
@@ -16,4 +22,9 @@ for (const name of files) {
   fs.copyFileSync(source, target);
 }
 
-console.log(`Runtime-Unterbau vorbereitet: ${files.join(", ")}`);
+const mobileSource = path.join(root, "bootstrap-2.0", "src", "mobile");
+const mobileTarget = path.join(root, "src", "mobile");
+fs.rmSync(mobileTarget, { recursive: true, force: true });
+fs.cpSync(mobileSource, mobileTarget, { recursive: true });
+
+console.log(`Runtime-Unterbau vorbereitet: ${files.join(", ")} + Mobile-Weboberfläche`);
