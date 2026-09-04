@@ -30,11 +30,11 @@ test("V4 full-window background is generated and old Multi Chat artwork is absen
   assert.doesNotMatch(multi, /multi-chat-hero/i);
 });
 
-test("V4 settings use module pages and required action buttons without JSON editor", () => {
+test("V4 settings use module pages and required action buttons without raw JSON editor", () => {
   const ui = read("src/renderer/v4-settings.js");
   for (const word of ["HILFE","TESTEN","ZURÜCKSETZEN","ÜBERNEHMEN","SPEICHERN"]) assert.match(ui, new RegExp(word));
   assert.match(ui, /nicht als funktionierend simuliert/i);
-  assert.doesNotMatch(ui, /textarea[^>]*json|JSON-Pflicht/i);
+  assert.doesNotMatch(ui, /<textarea/i);
   assert.match(read("src/preload.cjs"), /getV4Configs/);
   assert.match(read("src/main.cjs"), /v4-bootstrap\.cjs/);
 });
