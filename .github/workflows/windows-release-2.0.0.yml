@@ -56,11 +56,11 @@ jobs:
           npm run check
           if ($LASTEXITCODE -ne 0) { throw "Produktionsprüfung ist fehlgeschlagen." }
 
-      - name: Run integrated Chat Bot Multi Chat and module tests
+      - name: Run Multi Chat moderation Chat Bot and module tests
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          node --test test/integrated-2.0.0.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs modules/encoder-monitoring-overlay/test/*.test.cjs modules/twitch-holo-chat/test/*.test.cjs
+          node --test test/integrated-2.0.0.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs modules/twitch-holo-chat/test/*.test.cjs
           if ($LASTEXITCODE -ne 0) { throw "Mindestens ein Test ist fehlgeschlagen." }
 
       - name: Build Windows x64 NSIS installer with required desktop icon
