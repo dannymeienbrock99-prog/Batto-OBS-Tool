@@ -7,8 +7,14 @@ const root = path.resolve(__dirname, "..");
 const htmlFile = path.join(root, "src", "renderer", "index.html");
 let html = fs.readFileSync(htmlFile, "utf8");
 
-html = html.replace('./assets/bg.jpg', './assets/multi-chat-dashboard.svg')
-  .replace('alt="Crazy_Batto PC mit rotem und blauem Rauch"', 'alt="Crazy_Batto Multi Chat – TikTok, Twitch, YouTube und CNG"');
+// Übersicht immer auf die skalierbare Multi-Chat-Grafik setzen. Der Patch muss
+// idempotent bleiben, egal ob vorher noch bg.jpg oder bereits eine andere
+// overview-bg-Quelle eingetragen war.
+html = html.replace(
+  /<img\s+class="overview-bg"\s+src="[^"]+"\s+alt="[^"]*"\s*>/,
+  '<img class="overview-bg" src="./assets/multi-chat-dashboard.svg" alt="Crazy_Batto Multi Chat – TikTok, Twitch, YouTube und CNG">'
+);
+if (!html.includes('class="overview-bg"')) throw new Error("Overview-Bildplatzhalter fehlt.");
 
 const cssTag = '<link rel="stylesheet" href="./restored-tools.css">';
 if (!html.includes(cssTag)) {
