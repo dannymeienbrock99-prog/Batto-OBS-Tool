@@ -6,7 +6,8 @@
   "author": "Crazy_Batto / Team Alpha",
   "main": "src/main-v2.cjs",
   "scripts": {
-    "prepare:integrated": "node scripts/prepare-overview-bg.cjs && node scripts/prepare-runtime-support.cjs && node scripts/prepare-stream-overlay.cjs && node scripts/patch-commercial-settings.cjs && node scripts/verify-source-tree.cjs",
+    "prepare:touchdeck-0802": "node scripts/prepare-original-touchdeck.cjs",
+    "prepare:integrated": "npm run prepare:touchdeck-0802 && node scripts/prepare-overview-bg.cjs && node scripts/prepare-runtime-support.cjs && node scripts/prepare-stream-overlay.cjs && node scripts/patch-commercial-settings.cjs && node scripts/verify-source-tree.cjs",
     "pretest": "npm run prepare:integrated",
     "check": "node scripts/verify-source-tree.cjs && node scripts/check-icon.cjs",
     "test:core": "node --test test/commercial-settings.test.cjs test/hybrid-runtime.test.cjs test/cng-config.test.cjs test/platform-adapters-2.1.test.cjs test/overview-ui.test.cjs",
@@ -45,7 +46,8 @@
       {"from": "build/license.txt", "to": "Nutzungs-und-Lizenzbedingungen.txt"},
       {"from": "resources/team-logo.png", "to": "resources/team-logo.png"},
       {"from": "resources/team-logo.svg", "to": "resources/team-logo.svg"},
-      {"from": "resources/cng-chat-config.example.json", "to": "resources/cng-chat-config.example.json"}
+      {"from": "resources/cng-chat-config.example.json", "to": "resources/cng-chat-config.example.json"},
+      {"from": "resources/touchdeck-0802", "to": "touchdeck-0802"}
     ],
     "directories": {"output": "dist", "buildResources": "build"},
     "win": {
