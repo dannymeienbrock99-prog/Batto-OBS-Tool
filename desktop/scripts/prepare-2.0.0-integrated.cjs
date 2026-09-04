@@ -5,6 +5,16 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const source = path.join(root, "src");
+const assets = path.join(source, "renderer", "assets");
+
+const backgroundParts = [1, 2, 3, 4].map((number) => path.join(assets, `HIntergund-part-${String(number).padStart(2, "0")}.txt`));
+for (const filename of backgroundParts) {
+  if (!fs.existsSync(filename)) throw new Error(`V4-Hintergrundquelle fehlt: ${path.basename(filename)}`);
+}
+const backgroundBase64 = backgroundParts.map((filename) => fs.readFileSync(filename, "utf8").replace(/\s+/g, "")).join("");
+const backgroundBuffer = Buffer.from(backgroundBase64, "base64");
+if (backgroundBuffer.length < 10000 || backgroundBuffer[0] !== 0xff || backgroundBuffer[1] !== 0xd8) throw new Error("V4-Programm-Hintergrund konnte nicht rekonstruiert werden.");
+fs.writeFileSync(path.join(assets, "HIntergund.png"), backgroundBuffer);
 
 const indexFile = path.join(source, "renderer", "index.html");
 if (!fs.existsSync(indexFile)) throw new Error("Hauptfenster fehlt.");
@@ -32,8 +42,11 @@ const required = [
   "src/renderer/index.html",
   "src/renderer/app.js",
   "src/renderer/styles.css",
+  "src/renderer/v4-shell.css",
+  "src/renderer/v4-settings.js",
+  "src/renderer/v4-settings.css",
   "src/renderer/assets/team-alpha-logo.svg",
-  "src/renderer/assets/multi-chat-hero.jpg",
+  "src/renderer/assets/HIntergund.png",
   "src/renderer/multi-chat.html",
   "src/renderer/multi-chat.js",
   "src/renderer/multi-chat.css",
@@ -44,6 +57,9 @@ const required = [
   "src/services/chat-core.cjs",
   "src/services/moderation-store.cjs",
   "src/services/moderation-bootstrap.cjs",
+  "src/services/v4-config-store.cjs",
+  "src/services/v4-log-store.cjs",
+  "src/services/v4-bootstrap.cjs",
   "src/services/internet-test.cjs",
   "src/services/obs-websocket.cjs",
   "src/services/obs-chat-overlay.cjs",
@@ -57,6 +73,7 @@ for (const relative of required) {
 }
 
 const forbiddenPaths = [
+  "src/renderer/assets/multi-chat-hero.jpg",
   "src/services/hardware.cjs",
   "src/services/recommendation.cjs",
   "src/services/telemetry.cjs",
@@ -66,10 +83,9 @@ for (const relative of forbiddenPaths) {
   if (fs.existsSync(path.join(root, relative))) throw new Error(`Entfernter Bereich ist wieder vorhanden: ${relative}`);
 }
 
-const visible = ["src/renderer/index.html", "src/renderer/app.js", "src/preload.cjs", "src/main.cjs"]
+const visible = ["src/renderer/index.html", "src/renderer/app.js", "src/preload.cjs", "src/main.cjs", "src/renderer/multi-chat.css"]
   .map((relative) => fs.readFileSync(path.join(root, relative), "utf8")).join("\n");
-if (/Hardwarediagnose|Hardware vollständig erfassen|PC vollständig scannen|PC jetzt scannen|Hardware-Scan|hardware:scan|scanHardware|collectHardware/i.test(visible)) {
-  throw new Error("Hardwarediagnose ist wieder im Produkt enthalten.");
-}
+if (/Hardwarediagnose|Hardware vollständig erfassen|PC vollständig scannen|PC jetzt scannen|Hardware-Scan|hardware:scan|scanHardware|collectHardware/i.test(visible)) throw new Error("Hardwarediagnose ist wieder im Produkt enthalten.");
+if (/multi-chat-hero/i.test(visible)) throw new Error("Das laut V4 verbotene alte Multi-Chat-Bild ist wieder eingebunden.");
 
-console.log(`Batto OBS Tool 2.0.0: ${required.length} Kernbestandteile geprüft; Multi-Chat/Moderation vorhanden, Hardwarediagnose/Monitoring/Encoder-Empfehlung/Belastungstests entfernt.`);
+console.log(`Batto OBS Tool 2.0.0: ${required.length} V4-Kernbestandteile geprüft; Programm-Hintergrund erzeugt, altes Multi-Chat-Bild und Hardware-Vollanalyse entfernt.`);
