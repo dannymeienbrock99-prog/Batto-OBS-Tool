@@ -21,7 +21,7 @@ function removeLineContaining(text, needles) {
   return text.split(/\r?\n/).filter((line) => !list.some((needle) => line.includes(needle))).join("\n");
 }
 
-// Hauptprozess: DeckStore, Deck-State, Mobile-Deck-Ausführung und Deck-IPC vollständig entfernen.
+// Hauptprozess: DeckStore, Deck-State, Mobile-Deck-Ausführung, Self-Test und Deck-IPC vollständig entfernen.
 {
   const relative = "src/main.cjs";
   let text = read(relative);
@@ -31,6 +31,7 @@ function removeLineContaining(text, needles) {
   text = text.replace(/^\s*deckStore = new DeckStore\([^\n]+\);\r?\n/m, "");
   text = text.replace(/new LegacyMigration\(\{ userData: app\.getPath\("userData"\), deckStore, pluginRegistry \}\)/g,
     'new LegacyMigration({ userData: app.getPath("userData"), pluginRegistry })');
+  text = removeLineContaining(text, ['await check("DeckStore"', 'check("DeckStore"']);
 
   const mobileStart = '\nasync function executeMobilePayload(payload = {}) {\n  if (payload.kind === "deck-button") {';
   const mobileNext = '\n  if (payload.kind === "action") {';
@@ -47,6 +48,9 @@ function removeLineContaining(text, needles) {
 
   text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
   text = text.replace(/legacy-deck/gi, "legacy-control");
+  if (/DeckStore|deckStore|deck:create-profile|deck:execute-button/.test(text)) {
+    throw new Error("Touch-Deck-Entfernung: Im Hauptprozess sind weiterhin Deck-Reste vorhanden.");
+  }
   write(relative, text);
 }
 
@@ -114,7 +118,6 @@ function removeLineContaining(text, needles) {
   let text = read(relative);
   text = text.replace(/^\s*deck:\s*\["Touch-Deck"[^\n]*\r?\n/gm, "");
   text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
-  // Alte Deck-Routinen dürfen als toter Legacy-Code nicht im ausgelieferten Produkt bleiben.
   text = text.replace(/^.*api\.executeDeckAction[^\n]*\r?\n/gm, "");
   text = text.replace(/^.*data-view=["']deck["'][^\n]*\r?\n/gmi, "");
   write(relative, text);
@@ -135,6 +138,19 @@ for (const relative of ["src/mobile/app.js", "src/mobile/app-v2.js"]) {
   text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
   text = removeLineContaining(text, ["deck-button", "state.deck"]);
   write(relative, text);
+}
+
+// Migration darf keine Deck-Profile mehr kennen oder verarbeiten.
+{
+  const relative = "src/services/migration.cjs";
+  if (fs.existsSync(file(relative))) {
+    let text = read(relative);
+    text = text.replace(/Touch[-‑– ]Deck/gi, "Altsteuerung");
+    if (/deckStore|DeckStore|deck-profiles\.json|decks\.json/.test(text)) {
+      throw new Error("Touch-Deck-Entfernung: Migration enthält weiterhin Deck-Reste.");
+    }
+    write(relative, text);
+  }
 }
 
 // Diese Dateien dürfen niemals in app.asar gelangen.
