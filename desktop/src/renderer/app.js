@@ -12,7 +12,6 @@
     loadtest: ["Belastungstest", "Reale Last ausschließlich nach Bestätigung erzeugen und auswerten."],
     monitoring: ["Monitoring-Overlay", "Transparente OBS-Browserquelle im 3DMark- beziehungsweise Afterburner-Stil."],
     holo: ["Twitch-Hologramm", "Namen und Chatfarben holografisch gestalten – ohne Discord-Server-Boost."],
-    deck: ["Touch-Deck", "Variable Tastenraster, Profile und OBS-Aktionen konfigurieren."],
     settings: ["Einstellungen", "Lokale Standardwerte, Sicherheit und Produktinformationen verwalten."]
   };
 
@@ -20,7 +19,6 @@
   let currentView = "overview";
   let latestObs = null;
   let latestTelemetry = null;
-  let selectedDeckIndex = -1;
   let toastTimer = null;
 
   function escapeHtml(value) {
@@ -106,7 +104,6 @@
     byId("page-subtitle").textContent = pageMeta[name][1];
     if (name === "monitoring") loadMonitoringFrame();
     if (name === "holo") loadHoloFrame();
-    if (name === "deck") renderDeck();
   }
 
   function setObsConnected(connected, details = {}) {
@@ -450,136 +447,6 @@
     }
   }
 
-  function deckState() {
-    state.settings.deck ||= { activeProfile: "Standard", profiles: {} };
-    const deck = state.settings.deck;
-    deck.profiles ||= {};
-    if (!Object.keys(deck.profiles).length) {
-      deck.profiles.Standard = { rows: 3, columns: 5, pages: { root: [] } };
-    }
-    if (!deck.profiles[deck.activeProfile]) deck.activeProfile = Object.keys(deck.profiles)[0];
-    return deck;
-  }
-
-  function activeDeckProfile() {
-    const deck = deckState();
-    const profile = deck.profiles[deck.activeProfile];
-    profile.pages ||= { root: [] };
-    profile.pages.root ||= [];
-    return profile;
-  }
-
-  function renderDeckProfileOptions() {
-    const deck = deckState();
-    byId("deck-profile").innerHTML = Object.keys(deck.profiles)
-      .map((name) => `<option value="${escapeHtml(name)}" ${name === deck.activeProfile ? "selected" : ""}>${escapeHtml(name)}</option>`)
-      .join("");
-  }
-
-  function assignmentLabel(assignment) {
-    if (!assignment) return "Leer";
-    if (assignment.type === "obs") return assignment.action;
-    if (assignment.type === "url") return "Webseite";
-    if (assignment.type === "monitoring-editor") return "Monitoring";
-    if (assignment.type === "holo-editor") return "Hologramm";
-    return assignment.type || "Aktion";
-  }
-
-  function renderDeck() {
-    if (!state?.settings) return;
-    const deck = deckState();
-    const profile = activeDeckProfile();
-    renderDeckProfileOptions();
-    byId("deck-rows").value = profile.rows;
-    byId("deck-columns").value = profile.columns;
-    const count = profile.rows * profile.columns;
-    while (profile.pages.root.length < count) profile.pages.root.push(null);
-    const grid = byId("deck-grid");
-    grid.style.gridTemplateColumns = `repeat(${profile.columns}, minmax(74px, 1fr))`;
-    grid.innerHTML = "";
-    for (let index = 0; index < count; index += 1) {
-      const assignment = profile.pages.root[index];
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `deck-key${assignment ? "" : " empty"}${index === selectedDeckIndex ? " selected" : ""}`;
-      button.innerHTML = `<span>${escapeHtml(assignment?.title || (assignment ? assignmentLabel(assignment) : `Taste ${index + 1}`))}</span><small>${index + 1}</small>`;
-      button.addEventListener("click", () => {
-        selectedDeckIndex = index;
-        renderDeck();
-        fillDeckInspector();
-      });
-      button.addEventListener("dblclick", async () => {
-        if (!assignment) return;
-        try {
-          await api.executeDeckAction(assignment);
-          showToast(`Taste ausgeführt: ${assignment.title || assignmentLabel(assignment)}`);
-        } catch (error) {
-          showToast(errorMessage(error), "error");
-        }
-      });
-      grid.append(button);
-    }
-    fillDeckInspector();
-  }
-
-  function fillDeckInspector() {
-    const profile = activeDeckProfile();
-    const assignment = selectedDeckIndex >= 0 ? profile.pages.root[selectedDeckIndex] : null;
-    byId("deck-selected-label").textContent = selectedDeckIndex >= 0 ? `Taste ${selectedDeckIndex + 1}` : "Keine Taste ausgewählt.";
-    byId("deck-title").value = assignment?.title || "";
-    let type = "none";
-    let value = "";
-    if (assignment?.type === "obs") {
-      type = `obs:${assignment.action}`;
-      value = assignment.payload?.sceneName || "";
-    } else if (assignment?.type) {
-      type = assignment.type;
-      value = assignment.url || "";
-    }
-    byId("deck-action-type").value = type;
-    byId("deck-action-value").value = value;
-    byId("deck-value-row").hidden = !["obs:scene.set", "url"].includes(type);
-  }
-
-  function assignmentFromInspector() {
-    const type = byId("deck-action-type").value;
-    const title = byId("deck-title").value.trim();
-    const value = byId("deck-action-value").value.trim();
-    if (type === "none") return null;
-    if (type.startsWith("obs:")) {
-      const action = type.slice(4);
-      return {
-        type: "obs",
-        action,
-        title: title || action,
-        payload: action === "scene.set" ? { sceneName: value } : {}
-      };
-    }
-    if (type === "url") return { type: "url", url: value, title: title || "Webseite" };
-    return { type, title: title || (type === "monitoring-editor" ? "Monitoring" : "Hologramm") };
-  }
-
-  async function saveDeck() {
-    try {
-      state.settings = await api.saveSettings({ deck: deckState() });
-      showToast("Touch-Deck gespeichert.");
-    } catch (error) {
-      showToast(`Deck konnte nicht gespeichert werden: ${errorMessage(error)}`, "error");
-    }
-  }
-
-  function applyDeckGrid() {
-    const profile = activeDeckProfile();
-    const rows = Math.max(1, Math.min(10, Math.round(Number(byId("deck-rows").value) || 3)));
-    const columns = Math.max(1, Math.min(10, Math.round(Number(byId("deck-columns").value) || 5)));
-    profile.rows = rows;
-    profile.columns = columns;
-    while (profile.pages.root.length < rows * columns) profile.pages.root.push(null);
-    selectedDeckIndex = -1;
-    renderDeck();
-    showToast("Raster geändert. Verdeckte Belegungen bleiben im Profil gespeichert.");
-  }
-
   async function saveSettings() {
     try {
       const preferences = {
@@ -589,7 +456,7 @@
         monitoringEnabled: true,
         twitchHoloEnabled: true
       };
-      state.settings = await api.saveSettings({ preferences, deck: deckState() });
+      state.settings = await api.saveSettings({ preferences });
       showToast("Einstellungen gespeichert.");
     } catch (error) {
       showToast(errorMessage(error), "error");
@@ -654,31 +521,6 @@
     byId("monitoring-external").addEventListener("click", () => void api.openMonitoringEditor());
     byId("holo-copy").addEventListener("click", async () => { try { showToast(`OBS-Adresse kopiert: ${await api.copyHoloUrl()}`); } catch (error) { showToast(errorMessage(error), "error"); } });
     byId("holo-external").addEventListener("click", () => void api.openHoloEditor());
-    byId("deck-profile").addEventListener("change", () => { deckState().activeProfile = byId("deck-profile").value; selectedDeckIndex = -1; renderDeck(); });
-    byId("deck-profile-add").addEventListener("click", () => {
-      const name = window.prompt("Name des neuen Touch-Deck-Profils:", "Neues Profil");
-      if (!name?.trim()) return;
-      const normalized = name.trim().slice(0, 80);
-      const deck = deckState();
-      if (deck.profiles[normalized]) return showToast("Dieses Profil existiert bereits.", "error");
-      deck.profiles[normalized] = { rows: 3, columns: 5, pages: { root: [] } };
-      deck.activeProfile = normalized;
-      selectedDeckIndex = -1;
-      renderDeck();
-    });
-    byId("deck-apply-grid").addEventListener("click", applyDeckGrid);
-    byId("deck-save").addEventListener("click", () => void saveDeck());
-    byId("deck-action-type").addEventListener("change", () => { byId("deck-value-row").hidden = !["obs:scene.set", "url"].includes(byId("deck-action-type").value); });
-    byId("deck-apply-key").addEventListener("click", () => {
-      if (selectedDeckIndex < 0) return showToast("Zuerst eine Taste auswählen.", "error");
-      activeDeckProfile().pages.root[selectedDeckIndex] = assignmentFromInspector();
-      renderDeck();
-    });
-    byId("deck-clear-key").addEventListener("click", () => {
-      if (selectedDeckIndex < 0) return;
-      activeDeckProfile().pages.root[selectedDeckIndex] = null;
-      renderDeck();
-    });
     byId("settings-save").addEventListener("click", () => void saveSettings());
     api.onTelemetry(updateTelemetry);
     api.onObsStatusChanged((status) => setObsConnected(Boolean(status.connected), status));
@@ -704,7 +546,6 @@
     }
     if (state.recommendation) renderRecommendation(state.recommendation);
     updateTelemetry(latestTelemetry);
-    renderDeck();
     bindEvents();
     switchView("overview");
   }
