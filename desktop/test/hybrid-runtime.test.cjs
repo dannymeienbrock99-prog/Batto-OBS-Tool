@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { normalizeState } = require("../src/services/store.cjs");
 const { ConnectionManager } = require("../src/services/connection-manager.cjs");
-const { expandEnvironment } = require("../src/services/tiktok-live-studio.cjs");
+const { expandEnvironment, compareVersionLikeDesc } = require("../src/services/tiktok-live-studio.cjs");
 
 test("TikTok settings are split into LIVE Studio and API layers", () => {
   const state = normalizeState({
@@ -61,4 +61,10 @@ test("TikTok LIVE Studio path expansion uses environment variables", () => {
   process.env.LOCALAPPDATA = "C:\\Users\\Test\\AppData\\Local";
   assert.equal(expandEnvironment("%LOCALAPPDATA%\\TikTok LIVE Studio\\TikTok LIVE Studio.exe"), "C:\\Users\\Test\\AppData\\Local\\TikTok LIVE Studio\\TikTok LIVE Studio.exe");
   if (old === undefined) delete process.env.LOCALAPPDATA; else process.env.LOCALAPPDATA = old;
+});
+
+test("TikTok LIVE Studio version directories prefer the newest version", () => {
+  const versions = ["1.9.0", "1.33.2", "1.10.4", "1.33.10"];
+  versions.sort(compareVersionLikeDesc);
+  assert.deepEqual(versions, ["1.33.10", "1.33.2", "1.10.4", "1.9.0"]);
 });
