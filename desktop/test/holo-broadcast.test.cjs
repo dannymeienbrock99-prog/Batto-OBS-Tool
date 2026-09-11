@@ -107,7 +107,10 @@ test("pausing during a scheduled send aborts it and prevents an obsolete timer r
   let started; const start = new Promise((resolve) => { started = resolve; });
   const bot = new ChatBotService({ sendChat: (_p, _m, { signal }) => { started(); return new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")))); } }); t.after(() => bot.stop());
   bot.config = normalizeConfig({ broadcasts: [item({ platforms: ["twitch"], startDelayMs: 0 })] });
-  bot.restartBroadcasts(); await start;
+  bot.restartBroadcasts();
+  // Electron keeps the app alive; an isolated Node test needs its own live handle.
+  bot.broadcastTimers.get("one").ref();
+  await start;
   bot.config.broadcastSettings.enabled = false; bot.restartBroadcasts(); await sleep(20);
   assert.equal(bot.broadcastTimers.size, 0); assert.equal(bot.broadcastControllers.size, 0);
   assert.equal(bot.broadcastResults[0].results[0].status, "skipped");
