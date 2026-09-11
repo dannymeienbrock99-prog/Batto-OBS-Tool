@@ -8,7 +8,7 @@
     multichat: ["Multi-Chat", "Twitch, TikTok, CNG und YouTube mit Moderation in einem Chat."],
     internet: ["Internettest", "Upload, Download und Latenz messen."],
     obs: ["OBS-Verbindung", "OBS WebSocket 5 verbinden und steuern."],
-    holo: ["Twitch-Hologramm", "Namen und Chatfarben holografisch gestalten."],
+    holo: ["Chat-Design / Hologramm", "Gemeinsame Gestaltung für Twitch, TikTok, YouTube und CNG."],
     settings: ["Einstellungen", "Lokale Einstellungen des Batto OBS Tools."]
   };
   let state = null;
@@ -116,7 +116,9 @@
     }
   }
   async function refreshObs() { try { renderObs(await api.getObsSnapshot()); } catch (error) { toast(errorMessage(error), true); } }
-  async function loadHolo() { try { const status = await api.getHoloStatus(); byId("holo-url").textContent = status.overlayUrl || "Nicht gestartet"; if (status.editorUrl && byId("holo-frame").src !== status.editorUrl) byId("holo-frame").src = status.editorUrl; } catch (error) { toast(errorMessage(error), true); } }
+  api.onOpenChatDesign?.(() => switchView("holo"));
+
+  async function loadHolo() { try { const status = await api.getHoloStatus(); byId("holo-url").textContent = status.overlayUrl || "Nicht gestartet"; } catch (error) { toast(errorMessage(error), true); } }
 
   function bind() {
     document.querySelectorAll(".nav-button").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
@@ -129,7 +131,7 @@
     document.querySelectorAll("[data-obs-action]").forEach((button) => button.onclick = async () => { try { await api.executeObs(button.dataset.obsAction, {}); await refreshObs(); } catch (error) { toast(errorMessage(error), true); } });
     byId("obs-set-scene").onclick = async () => { try { await api.executeObs("scene.set", { sceneName: byId("obs-scene-select").value }); await refreshObs(); } catch (error) { toast(errorMessage(error), true); } };
     byId("holo-copy").onclick = async () => { try { await api.copyHoloUrl(); toast("OBS-Adresse kopiert."); } catch (error) { toast(errorMessage(error), true); } };
-    byId("holo-external").onclick = async () => { try { await api.openHoloEditor(); } catch (error) { toast(errorMessage(error), true); } };
+    byId("holo-external").onclick = async () => { try { await api.chatOverlayOpen(); } catch (error) { toast(errorMessage(error), true); } };
   }
 
   async function init() {

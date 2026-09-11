@@ -132,6 +132,10 @@
           <div class="v4-actions"><button data-v4-help>HILFE</button><button data-v4-test ${testable.has(selected)?"":"disabled"}>TESTEN</button><button data-v4-reset>ZURÜCKSETZEN</button><button data-v4-apply>ÜBERNEHMEN</button><button class="primary" data-v4-save>SPEICHERN</button></div><div class="v4-save-state" id="v4-save-state"></div>
         </div>
       </section></div>`;
+    if (["chatDesign", "autoBroadcast"].includes(selected)) {
+      const title = selected === "chatDesign" ? "Chat-Design / Hologramm" : "Auto-Broadcast";
+      host.querySelector(".v4-settings-main").innerHTML = `<header class="v4-module-head"><div><h2>${title}</h2><p>Alle Einstellungen und Ergebnisse werden im gemeinsamen Editor verwaltet.</p></div></header><div class="v4-config-panel"><button class="primary" data-open-shared>${title} öffnen</button></div>`;
+    }
     bind();
   }
 
@@ -149,6 +153,8 @@
 
   function bind() {
     host.querySelectorAll("[data-v4-module]").forEach((button)=>button.onclick=async()=>{selected=button.dataset.v4Module;await refreshTools();render();});
+    const shared = host.querySelector("[data-open-shared]");
+    if (shared) { shared.onclick = () => { if (selected === "chatDesign") void api.openHoloEditor(); else document.querySelector('[data-view="chatbot"]')?.click(); }; return; }
     host.querySelector("[data-v4-help]").onclick=()=>window.alert(`${moduleState(selected).title}\n\n${descriptions[selected]||""}`);
     host.querySelector("[data-v4-test]").onclick=async()=>{try{const result=await api.testV4Module(selected);setMessage(`TEST OK: ${result.message||result.module||selected}`);}catch(error){setMessage(`TEST FEHLER: ${error.message||error}`,true);}};
     host.querySelector("[data-v4-apply]").onclick=()=>{draft=collectDraft();setMessage("Änderungen übernommen – noch nicht dauerhaft gespeichert.");};
