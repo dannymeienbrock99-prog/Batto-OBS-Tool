@@ -8,7 +8,7 @@ class CngUnifiedAdapter extends EventEmitter {
   constructor({ transportFactory = null } = {}) { super(); this.platform = "cng"; this.transportFactory = transportFactory; this.transport = null; this.config = null; }
   onMessage(callback) { this.on("message", callback); }
   onStatus(callback) { this.on("status", callback); }
-  status() { return { platform: this.platform, connected: Boolean(this.transport?.connected), configured: Boolean(this.config?.chat?.url && this.config?.chat?.obsChatToken), creatorId: this.config?.creatorId || "" }; }
+  status() { return { platform: this.platform, connected: Boolean(this.transport?.connected), configured: Boolean(this.config?.chat?.url && this.config?.chat?.obsChatToken), creatorId: this.config?.creatorId || "", canSend: false, sendReason: "CNG: Keine verifizierte Chat-Sendeschnittstelle angebunden." }; }
   emitStatus(extra = {}) { this.emit("status", { ...this.status(), ...extra }); }
 
   configure(input) { this.config = normalizeCngConfig(input); this.emitStatus(); return this.config; }

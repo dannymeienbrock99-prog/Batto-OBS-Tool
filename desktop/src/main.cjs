@@ -10,6 +10,7 @@ const { runInternetTest } = require("./services/internet-test.cjs");
 const { ObsWebSocketClient, normalizeLocalObsHost } = require("./services/obs-websocket.cjs");
 const { StreamStatusSampler } = require("./services/stream-status.cjs");
 const { TwitchHoloServer } = require("./services/twitch-holo-server.cjs");
+const { ChatDesignStore } = require("./services/chat-design-store.cjs");
 
 app.setName("Batto OBS Tool");
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -19,6 +20,7 @@ let mainWindow = null;
 let settingsStore = null;
 let secretStore = null;
 let holoServer = null;
+let chatDesignStore = null;
 let internetResult = null;
 let moduleErrors = {};
 const obs = new ObsWebSocketClient();
@@ -38,7 +40,7 @@ app.on("second-instance", () => {
 async function startLocalModules() {
   moduleErrors = {};
   try {
-    holoServer = new TwitchHoloServer({ preferredPort: 17823, webRoot: path.join(__dirname, "..", "modules", "twitch-holo-chat", "web") });
+    holoServer = new TwitchHoloServer({ preferredPort: 17823, designStore: chatDesignStore });
     await holoServer.start();
   } catch (error) {
     moduleErrors.twitchHolo = errorPayload(error);
@@ -103,7 +105,9 @@ function registerIpc() {
   ipcMain.handle("obs:snapshot", () => safeObsSnapshot());
   ipcMain.handle("obs:execute", (_event, action, payload) => obs.execute(action, payload));
   ipcMain.handle("holo:status", () => holoServer?.status() || { running: false });
-  ipcMain.handle("holo:open-editor", async () => { const status = holoServer?.status(); if (!status?.editorUrl) throw new Error("Hologramm-Editor ist nicht gestartet."); await shell.openExternal(status.editorUrl); return status; });
+  ipcMain.handle("chat:design:get", () => chatDesignStore.snapshot());
+  ipcMain.handle("chat:design:save", (_event, config) => chatDesignStore.save(config));
+  ipcMain.handle("holo:open-editor", () => { mainWindow?.show(); mainWindow?.focus(); mainWindow?.webContents.send("chat:open-design"); return { opened: true }; });
   ipcMain.handle("holo:copy-url", () => { const status = holoServer?.status(); if (!status?.overlayUrl) throw new Error("Hologramm-Overlay ist nicht gestartet."); clipboard.writeText(status.overlayUrl); return status.overlayUrl; });
 }
 
@@ -120,6 +124,11 @@ app.whenReady().then(async () => {
   settingsStore = new SettingsStore(userDataFile("settings.json"));
   secretStore = new SecretStore(userDataFile("secrets.json"), safeStorage);
   await settingsStore.load();
+  chatDesignStore = new ChatDesignStore(userDataFile("chat-design.json"));
+  await chatDesignStore.load();
+  chatDesignStore.on("changed", (config) => {
+    for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send("chat:design-changed", config);
+  });
   if (process.argv.includes("--self-test")) { try { await runSelfTest(); app.exit(0); } catch (error) { process.stderr.write(`${String(error?.stack || error)}\n`); app.exit(1); } return; }
   registerIpc();
   await startLocalModules();
@@ -134,6 +143,6 @@ module.exports = {
   getObsClient: () => obs,
   getMainWindow: () => mainWindow,
   getTwitchHoloServer: () => holoServer,
-  getStreamOverlayServer: () => null,
+  getStreamOverlayServer: () => holoServer,
   getStateSnapshot: () => stateSnapshot()
 };

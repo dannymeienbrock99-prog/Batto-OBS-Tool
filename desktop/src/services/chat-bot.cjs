@@ -7,6 +7,7 @@ const path = require("node:path");
 const { EventEmitter } = require("node:events");
 const { spawn } = require("node:child_process");
 const { WebSocketServer } = require("ws");
+const { deliverBroadcast } = require("./broadcast-delivery.cjs");
 
 const PLATFORMS = ["twitch", "tiktok", "youtube", "cng"];
 const ROLES = ["all", "follower", "subscriber", "vip", "moderator", "broadcaster"];
@@ -31,6 +32,7 @@ function defaultConfig() {
     enabled: true,
     platforms: Object.fromEntries(PLATFORMS.map((platform) => [platform, { enabled: true }])),
     broadcasts: [],
+    broadcastSettings: { enabled: true, timeoutMs: 10000 },
     commands: [],
     events: [],
     discord: { enabled: false, webhookUrl: "", title: "{streamer} ist LIVE!", message: "{title}\n{stream_url}", embed: true, oncePerStream: true, startDelayMs: 0, offlineMessage: "" },
@@ -87,11 +89,12 @@ function normalizeBroadcast(input = {}) {
   const messages = Array.isArray(input.messages) ? input.messages.map((item) => text(item, 1000)).filter(Boolean) : [text(input.message, 1000)].filter(Boolean);
   return {
     id: text(input.id, 120) || id("broadcast"), enabled: input.enabled !== false,
-    platforms: safePlatforms(input.platforms).length ? safePlatforms(input.platforms) : [...PLATFORMS],
+    platforms: Array.isArray(input.platforms) ? safePlatforms(input.platforms) : [...PLATFORMS],
     messages, intervalMs: clamp(input.intervalMs, 10000, 86400000, 300000), randomInterval: input.randomInterval === true,
     intervalMinMs: clamp(input.intervalMinMs, 10000, 86400000, 180000), intervalMaxMs: clamp(input.intervalMaxMs, 10000, 86400000, 600000),
     startDelayMs: clamp(input.startDelayMs, 0, 86400000, 0), rotation: input.rotation !== false,
-    onlyWhenLive: input.onlyWhenLive === true, onlyWhenActive: input.onlyWhenActive === true, minChatMessages: clamp(input.minChatMessages, 0, 10000, 1)
+    onlyWhenLive: input.onlyWhenLive === true, onlyWhenActive: input.onlyWhenActive === true, minChatMessages: clamp(input.minChatMessages, 1, 10000, 1),
+    activityWindowMs: clamp(input.activityWindowMs, 10000, 86400000, 300000), showOverlay: input.showOverlay === true
   };
 }
 function normalizeEvent(input = {}) {
@@ -110,6 +113,7 @@ function normalizeConfig(input = {}) {
     ...base, ...input,
     platforms: { ...base.platforms, ...(input.platforms || {}) },
     broadcasts: Array.isArray(input.broadcasts) ? input.broadcasts.map(normalizeBroadcast) : [],
+    broadcastSettings: { enabled: input.broadcastSettings?.enabled !== false, timeoutMs: clamp(input.broadcastSettings?.timeoutMs, 1000, 30000, 10000) },
     commands: Array.isArray(input.commands) ? input.commands.map(normalizeCommand) : [],
     events: Array.isArray(input.events) ? input.events.map(normalizeEvent) : [],
     discord: { ...base.discord, ...(input.discord || {}) },
@@ -148,13 +152,15 @@ function sendKeysExpression(keys) {
 }
 
 class ChatBotService extends EventEmitter {
-  constructor({ configFile, mediaRoot, sendChat, obs, isLive } = {}) {
+  constructor({ configFile, mediaRoot, sendChat, obs, isLive, getStatuses, publishBroadcast } = {}) {
     super();
     this.configFile = configFile;
     this.mediaRoot = mediaRoot || path.join(path.dirname(configFile || process.cwd()), "chat-bot-media");
     this.sendChat = typeof sendChat === "function" ? sendChat : async () => { throw new Error("Für diese Plattform ist noch kein Sendekanal verbunden."); };
     this.obs = obs || null;
     this.isLive = typeof isLive === "function" ? isLive : () => false;
+    this.getStatuses = typeof getStatuses === "function" ? getStatuses : () => null;
+    this.publishBroadcast = publishBroadcast;
     this.config = defaultConfig();
     this.logs = [];
     this.commandCooldowns = new Map();
@@ -162,8 +168,13 @@ class ChatBotService extends EventEmitter {
     this.eventCooldowns = new Map();
     this.broadcastTimers = new Map();
     this.broadcastIndexes = new Map();
+    this.broadcastEpoch = 0;
+    this.broadcastControllers = new Map();
+    this.broadcastResults = [];
+    this.updateQueue = Promise.resolve();
     this.poolIndexes = new Map();
     this.chatActivity = Object.fromEntries(PLATFORMS.map((p) => [p, 0]));
+    this.chatActivityTimes = Object.fromEntries(PLATFORMS.map((p) => [p, []]));
     this.actionRunning = false;
     this.server = null;
     this.wss = null;
@@ -181,10 +192,24 @@ class ChatBotService extends EventEmitter {
     await fsp.writeFile(this.configFile, JSON.stringify(this.config, null, 2), { encoding: "utf8", mode: 0o600 });
     return this.snapshot();
   }
-  async update(value = {}) { this.config = normalizeConfig({ ...this.config, ...value }); await this.save(); this.restartBroadcasts(); return this.snapshot(); }
+  update(value = {}) {
+    const task = this.updateQueue.then(async () => {
+      const next = normalizeConfig({ ...this.config, ...value });
+      const schedulerConfig = (config) => JSON.stringify([config.enabled, config.broadcastSettings, config.broadcasts, config.platforms]);
+      const changed = schedulerConfig(next) !== schedulerConfig(this.config);
+      await fsp.mkdir(path.dirname(this.configFile), { recursive: true });
+      await fsp.writeFile(this.configFile + ".tmp", JSON.stringify(next, null, 2), { encoding: "utf8", mode: 0o600 });
+      await fsp.rename(this.configFile + ".tmp", this.configFile);
+      this.config = next;
+      if (changed) this.restartBroadcasts();
+      return this.snapshot();
+    });
+    this.updateQueue = task.catch(() => {});
+    return task;
+  }
   snapshot() {
     return {
-      config: clone(this.config), logs: this.logs.slice(-200),
+      config: clone(this.config), logs: this.logs.slice(-200), broadcastResults: clone(this.broadcastResults), capabilities: this.getStatuses(),
       overlay: { running: Boolean(this.server), baseUrl: this.server ? `http://127.0.0.1:${this.config.overlay.port}` : "", urls: this.overlayUrls() },
       mediaRoot: this.mediaRoot
     };
@@ -206,6 +231,7 @@ class ChatBotService extends EventEmitter {
     return this.snapshot();
   }
   async stop() {
+    this.cancelBroadcasts();
     for (const timer of this.broadcastTimers.values()) clearTimeout(timer);
     this.broadcastTimers.clear();
     for (const client of this.clients) { try { client.close(); } catch {} }
@@ -267,36 +293,67 @@ class ChatBotService extends EventEmitter {
   }
 
   restartBroadcasts() {
-    for (const timer of this.broadcastTimers.values()) clearTimeout(timer);
-    this.broadcastTimers.clear();
-    if (!this.config.enabled) return;
+    this.cancelBroadcasts();
+    if (!this.config.enabled || !this.config.broadcastSettings.enabled) return;
     for (const item of this.config.broadcasts) if (item.enabled) this.scheduleBroadcast(item, item.startDelayMs);
   }
+  cancelBroadcasts() {
+    this.broadcastEpoch += 1;
+    for (const timer of this.broadcastTimers.values()) clearTimeout(timer);
+    this.broadcastTimers.clear();
+    for (const controller of this.broadcastControllers.values()) controller.abort();
+  }
   scheduleBroadcast(item, overrideMs = null) {
+    const epoch = this.broadcastEpoch;
     const ms = overrideMs ?? (item.randomInterval ? Math.round(item.intervalMinMs + Math.random() * Math.max(0, item.intervalMaxMs - item.intervalMinMs)) : item.intervalMs);
     const timer = setTimeout(async () => {
+      if (epoch !== this.broadcastEpoch) return;
+      this.broadcastTimers.delete(item.id);
       try { await this.runBroadcast(item); } catch (error) { this.log("error", `Auto-Broadcast ${item.id}: ${error.message}`); }
-      if (this.config.enabled && this.config.broadcasts.some((x) => x.id === item.id && x.enabled)) this.scheduleBroadcast(item);
+      if (epoch === this.broadcastEpoch && this.config.enabled && this.config.broadcastSettings.enabled && this.config.broadcasts.some((x) => x.id === item.id && x.enabled)) this.scheduleBroadcast(item);
     }, Math.max(1000, ms));
     timer.unref?.(); this.broadcastTimers.set(item.id, timer);
   }
   async runBroadcast(item) {
-    if (item.onlyWhenLive && !await this.isLive()) return;
-    if (!item.messages.length) return;
-    const index = this.broadcastIndexes.get(item.id) || 0;
-    const message = item.rotation ? item.messages[index % item.messages.length] : item.messages[Math.floor(Math.random() * item.messages.length)];
-    this.broadcastIndexes.set(item.id, index + 1);
-    for (const platform of item.platforms) {
-      if (!this.config.platforms[platform]?.enabled) continue;
-      if (item.onlyWhenActive && this.chatActivity[platform] < item.minChatMessages) continue;
-      await this.sendChat(platform, message);
-      this.log("broadcast", `${platform}: ${message}`, { platform, itemId: item.id });
-    }
+    item = normalizeBroadcast(item);
+    if (this.broadcastControllers.has(item.id)) throw new Error("Dieser Broadcast wird gerade versendet.");
+    if (!item.messages.length || !item.platforms.length) throw new Error("Nachricht und mindestens ein Ziel auswählen.");
+    const controller = new AbortController();
+    this.broadcastControllers.set(item.id, controller);
+    try {
+      const index = this.broadcastIndexes.get(item.id) || 0;
+      const message = item.rotation ? item.messages[index % item.messages.length] : item.messages[Math.floor(Math.random() * item.messages.length)];
+      const live = !item.onlyWhenLive || await this.isLive();
+      const active = (platform) => !item.onlyWhenActive || this.chatActivityTimes[platform].filter((time) => time >= Date.now() - item.activityWindowMs).length >= item.minChatMessages;
+      const results = live ? await deliverBroadcast({
+        platforms: item.platforms, message, send: this.sendChat, statuses: this.getStatuses(),
+        enabled: this.config.platforms, timeoutMs: this.config.broadcastSettings.timeoutMs, signal: controller.signal,
+        active
+      }) : item.platforms.map((platform) => ({ platform, status: "skipped", reason: "OBS-Stream ist nicht live.", time: Date.now() }));
+      if (results.some((result) => ["sent", "submitted"].includes(result.status))) this.broadcastIndexes.set(item.id, index + 1);
+      const report = { id: id("delivery"), itemId: item.id, time: Date.now(), message, results, overlay: false };
+      const overlayPlatforms = item.platforms.filter((platform) => this.config.platforms[platform]?.enabled !== false && active(platform));
+      if (item.showOverlay && overlayPlatforms.length && live && !controller.signal.aborted && typeof this.publishBroadcast === "function") {
+        try { this.publishBroadcast(message, overlayPlatforms); report.overlay = true; }
+        catch { report.overlayError = "OBS-Ausgabe nicht verfügbar."; }
+      }
+      this.broadcastResults.push(report);
+      this.broadcastResults = this.broadcastResults.slice(-100);
+      for (const result of results) this.log("broadcast", `${result.platform}: ${result.status}${result.reason ? ` – ${result.reason}` : ""}`, { itemId: item.id, ...result });
+      this.emit("broadcast-result", report);
+      return report;
+    } finally { if (this.broadcastControllers.get(item.id) === controller) this.broadcastControllers.delete(item.id); }
   }
 
   async ingestChat(message = {}) {
+    if (message.metadata?.historical) return { matched: false, reason: "history" };
     const platform = PLATFORMS.includes(message.platform) ? message.platform : "cng";
     this.chatActivity[platform] = (this.chatActivity[platform] || 0) + 1;
+    if (!message.metadata?.eventType) {
+      const now = Date.now();
+      this.chatActivityTimes[platform] = this.chatActivityTimes[platform].filter((time) => time >= now - 86400000).slice(-9999);
+      this.chatActivityTimes[platform].push(now);
+    }
     if (!this.config.enabled || !this.config.platforms[platform]?.enabled) return { matched: false };
     const body = text(message.message || message.text, 1000);
     const token = body.split(/\s+/)[0].toLowerCase();

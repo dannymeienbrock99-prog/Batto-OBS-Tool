@@ -11,6 +11,7 @@ const BACKUP_FILES = [
   "v4-module-config.json",
   "multi-chat-moderation.json",
   "chat-bot.json",
+  "chat-design.json",
   "cng-personal-chat.json",
   "tts-config.json",
   "chat-overlay.json",
