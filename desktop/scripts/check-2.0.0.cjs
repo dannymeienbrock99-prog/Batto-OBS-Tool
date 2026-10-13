@@ -18,6 +18,7 @@ const must = (text, pattern, message) => { if (pattern instanceof RegExp ? !patt
 const mustNot = (text, pattern, message) => { if (pattern instanceof RegExp ? pattern.test(text) : text.includes(pattern)) fail(message); };
 
 const required = [
+  "src/shared/chat-design.js","src/services/chat-design-store.cjs","src/services/broadcast-delivery.cjs","src/renderer/chat-design-editor.js","src/renderer/chat-design.css","src/renderer/chat-overlay.html","src/renderer/chat-overlay.js","src/services/platforms/chat-api.cjs","src/services/platforms/twitch-adapter.cjs","src/services/platforms/youtube-adapter.cjs","test/holo-broadcast.test.cjs",
   "src/main.cjs","src/chat-bootstrap.cjs","src/preload.cjs","src/renderer/index.html","src/renderer/app.js","src/renderer/styles.css",
   "src/renderer/v4-shell.css","src/renderer/v4-settings.js","src/renderer/v4-settings.css","src/renderer/assets/HIntergund.png",
   "src/renderer/multi-chat.js","src/renderer/multi-chat.css","src/renderer/chat-bot.js","src/renderer/chat-bot.css",

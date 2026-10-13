@@ -16,6 +16,8 @@
   let messages = [];
   let moderation = {};
   let moderationPlatform = "twitch";
+  let chatDesign = window.BattoChatDesign?.defaults();
+  api.onChatDesignChanged?.((config) => { chatDesign = config; updateBody(); });
   let contextMessage = null;
   let ttsConfig = { enabled: false, language: "de-DE", rate: 1, pitch: 1, volume: 1, cooldownMs: 1200, maxQueue: 20, maxCommentLength: 220, chat: true, events: true, announcePlatforms: ["twitch","tiktok","cng","youtube"], blockUsers: [], allowUsers: [] };
   const ttsQueue = [];
@@ -50,10 +52,10 @@
         <div class="moderation-tabs">${["twitch","tiktok","cng","youtube"].map((p)=>`<button data-mod-platform="${p}" class="${moderationPlatform===p?'active':''}">${platformMeta[p][0]}</button>`).join("")}</div>
         <div id="moderation-overview"></div>
       </div>
-      <div class="settings-section"><h3>Twitch</h3><label>Kanal<input id="cfg-twitch-channel" placeholder="dein_channel"></label><label>OAuth-Token<input id="cfg-twitch-token" type="password" placeholder="oauth-…"></label><label>Username<input id="cfg-twitch-user" placeholder="batto_reader"></label><button id="cfg-twitch-connect">Twitch verbinden</button></div>
+      <div class="settings-section"><h3>Twitch</h3><label>Kanal<input id="cfg-twitch-channel" placeholder="dein_channel"></label><label>Twitch-Anmeldung<input id="cfg-twitch-token" type="password" placeholder="oauth-…" autocomplete="off"></label><small>Benutzername wird aus dem Token ermittelt. Rechte: chat:read und user:write:chat. Token gilt nur für diese Sitzung.</small><button id="cfg-twitch-connect">Twitch verbinden</button></div>
       <div class="settings-section"><h3>CNG</h3><label>Persönliche CNG-Chat-URL<input id="cfg-cng-chat" placeholder="https://cng-plattform.com/chat-popout/…"></label><label>Persönliche Alert-URL<input id="cfg-cng-alert" placeholder="https://cng-plattform.com/alert-overlay…"></label><div class="settings-actions"><button id="cfg-cng-save">Speichern</button><button id="cfg-cng-connect">Verbinden</button></div></div>
-      <div class="settings-section"><h3>TikTok LIVE</h3><label>LIVE-Username<input id="cfg-tiktok-user" placeholder="@username"></label><button id="cfg-tiktok-connect">TikTok verbinden</button></div>
-      <div class="settings-section"><h3>YouTube</h3><label>Video-ID<input id="cfg-youtube-video" placeholder="Live-Video-ID"></label><button id="cfg-youtube-connect">YouTube vorbereiten</button></div>
+      <div class="settings-section"><h3>TikTok LIVE</h3><label>Verbindung<select id="cfg-tiktok-mode"><option value="tikfinity">TikFinity (auf diesem Computer)</option value="direct">Direkter LIVE-Reader</option></select></label><label>LIVE-Username (direkter Reader)<input id="cfg-tiktok-user" placeholder="@username"></label><small>TikFinity: 127.0.0.1:21213 · Nur Empfang.</small><button id="cfg-tiktok-connect">TikTok verbinden</button></div>
+      <div class="settings-section"><h3>YouTube</h3><label>Video-ID oder URL<input id="cfg-youtube-video" placeholder="Live-Video-ID oder YouTube-URL"></label><label>Livechat-ID (optional statt Video)<input id="cfg-youtube-chat" placeholder="Livechat-ID"></label><label>YouTube-Anmeldung<input id="cfg-youtube-token" type="password" autocomplete="off"></label><small>Recht: youtube oder youtube.force-ssl. Token gilt nur für diese Sitzung.</small><button id="cfg-youtube-connect">YouTube verbinden</button></div>
       <div class="settings-section"><h3>Batto TTS</h3><label><input id="tts-enabled" type="checkbox"> Chat-TTS aktiv</label><label>Sprache<select id="tts-language"><option>de-DE</option><option>en-US</option><option>en-GB</option><option>fr-FR</option><option>es-ES</option><option>it-IT</option><option>pt-BR</option><option>ja-JP</option><option>ko-KR</option></select></label><label>Stimme<select id="tts-voice"><option value="">Systemstimme</option></select></label><label>Geschwindigkeit<input id="tts-rate" type="range" min="0.5" max="2" step="0.05" value="1"></label><label>Tonhöhe<input id="tts-pitch" type="range" min="0" max="2" step="0.05" value="1"></label><label>Lautstärke<input id="tts-volume" type="range" min="0" max="1" step="0.05" value="1"></label></div>
       <div class="settings-actions"><button id="chat-clear">Chat leeren</button><button id="chat-settings-close">Schließen</button></div>`;
   }
@@ -67,11 +69,11 @@
     root.querySelector("#chat-send").onclick = sendCurrentMessage;
     root.querySelector("#chat-input").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendCurrentMessage(); } });
 
-    root.querySelector("#cfg-twitch-connect").onclick = async () => { try { await api.chatConnect("twitch", { channel: value("cfg-twitch-channel"), token: value("cfg-twitch-token"), username: value("cfg-twitch-user") }); await refreshSettings(); } catch (error) { alert(error.message); } };
+    root.querySelector("#cfg-twitch-connect").onclick = async () => { try { await api.chatConnect("twitch", { channel: value("cfg-twitch-channel"), token: value("cfg-twitch-token") }); await refreshSettings(); } catch (error) { alert(error.message); } };
     root.querySelector("#cfg-cng-save").onclick = async () => { try { await api.saveCngConfig({ chat: { url: value("cfg-cng-chat") }, alerts: { url: value("cfg-cng-alert") } }); await refreshSettings(); } catch (error) { alert(error.message); } };
     root.querySelector("#cfg-cng-connect").onclick = async () => { try { await api.chatConnect("cng", await api.getCngConfig()); await refreshSettings(); } catch (error) { alert(error.message); } };
-    root.querySelector("#cfg-tiktok-connect").onclick = async () => { try { await api.chatConnect("tiktok", { username: value("cfg-tiktok-user") }); await refreshSettings(); } catch (error) { alert(error.message); } };
-    root.querySelector("#cfg-youtube-connect").onclick = async () => { try { await api.chatConnect("youtube", { videoId: value("cfg-youtube-video") }); await refreshSettings(); } catch (error) { alert(error.message); } };
+    root.querySelector("#cfg-tiktok-connect").onclick = async () => { try { await api.chatConnect("tiktok", { username: value("cfg-tiktok-user"), mode: value("cfg-tiktok-mode") }); await refreshSettings(); } catch (error) { alert(error.message); } };
+    root.querySelector("#cfg-youtube-connect").onclick = async () => { try { await api.chatConnect("youtube", { videoId: value("cfg-youtube-video"), liveChatId: value("cfg-youtube-chat"), token: value("cfg-youtube-token") }); await refreshSettings(); } catch (error) { alert(error.message); } };
     root.querySelector("#tts-enabled").onchange = saveTts;
     ["tts-language","tts-voice","tts-rate","tts-pitch","tts-volume"].forEach((id) => root.querySelector(`#${id}`).onchange = saveTts);
     root.querySelectorAll("[data-mod-platform]").forEach((button) => button.onclick = () => { moderationPlatform = button.dataset.modPlatform; renderModerationOverview(); root.querySelectorAll("[data-mod-platform]").forEach((item) => item.classList.toggle("active", item.dataset.modPlatform === moderationPlatform)); });
@@ -108,6 +110,7 @@
       const meta = platformMeta[m.platform] || platformMeta.cng;
       return `<div class="chat-row" data-message-index="${index}"><span class="platform-badge" style="background:${esc(m.color || meta[1])}">${meta[2]}</span><div><div class="chat-meta"><button class="chat-user user-context" data-user="${esc(m.username)}" data-platform="${esc(m.platform)}" data-message-id="${esc(m.id || "")}" style="color:${esc(m.color || meta[1])}">${esc(m.username)}</button><span class="chat-role">${esc(meta[0])}</span>${m.role ? `<span class="chat-role">${esc(m.role)}</span>` : ""}${moderationBadge(m)}</div><div class="chat-message">${esc(m.message)}</div></div></div>`;
     }).join("");
+    body.querySelectorAll(".chat-row").forEach((row, index) => window.BattoChatDesign?.apply(row, visible[index], chatDesign));
     body.querySelectorAll(".user-context").forEach((button) => button.addEventListener("contextmenu", (event) => {
       event.preventDefault();
       const row = button.closest(".chat-row");
@@ -168,13 +171,13 @@
       <div><strong>Stummgeschaltet</strong>${list(state.muted, "Niemand stummgeschaltet.")}</div>
       <div><strong>Blockiert</strong>${list(state.blocked, "Niemand blockiert.")}</div>
     </div>
-    <div class="moderation-history"><strong>Verlauf</strong>${state.history.length ? state.history.slice().reverse().slice(0,100).map((entry)=>`<div class="history-row"><span>${new Date(entry.timestamp).toLocaleString("de-DE")}</span><b>${esc(entry.username)}</b><span>${esc(entry.action)}</span><small>${esc(entry.reason || entry.lastMessage || "Kein Grund angegeben")}</small></div>`).join("") : '<small>Noch keine Moderationsaktionen.</small>'}</div>`;
+    <div class="moderation-history"><strong>Verlauf</strong>${state.history.length ? state.history.slice().reverse().slice(0,100).map((entry)=>`<div class="history-row"><span>${new Date(entry.timestamp).toLocaleString("de-DE")}</span><b>${esc(entry.username)}</b><span>${esc(entry.action)}</span><small>${esc(entry.reason || entry.lastMessage || "Kein Grund angegeben")}</small><span class="history-result ${entry.remoteApplied ? "platform" : "local"}">${entry.remoteApplied ? "Plattform" : "Lokal"}</span></div>`).join("") : '<small>Noch keine Moderationsaktionen.</small>'}</div>`;
   }
 
   async function refreshSettings() {
     const statuses = await api.chatStatuses();
     const grid = root.querySelector("#chat-status-grid");
-    if (grid) grid.innerHTML = Object.entries(statuses).map(([p,s]) => `<div class="status-card"><strong>${esc(platformMeta[p]?.[0] || p)}</strong><small><span class="dot ${s.connected?'on':''}"></span>${s.connected?'Verbunden':s.configured?'Konfiguriert':'Getrennt'}</small></div>`).join("");
+    if (grid) grid.innerHTML = Object.entries(statuses).map(([p,s]) => `<div class="status-card"><strong>${esc(platformMeta[p]?.[0] || p)}</strong><small><span class="dot ${s.connected?'on':''}"></span>${s.connected?'Verbunden':s.configured?'Konfiguriert':'Getrennt'}</small><small>${s.canSend ? 'Chatversand verfügbar' : esc(s.sendReason || 'Kein Chatversand')}</small></div>`).join("");
     moderation = await api.getModerationState();
     renderModerationOverview();
     const cng = await api.getCngConfig();
@@ -240,6 +243,7 @@
   async function init() {
     render();
     moderation = await api.getModerationState();
+    if (api.getChatDesign) chatDesign = await api.getChatDesign();
     messages = await api.chatHistory({ limit: 300 });
     updateBody();
     api.onChatMessages(acceptBatch);

@@ -1,130 +1,90 @@
 "use strict";
-
 const fs = require("node:fs/promises");
-const http = require("node:http");
 const path = require("node:path");
+const http = require("node:http");
+const { WebSocketServer } = require("ws");
+const { defaults } = require("../shared/chat-design.js");
 
-const CONTENT_TYPES = Object.freeze({
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml"
-});
-
+// One presentation feed for Holo, the normal chat overlay and reconnects.
+// Configuration writes are IPC-only; this server never accepts chat sends.
 class TwitchHoloServer {
-  constructor({ webRoot, preferredPort = 17823 } = {}) {
-    this.host = "127.0.0.1";
-    this.webRoot = path.resolve(webRoot);
-    this.preferredPort = Math.max(1, Math.min(65535, Math.round(Number(preferredPort) || 17823)));
-    this.port = null;
-    this.server = null;
+  constructor({ preferredPort = 17823, designStore = null } = {}) {
+    this.host = "127.0.0.1"; this.preferredPort = preferredPort; this.port = null;
+    this.server = null; this.wss = null; this.designStore = designStore; this.history = [];
+    this.onDesign = () => this.publish({ type: "design", config: this.config() });
   }
-
+  config() { return this.designStore?.snapshot() || defaults(); }
   async start() {
     if (this.server) return this.status();
-    let lastError;
-    for (let offset = 0; offset < 30; offset += 1) {
+    for (let offset = 0; offset < 30; offset++) {
       const port = this.preferredPort + offset;
+      const server = http.createServer((req, res) => void this.handle(req, res));
       try {
-        await this.listen(port);
-        this.port = port;
-        return this.status();
-      } catch (error) {
-        lastError = error;
-        if (error.code !== "EADDRINUSE") throw error;
-      }
+        await new Promise((resolve, reject) => { server.once("error", reject); server.listen(port, this.host, resolve); });
+        this.server = server; this.port = server.address().port; break;
+      } catch (error) { if (error.code !== "EADDRINUSE" || offset === 29) throw error; }
     }
-    throw lastError || new Error("Kein freier Port für das Twitch-Hologramm gefunden.");
-  }
-
-  listen(port) {
-    return new Promise((resolve, reject) => {
-      const server = http.createServer((request, response) => {
-        void this.handle(request, response).catch(() => {
-          if (!response.headersSent) {
-            response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-          }
-          response.end("Interner Hologramm-Overlay-Fehler.");
-        });
-      });
-      server.once("error", reject);
-      server.once("listening", () => {
-        server.removeListener("error", reject);
-        this.server = server;
-        resolve();
-      });
-      server.listen(port, this.host);
+    this.wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
+    this.server.on("upgrade", (req, socket, head) => {
+      const origin = req.headers.origin;
+      if (req.url !== "/chat-ws" || (origin && origin !== "null" && origin !== "http://127.0.0.1:" + this.port)) { socket.destroy(); return; }
+      this.wss.handleUpgrade(req, socket, head, (ws) => this.wss.emit("connection", ws));
     });
+    this.wss.on("connection", (ws) => {
+      ws.on("error", () => {});
+      ws.send(JSON.stringify({ type: "snapshot", config: this.config(), messages: this.history }));
+    });
+    this.designStore?.on("changed", this.onDesign);
+    return this.status();
   }
-
-  async stop() {
-    if (!this.server) return;
-    const server = this.server;
-    this.server = null;
-    this.port = null;
-    await new Promise((resolve) => server.close(resolve));
+  publish(event) {
+    const payload = JSON.stringify(event);
+    for (const ws of this.wss?.clients || []) if (ws.readyState === 1) ws.send(payload, () => {});
   }
-
+  publishEvent(event) {
+    if (event.type !== "chat") return;
+    const message = { id: event.id, platform: event.platform, username: event.name, message: event.text,
+      color: event.data?.color, role: event.data?.role, badges: event.data?.badges, timestamp: event.timestamp };
+    if (message.id && this.history.some((item) => item.id === message.id)) return;
+    this.history.push(message); this.history = this.history.slice(-100);
+    this.publish({ type: "chat", message });
+  }
+  clearChat(platform) {
+    this.history = !platform || platform === "all" ? [] : this.history.filter((item) => item.platform !== platform);
+    this.publish({ type: "snapshot", config: this.config(), messages: this.history });
+  }
   status() {
-    const base = this.port ? `http://${this.host}:${this.port}` : null;
-    return {
-      running: Boolean(this.server && this.port),
-      host: this.host,
-      port: this.port,
-      editorUrl: base ? `${base}/editor` : null,
-      overlayUrl: base ? `${base}/overlay` : null
-    };
+    const base = this.port ? "http://127.0.0.1:" + this.port : "";
+    return { running: Boolean(this.server), active: Boolean(this.server), host: this.host, port: this.port,
+      editorUrl: null, overlayUrl: base ? base + "/overlay" : "", chatOverlayUrl: base ? base + "/chat-overlay" : "" };
   }
-
-  async handle(request, response) {
-    const remote = String(request.socket?.remoteAddress || "");
-    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1", ""].includes(remote)) {
-      response.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-      response.end("Nur lokal erreichbar.");
-      return;
-    }
-    const url = new URL(request.url, `http://${this.host}:${this.port || this.preferredPort}`);
-    if (url.pathname === "/health") {
-      const body = Buffer.from(JSON.stringify(this.status()), "utf8");
-      response.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": body.length, "Cache-Control": "no-store" });
-      response.end(body);
-      return;
-    }
-    let filename;
-    if (url.pathname === "/" || url.pathname === "/editor") filename = "editor.html";
-    else if (url.pathname === "/overlay") filename = "overlay.html";
-    else filename = url.pathname.replace(/^\/+/, "");
-    const resolved = path.resolve(this.webRoot, filename);
-    if (!resolved.startsWith(`${this.webRoot}${path.sep}`)) {
-      response.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-      response.end("Ungültiger Pfad.");
-      return;
-    }
+  async handle(req, res) {
     try {
-      const content = await fs.readFile(resolved);
-      response.writeHead(200, {
-        "Content-Type": CONTENT_TYPES[path.extname(resolved).toLowerCase()] || "application/octet-stream",
-        "Content-Length": content.length,
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-        "Cross-Origin-Resource-Policy": "cross-origin",
-        "Access-Control-Allow-Origin": "*",
-        "Content-Security-Policy": path.extname(resolved).toLowerCase() === ".html"
-          ? "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws://127.0.0.1:*; img-src 'self' data:; object-src 'none'; base-uri 'none'"
-          : "default-src 'none'"
-      });
-      response.end(content);
-    } catch (error) {
-      response.writeHead(error.code === "ENOENT" ? 404 : 500, {
-        "Content-Type": "text/plain; charset=utf-8"
-      });
-      response.end(error.code === "ENOENT" ? "Nicht gefunden." : "Datei konnte nicht geladen werden.");
-    }
+      if (req.method !== "GET") { res.writeHead(405); res.end(); return; }
+      const route = new URL(req.url, "http://127.0.0.1").pathname;
+      if (route === "/health") { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(this.status())); return; }
+      const assets = {
+        "/": ["renderer/chat-overlay.html", "text/html"],
+        "/overlay": ["renderer/chat-overlay.html", "text/html"],
+        "/chat-overlay": ["renderer/chat-overlay.html", "text/html"],
+        "/chat-overlay.js": ["renderer/chat-overlay.js", "text/javascript"],
+        "/chat-design.css": ["renderer/chat-design.css", "text/css"],
+        "/chat-design.js": ["shared/chat-design.js", "text/javascript"]
+      };
+      if (!Object.hasOwn(assets, route)) { res.writeHead(404); res.end("Chatdesign wird direkt im Batto OBS Tool bearbeitet."); return; }
+      const [asset, type] = assets[route];
+      const body = await fs.readFile(path.join(__dirname, "..", asset));
+      res.writeHead(200, { "Content-Type": type + "; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:*; object-src 'none'; base-uri 'none'" });
+      res.end(body);
+    } catch { if (!res.headersSent) res.writeHead(500); res.end("Overlay konnte nicht geladen werden."); }
+  }
+  async stop() {
+    this.designStore?.off("changed", this.onDesign);
+    for (const ws of this.wss?.clients || []) ws.terminate();
+    this.wss?.close(); this.wss = null;
+    const server = this.server; this.server = null; this.port = null;
+    if (server) await new Promise((resolve) => server.close(resolve));
   }
 }
-
-module.exports = {
-  TwitchHoloServer
-};
+module.exports = { TwitchHoloServer };

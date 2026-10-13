@@ -7,13 +7,19 @@ on:
     paths:
       - "desktop/**"
       - ".github/workflows/windows-release-2.0.0.yml"
+  pull_request:
+    branches:
+      - release/windows-2.0.0-integrated
+    paths:
+      - "desktop/**"
+      - ".github/workflows/windows-release-2.0.0.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: batto-obs-tool-2.0.0-windows
+  group: batto-obs-tool-2.0.0-windows-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -60,7 +66,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          node --test test/integrated-2.0.0.test.cjs test/v4-phase1.test.cjs test/v4-completion.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs modules/twitch-holo-chat/test/*.test.cjs
+          node --test test/integrated-2.0.0.test.cjs test/v4-phase1.test.cjs test/v4-completion.test.cjs test/store.test.cjs test/multi-chat.test.cjs test/chat-bot.test.cjs test/holo-broadcast.test.cjs modules/twitch-holo-chat/test/*.test.cjs
           if ($LASTEXITCODE -ne 0) { throw "Mindestens ein V4-Test ist fehlgeschlagen." }
 
       - name: Build Windows x64 NSIS installer with required desktop icon

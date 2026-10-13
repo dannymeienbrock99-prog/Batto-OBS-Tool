@@ -13,6 +13,8 @@
   let editingCommand = null;
   let editingBroadcast = null;
   let editingEvent = null;
+  let chatDesign = window.BattoChatDesign?.defaults();
+  const sendingBroadcasts = new Set();
 
   const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
   const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -92,11 +94,41 @@
 
   function broadcastPage() {
     const list = config().broadcasts || [];
-    return `<div class="chatbot-grid"><article class="chatbot-card"><div class="chatbot-item-head"><h3>Automatische Nachrichten</h3><button id="broadcast-new" class="primary">Neue Nachricht</button></div><p>Nachrichten pro Plattform, Intervall, Startverzögerung und LIVE-Bedingung konfigurieren.</p><div class="chatbot-list">${list.length ? list.map((item) => `<div class="chatbot-item"><div class="chatbot-item-head"><strong>${esc(item.messages?.[0] || "Ohne Text")}</strong><span class="chatbot-small">${Math.round((item.intervalMs || 0)/1000)} s</span></div><small>${item.platforms.map((p) => labels[p]).join(" · ")}</small><div class="button-row"><button data-broadcast-edit="${item.id}">Bearbeiten</button><button data-broadcast-test="${item.id}">Test</button><button class="danger-text" data-broadcast-delete="${item.id}">Löschen</button></div></div>`).join("") : '<div class="chatbot-empty">Noch keine Auto-Broadcast-Nachricht.</div>'}</div></article><article class="chatbot-card">${broadcastEditor()}</article></div>`;
+    return `<div class="chatbot-broadcast-toolbar"><label><input id="broadcast-master" type="checkbox" ${config().broadcastSettings?.enabled !== false ? "checked" : ""}> Zeitplan aktiv</label><span id="broadcast-master-status">${config().enabled === false ? "Bot deaktiviert" : config().broadcastSettings?.enabled === false ? "Alle Zeitpläne pausiert" : "Automatischer Versand aktiviert"}</span></div>
+    <div id="broadcast-capabilities" class="broadcast-capabilities"></div>
+    <div class="chatbot-grid"><article class="chatbot-card"><div class="chatbot-item-head"><h3>Geplante Nachrichten</h3><button id="broadcast-new" class="primary">Neue Nachricht</button></div><p>Jedes Ziel erhält ein eigenes Ergebnis. „Jetzt senden“ führt einen echten Einzelversand aus; LIVE- und Aktivitätsbedingungen gelten dabei ebenfalls.</p><div class="chatbot-list">${list.length ? list.map((item) => `<div class="chatbot-item"><div class="chatbot-item-head"><strong>${esc(item.messages?.[0] || "Ohne Text")}</strong><span class="chatbot-small">${item.enabled ? "Aktiv" : "Pausiert"} · ${item.randomInterval ? `${Math.round(item.intervalMinMs/1000)}–${Math.round(item.intervalMaxMs/1000)}` : Math.round(item.intervalMs/1000)} s</span></div><small>${item.platforms.map((p) => labels[p]).join(" · ")}</small><div class="button-row"><button data-broadcast-edit="${esc(item.id)}">Bearbeiten</button><button data-broadcast-test="${esc(item.id)}">Jetzt senden</button><button class="danger-text" data-broadcast-delete="${esc(item.id)}">Löschen</button></div></div>`).join("") : '<div class="chatbot-empty">Noch kein Auto-Broadcast geplant.</div>'}</div><h3>Letzte Zustellungen</h3><div id="broadcast-results" aria-live="polite"></div></article><article class="chatbot-card">${broadcastEditor()}</article></div>`;
   }
   function broadcastEditor() {
-    const item = editingBroadcast || { id: id("broadcast"), enabled: true, messages: ["Folgt mir für mehr!"], platforms: [...platforms], intervalMs: 300000, startDelayMs: 0, onlyWhenLive: true, onlyWhenActive: false, rotation: true };
-    return `<h3>${editingBroadcast ? "Auto-Broadcast bearbeiten" : "Auto-Broadcast erstellen"}</h3><div class="chatbot-form"><label>Nachrichten – eine pro Zeile<textarea id="broadcast-messages">${esc((item.messages || []).join("\n"))}</textarea></label>${checkedPlatforms("broadcast", item.platforms)}<div class="chatbot-inline"><label>Intervall Sekunden<input id="broadcast-interval" type="number" min="10" value="${Math.max(10,Math.round((item.intervalMs||300000)/1000))}"></label><label>Startverzögerung Sekunden<input id="broadcast-delay" type="number" min="0" value="${Math.round((item.startDelayMs||0)/1000)}"></label></div><label><input id="broadcast-live" type="checkbox" ${item.onlyWhenLive ? "checked" : ""}> Nur wenn Stream LIVE ist</label><label><input id="broadcast-active" type="checkbox" ${item.onlyWhenActive ? "checked" : ""}> Nur bei Chat-Aktivität</label><label><input id="broadcast-enabled" type="checkbox" ${item.enabled !== false ? "checked" : ""}> Aktiv</label><div class="button-row"><button id="broadcast-save" class="primary">Speichern</button><button id="broadcast-cancel">Zurücksetzen</button></div></div>`;
+    const item = editingBroadcast || { enabled: true, messages: ["Folgt mir für mehr!"], platforms: [...platforms], intervalMs: 300000, startDelayMs: 30000, onlyWhenLive: true, onlyWhenActive: false, rotation: true, activityWindowMs: 300000, minChatMessages: 1 };
+    return `<h3>${editingBroadcast ? "Auto-Broadcast bearbeiten" : "Auto-Broadcast erstellen"}</h3><div class="chatbot-form"><label>Nachrichten – eine pro Zeile<textarea id="broadcast-messages">${esc((item.messages || []).join("\n"))}</textarea></label><small>Twitch: maximal 500 Zeichen · YouTube: maximal 200 Zeichen je Nachricht. Längere Texte werden für das jeweilige Ziel abgelehnt.</small>${checkedPlatforms("broadcast", item.platforms)}
+    <div class="chatbot-inline"><label>Intervall Sekunden<input id="broadcast-interval" type="number" min="10" max="86400" value="${Math.max(10,Math.round((item.intervalMs||300000)/1000))}"></label><label>Startverzögerung Sekunden<input id="broadcast-delay" type="number" min="0" max="86400" value="${Math.round((item.startDelayMs||0)/1000)}"></label></div>
+    <label><input id="broadcast-random" type="checkbox" ${item.randomInterval ? "checked" : ""}> Zufälliges Intervall</label><div class="chatbot-inline"><label>Minimum Sekunden<input id="broadcast-min" type="number" min="10" max="86400" value="${Math.round((item.intervalMinMs||180000)/1000)}"></label><label>Maximum Sekunden<input id="broadcast-max" type="number" min="10" max="86400" value="${Math.round((item.intervalMaxMs||600000)/1000)}"></label></div>
+    <label>Textauswahl<select id="broadcast-rotation"><option value="rotate" ${item.rotation !== false ? "selected" : ""}>Der Reihe nach</option><option value="random" ${item.rotation === false ? "selected" : ""}>Zufällig</option></select></label>
+    <label><input id="broadcast-live" type="checkbox" ${item.onlyWhenLive ? "checked" : ""}> Nur wenn der OBS-Stream LIVE ist</label><label><input id="broadcast-active" type="checkbox" ${item.onlyWhenActive ? "checked" : ""}> Nur bei aktueller Chat-Aktivität</label><div class="chatbot-inline"><label>Mindestens Nachrichten<input id="broadcast-min-messages" type="number" min="1" max="10000" value="${item.minChatMessages || 1}"></label><label>Innerhalb Sekunden<input id="broadcast-window" type="number" min="10" max="86400" value="${Math.round((item.activityWindowMs||300000)/1000)}"></label></div>
+    <label><input id="broadcast-overlay" type="checkbox" ${item.showOverlay ? "checked" : ""}> Zusätzlich in der lokalen OBS-Chatquelle anzeigen</label><small>Die OBS-Anzeige ist unabhängig von der Zustellung an Plattformen.</small>
+    <label><input id="broadcast-enabled" type="checkbox" ${item.enabled !== false ? "checked" : ""}> Diesen Zeitplan aktivieren</label><h4>Holo-Vorschau · kein Versand</h4><div id="broadcast-preview" class="design-preview"></div>
+    <div class="button-row"><button id="broadcast-save" class="primary">Speichern & planen</button><button id="broadcast-cancel">Zurücksetzen</button></div></div>`;
+  }
+  function refreshCapabilities() {
+    const host = root.querySelector("#broadcast-capabilities"); if (!host) return;
+    host.innerHTML = platforms.map((p) => { const state = snapshot?.capabilities?.[p] || {}; return `<div class="broadcast-capability"><strong>${labels[p]}</strong><small>${state.connected && state.canSend ? "● Versand verbunden" : esc(state.sendReason || "Nicht verbunden")}</small></div>`; }).join("");
+  }
+  function refreshBroadcastResults() {
+    const host = root.querySelector("#broadcast-results"); if (!host) return;
+    const reports = snapshot?.broadcastResults || [];
+    const statusNames = { sent: "Gesendet ✓", submitted: "Unbestätigt", skipped: "Übersprungen", failed: "Fehler" };
+    host.innerHTML = reports.length ? reports.slice(-8).reverse().map((report) => `<div class="broadcast-report"><small>${new Date(report.time).toLocaleTimeString("de-DE")}</small><p>${esc(report.message)}</p>${report.results.map((r) => `<div class="broadcast-result" data-result="${r.status}"><strong>${labels[r.platform]}</strong><span>${statusNames[r.status] || esc(r.status)}</span><small>${esc(r.reason || (r.messageId ? `Bestätigung: ${r.messageId}` : ""))}</small></div>`).join("")}${report.overlay ? "<small>Zusätzlich lokal in OBS angezeigt.</small>" : ""}${report.overlayError ? `<small>${esc(report.overlayError)}</small>` : ""}</div>`).join("") : '<div class="chatbot-empty">Noch kein Versand durchgeführt.</div>';
+  }
+  function previewBroadcast() {
+    const host = root.querySelector("#broadcast-preview"); if (!host) return;
+    const message = root.querySelector("#broadcast-messages").value.split(/\r?\n/).find((line) => line.trim()) || "Deine Nachricht erscheint hier.";
+    host.replaceChildren();
+    for (const p of readPlatforms("broadcast")) {
+      const row = document.createElement("div"); row.className = "chat-row";
+      const name = document.createElement("span"); name.className = "chat-user"; name.textContent = `Batto · ${labels[p]}`;
+      const body = document.createElement("div"); body.className = "chat-message"; body.textContent = message;
+      row.append(name, body); host.append(row); window.BattoChatDesign?.apply(row, { platform: p, username: "Batto", role: "broadcaster" }, chatDesign);
+    }
   }
 
   function commandsPage() {
@@ -140,7 +172,20 @@
     root.querySelector("#broadcast-new")?.addEventListener("click", () => { editingBroadcast = null; render(); });
     root.querySelectorAll("[data-broadcast-edit]").forEach((b)=>b.onclick=()=>{editingBroadcast=clone(config().broadcasts.find((x)=>x.id===b.dataset.broadcastEdit));render()});
     root.querySelectorAll("[data-broadcast-delete]").forEach((b)=>b.onclick=()=>removeById("broadcasts",b.dataset.broadcastDelete));
-    root.querySelectorAll("[data-broadcast-test]").forEach((b)=>b.onclick=async()=>{const item=config().broadcasts.find((x)=>x.id===b.dataset.broadcastTest);if(!item)return;try{await api.testChatBotActions([{type:"chat",message:item.messages?.[0]||"Test",platforms:item.platforms}],{platform:item.platforms?.[0]||"twitch"});toast("Auto-Broadcast-Test ausgeführt.")}catch(e){toast(e.message,true)}});
+    root.querySelectorAll("[data-broadcast-test]").forEach((button) => button.onclick = async () => {
+      const itemId = button.dataset.broadcastTest; if (sendingBroadcasts.has(itemId)) return;
+      sendingBroadcasts.add(itemId); button.disabled = true;
+      try { const report = await api.sendChatBotBroadcast(itemId); acceptBroadcastReport(report); toast("Versand abgeschlossen. Ergebnisse je Plattform siehe unten."); }
+      catch (e) { toast(e.message, true); } finally { sendingBroadcasts.delete(itemId); button.disabled = false; }
+    });
+    root.querySelector("#broadcast-master")?.addEventListener("change", async (event) => {
+      const enabled = event.target.checked; event.target.disabled = true;
+      try { snapshot = await api.saveChatBotConfig({ broadcastSettings: { ...(config().broadcastSettings || {}), enabled } }); root.querySelector("#broadcast-master-status").textContent = enabled ? "Automatischer Versand aktiviert" : "Alle Zeitpläne pausiert"; }
+      catch (e) { event.target.checked = !enabled; toast(e.message, true); } finally { event.target.disabled = false; }
+    });
+    root.querySelector("#broadcast-messages")?.addEventListener("input", previewBroadcast);
+    root.querySelectorAll('[data-prefix="broadcast"]').forEach((input) => input.addEventListener("change", previewBroadcast));
+    refreshCapabilities(); refreshBroadcastResults(); previewBroadcast();
     root.querySelector("#broadcast-save")?.addEventListener("click", saveBroadcast);
     root.querySelector("#broadcast-cancel")?.addEventListener("click",()=>{editingBroadcast=null;render()});
 
@@ -202,7 +247,11 @@
   async function saveBroadcast() {
     try {
       const current = editingBroadcast || { id: id("broadcast") };
-      const item = { ...current, enabled: root.querySelector("#broadcast-enabled").checked, messages: root.querySelector("#broadcast-messages").value.split(/\r?\n/).map((x)=>x.trim()).filter(Boolean), platforms: readPlatforms("broadcast"), intervalMs: Number(root.querySelector("#broadcast-interval").value)*1000, startDelayMs:Number(root.querySelector("#broadcast-delay").value)*1000, onlyWhenLive:root.querySelector("#broadcast-live").checked, onlyWhenActive:root.querySelector("#broadcast-active").checked, rotation:true };
+      const item = { ...current, enabled: root.querySelector("#broadcast-enabled").checked, messages: root.querySelector("#broadcast-messages").value.split(/\r?\n/).map((x)=>x.trim()).filter(Boolean), platforms: readPlatforms("broadcast"), intervalMs: Number(root.querySelector("#broadcast-interval").value)*1000, startDelayMs:Number(root.querySelector("#broadcast-delay").value)*1000, onlyWhenLive:root.querySelector("#broadcast-live").checked, onlyWhenActive:root.querySelector("#broadcast-active").checked, rotation:root.querySelector("#broadcast-rotation").value === "rotate", randomInterval:root.querySelector("#broadcast-random").checked, intervalMinMs:Number(root.querySelector("#broadcast-min").value)*1000, intervalMaxMs:Number(root.querySelector("#broadcast-max").value)*1000, minChatMessages:Number(root.querySelector("#broadcast-min-messages").value), activityWindowMs:Number(root.querySelector("#broadcast-window").value)*1000, showOverlay:root.querySelector("#broadcast-overlay").checked };
+      if (!item.messages.length || !item.platforms.length) throw new Error("Mindestens eine Nachricht und ein Ziel auswählen.");
+      if (item.messages.some((m) => m.length > 1000)) throw new Error("Eine Nachricht enthält mehr als 1000 Zeichen.");
+      if (item.randomInterval && item.intervalMaxMs < item.intervalMinMs) throw new Error("Das maximale Intervall muss mindestens so groß wie das Minimum sein.");
+      for (const input of root.querySelectorAll('[data-chatbot-page="broadcasts"] input[type="number"]')) if (!input.checkValidity()) throw new Error("Bitte die angegebenen Zahlenbereiche einhalten.");
       const list = [...(config().broadcasts||[])]; const index=list.findIndex((x)=>x.id===item.id); if(index>=0)list[index]=item;else list.push(item);
       editingBroadcast=null; await savePartial({broadcasts:list}); toast("Auto-Broadcast gespeichert.");
     } catch(e){toast(e.message,true)}
@@ -230,6 +279,15 @@
   async function refresh() { try { snapshot=await api.getChatBotState();render(); }catch(e){root.innerHTML=`<div class="chatbot-empty">Chat Bot konnte nicht geladen werden: ${esc(e.message)}</div>`;} }
 
   api.onChatBotLog?.((entry)=>{if(!snapshot)return;snapshot.logs=snapshot.logs||[];snapshot.logs.push(entry);if(tab==="logs")render()});
-  api.onChatBotState?.((state)=>{snapshot=state;render()});
+  function acceptBroadcastReport(report) {
+    if (!snapshot) return;
+    snapshot.broadcastResults = [...(snapshot.broadcastResults || []).filter((r) => r.id !== report.id), report].slice(-100);
+    refreshBroadcastResults();
+  }
+  api.onChatBotBroadcast?.(acceptBroadcastReport);
+  api.onChatStatus?.((state) => { if (snapshot) { snapshot.capabilities ||= {}; snapshot.capabilities[state.platform] = state; refreshCapabilities(); } });
+  api.onChatDesignChanged?.((value) => { chatDesign = value; previewBroadcast(); });
+  api.getChatDesign?.().then((value) => { chatDesign = value; previewBroadcast(); }).catch(() => {});
+  api.onChatBotState?.((state)=>{snapshot=state;refreshCapabilities();refreshBroadcastResults()});
   refresh();
 })();

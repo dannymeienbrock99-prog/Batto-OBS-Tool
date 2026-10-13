@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   getHoloStatus: () => ipcRenderer.invoke("holo:status"),
   openHoloEditor: () => ipcRenderer.invoke("holo:open-editor"),
   copyHoloUrl: () => ipcRenderer.invoke("holo:copy-url"),
+  getChatDesign: () => ipcRenderer.invoke("chat:design:get"),
+  saveChatDesign: (config) => ipcRenderer.invoke("chat:design:save", config),
+  onChatDesignChanged: (callback) => on("chat:design-changed", callback),
+  onOpenChatDesign: (callback) => on("chat:open-design", callback),
+  setTwitchChatColor: (color) => ipcRenderer.invoke("chat:twitch-color", color),
 
   getV4Configs: () => ipcRenderer.invoke("v4:configs:get"),
   getV4Config: (id) => ipcRenderer.invoke("v4:config:get", id),
@@ -62,6 +67,8 @@ contextBridge.exposeInMainWorld("batto", Object.freeze({
   applyModeration: (input) => ipcRenderer.invoke("moderation:apply", input),
 
   getChatBotState: () => ipcRenderer.invoke("chatbot:get-state"),
+  sendChatBotBroadcast: (id) => ipcRenderer.invoke("chatbot:send-broadcast", id),
+  onChatBotBroadcast: (callback) => on("chatbot:broadcast-result", callback),
   saveChatBotConfig: (value) => ipcRenderer.invoke("chatbot:save-config", value),
   testChatBotCommand: (commandId, platform) => ipcRenderer.invoke("chatbot:test-command", commandId, platform),
   testChatBotActions: (actions, context) => ipcRenderer.invoke("chatbot:test-actions", actions, context),

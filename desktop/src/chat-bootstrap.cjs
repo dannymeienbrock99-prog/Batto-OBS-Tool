@@ -57,7 +57,7 @@ async function streamIsLive() {
   if (!client) return false;
   try {
     const snapshot = await client.snapshot?.();
-    return Boolean(snapshot?.stream?.active || snapshot?.streaming || snapshot?.output?.streaming || snapshot?.stats?.outputActive);
+    return Boolean(snapshot?.stream?.outputActive || snapshot?.stream?.active || snapshot?.streaming || snapshot?.output?.streaming || snapshot?.stats?.outputActive);
   } catch {
     return Boolean(client.status?.().streaming);
   }
@@ -118,6 +118,7 @@ function registerChatIpc() {
   ipcMain.handle("chat:connect", (_event, platform, config) => core.connect(platform, config));
   ipcMain.handle("chat:disconnect", (_event, platform) => core.disconnect(platform));
   ipcMain.handle("chat:send", (_event, platform, message) => core.send(platform, message));
+  ipcMain.handle("chat:twitch-color", (_event, color) => core.adapters.get("twitch").setChatColor(color));
   ipcMain.handle("chat:unified-clear", (_event, platform) => { core.clear(platform); return true; });
   ipcMain.handle("chat:toggle-window", () => windows.toggle());
   ipcMain.handle("chat:window-status", () => windows.status());
@@ -139,6 +140,11 @@ function registerChatIpc() {
   ipcMain.handle("chat:overlay-remove", async () => removeObsChatOverlay(obsClient(), overlaySettings.sourceName));
 
   ipcMain.handle("chatbot:get-state", () => chatBot.snapshot());
+  ipcMain.handle("chatbot:send-broadcast", async (_event, itemId) => {
+    const item = chatBot.config.broadcasts.find((entry) => entry.id === itemId);
+    if (!item) throw new Error("Broadcast nicht gefunden. Zuerst speichern.");
+    return chatBot.runBroadcast(item);
+  });
   ipcMain.handle("chatbot:save-config", async (_event, value = {}) => {
     const result = await chatBot.update(value);
     broadcast("chatbot:state", result);
@@ -193,13 +199,20 @@ app.whenReady().then(async () => {
   chatBot = new ChatBotService({
     configFile: chatBotConfigFile(),
     mediaRoot: chatBotMediaRoot(),
-    sendChat: (platform, message) => core.send(platform, message),
+    sendChat: (platform, message, options) => core.send(platform, message, options),
+    getStatuses: () => core.statuses(),
+    publishBroadcast: (message, platforms) => {
+      const server = overlayServer();
+      if (!server?.status().running) throw new Error("Chat-Overlay ist nicht gestartet.");
+      for (const platform of platforms) server.publishEvent(toOverlayChatEvent({ id: `broadcast-${Date.now()}-${platform}`, platform, username: "Batto · Broadcast", message, role: "broadcaster" }));
+    },
     obs: obsClient(),
     isLive: () => streamIsLive()
   });
   await chatBot.start();
   chatBot.on("log", (entry) => broadcast("chatbot:log", entry));
   chatBot.on("overlay", (entry) => broadcast("chatbot:overlay", entry));
+  chatBot.on("broadcast-result", (entry) => broadcast("chatbot:broadcast-result", entry));
 
   core.on("messages", (batch) => {
     void (async () => {
@@ -207,6 +220,7 @@ app.whenReady().then(async () => {
       const server = overlayServer();
       for (const message of filtered.visible) {
         server?.publishEvent(toOverlayChatEvent(message));
+        if (message.metadata?.historical) continue;
         const event = platformEvent(message);
         if (event) {
           await chatBot.triggerEvent(event.trigger, event.payload).catch((error) => chatBot.log("error", `Event-Fehler: ${error.message}`));
